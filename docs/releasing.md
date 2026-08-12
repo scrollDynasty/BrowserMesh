@@ -43,6 +43,8 @@ The aggregate `all-checks-passed` job depends on static, Node 22/24, browser, st
 
 Create a fine-grained personal access token that can access this repository and create/update pull requests, contents, tags, and releases. Store it as the Actions secret `RELEASE_PLEASE_TOKEN`.
 
+Until this secret exists, the `release-please` workflow exits successfully with an informational notice and does not create a Release PR. This keeps normal CI green while the repository is being configured.
+
 A separate token is intentional: GitHub suppresses workflow events caused by the built-in `GITHUB_TOKEN`. The PAT allows CI to run on release PRs and allows the release-created tag to trigger `publish.yml`.
 
 Enable **Settings → Actions → General → Allow GitHub Actions to create and approve pull requests** if repository policy requires it.

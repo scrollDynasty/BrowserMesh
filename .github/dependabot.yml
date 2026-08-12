@@ -7,7 +7,7 @@ updates:
       day: monday
       time: '06:00'
       timezone: Asia/Tashkent
-    open-pull-requests-limit: 5
+    open-pull-requests-limit: 1
     versioning-strategy: increase-if-necessary
     commit-message:
       prefix: chore
@@ -16,6 +16,11 @@ updates:
     groups:
       npm-minor-and-patch:
         update-types: [minor, patch]
+    ignore:
+      - dependency-name: typescript
+        update-types: [version-update:semver-major]
+      - dependency-name: '@types/node'
+        update-types: [version-update:semver-major]
 
   - package-ecosystem: github-actions
     directory: /
@@ -23,7 +28,11 @@ updates:
       interval: monthly
       time: '06:00'
       timezone: Asia/Tashkent
-    open-pull-requests-limit: 5
+    open-pull-requests-limit: 1
     commit-message:
       prefix: ci
       include: scope
+    groups:
+      github-actions:
+        patterns:
+          - '*'

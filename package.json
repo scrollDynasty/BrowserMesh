@@ -35,7 +35,7 @@
     "lint": "eslint .",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "test": "vitest run --exclude tests/integration/** --exclude tests/e2e/** --exclude tests/stress/**",
+    "test": "vitest run tests/unit",
     "test:integration": "vitest run tests/integration",
     "test:e2e": "vitest run tests/e2e",
     "test:stress": "vitest run tests/stress",

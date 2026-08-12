@@ -13,9 +13,16 @@ jobs:
     name: release-please
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    env:
+      HAS_RELEASE_PLEASE_TOKEN: ${{ secrets.RELEASE_PLEASE_TOKEN != '' }}
     steps:
+      - name: Explain disabled release automation
+        if: env.HAS_RELEASE_PLEASE_TOKEN != 'true'
+        run: |
+          echo "::notice::Release Please is disabled until the RELEASE_PLEASE_TOKEN repository secret is configured."
       - name: Create or update Release PR
-        uses: googleapis/release-please-action@8b8fd2cc23b2e18957157a9d923d75aa0c6f6ad5 # v4
+        if: env.HAS_RELEASE_PLEASE_TOKEN == 'true'
+        uses: googleapis/release-please-action@45996ed1f6d02564a971a2fa1b5860e934307cf7 # v5.0.0
         with:
           token: ${{ secrets.RELEASE_PLEASE_TOKEN }}
           target-branch: master
