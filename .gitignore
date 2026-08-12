@@ -6,3 +6,7 @@ coverage/
 .env
 .env.*
 !.env.example
+
+# Local implementation-agent instructions and bootstrap prompt
+AGENTS.md
+PROMT.md
