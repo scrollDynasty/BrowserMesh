@@ -21,7 +21,7 @@ The domain and application ports do not import Playwright or MCP. The MCP adapte
 - A close marks the session as no longer accepting work, waits for already queued work, closes its context, and removes page handles. Repeated close is idempotent.
 - Session initialization is itself queued. Shutdown queues close behind initialization, preventing a context from appearing after shutdown cleanup.
 - Shutdown rejects new operations, drains/closes sessions in parallel, stops Chromium, and reports aggregated cleanup failures.
-- Public views are copies. Message payloads are structured-cloned when crossing the runtime boundary.
+- Public session/page views are copies and do not expose internal maps or Playwright handles.
 
 ## Error contract
 
@@ -31,8 +31,10 @@ The domain and application ports do not import Playwright or MCP. The MCP adapte
 
 The filesystem adapter validates state names against a conservative filename pattern, writes through a temporary file, and atomically renames it. It does not accept caller-controlled paths. Saved state contains credentials and uses private directory/file modes where supported; `.browsermesh/` is Git-ignored. Screenshots are returned in memory as MCP image data, so no arbitrary overwrite path exists.
 
-## Agents and messages
+## External-client boundary
 
-Agents and browser sessions remain separate entities. A session may be unowned or owned by one agent. An owned session rejects operations without the matching `agentId`; handoff requires the current owner. Mailboxes are per-recipient arrays with deterministic insertion order, correlation/reply IDs, and explicit acknowledgement. This implementation is in-memory behind runtime contracts and intentionally has no external broker.
+The MCP client is the reasoning and orchestration agent. BrowserMesh has no Agent entity, registry, ownership model, mailbox, message bus, or handoff protocol. It only manages explicitly addressed browser sessions. Optional session names and string metadata let an external client label roles or accounts without turning those labels into runtime principals.
+
+If concurrent independent MCP clients later require access protection, a generic client/workflow lease can be added around session access. It must not depend on an internal LLM Agent abstraction.
 
 Architectural decisions are recorded in [docs/decisions](decisions/).

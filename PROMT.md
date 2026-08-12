@@ -88,13 +88,10 @@ Phase 7
 → Persistence
 
 Phase 8
-→ Agents
+→ External MCP Client Multi-Session Demo
 
-Phase 9
-→ Messaging
-
-Phase 10
-→ Full Multi-Agent Demo
+BrowserMesh v0.1 не содержит внутренних Agent entities, Agent registry, ownership,
+mailboxes или messaging. Reasoning и orchestration выполняет внешний MCP client.
 
 Не перескакивай через фундаментальные незавершённые phases.
 

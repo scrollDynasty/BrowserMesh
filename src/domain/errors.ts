@@ -12,9 +12,6 @@ export const errorCodes = [
   'LIMIT_EXCEEDED',
   'RUNTIME_SHUTTING_DOWN',
   'SAVED_STATE_NOT_FOUND',
-  'AGENT_NOT_FOUND',
-  'SESSION_OWNED_BY_ANOTHER_AGENT',
-  'MESSAGE_TARGET_NOT_FOUND',
 ] as const;
 
 export type BrowserMeshErrorCode = (typeof errorCodes)[number];

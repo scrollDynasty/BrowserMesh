@@ -13,7 +13,17 @@ describe('MCP adapter', () => {
     await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
     const tools = await client.listTools();
     expect(tools.tools.map(({ name }) => name)).toContain('browser_session_create');
-    expect(tools.tools.map(({ name }) => name)).toContain('browser_message_send');
+    expect(
+      tools.tools.some(
+        ({ name }) =>
+          name.startsWith('browser_agent_') ||
+          name.startsWith('browser_message_') ||
+          name === 'browser_session_assign' ||
+          name === 'browser_session_release',
+      ),
+    ).toBe(false);
+    const createTool = tools.tools.find(({ name }) => name === 'browser_session_create');
+    expect(createTool?.description).toContain('different user, account, role');
     const created = await client.callTool({
       name: 'browser_session_create',
       arguments: { name: 'mcp' },

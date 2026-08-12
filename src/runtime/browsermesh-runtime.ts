@@ -7,11 +7,7 @@ import type { EventSinkPort } from '../application/ports/events.js';
 import type { SavedStateView, StateRepositoryPort } from '../application/ports/state-repository.js';
 import { BrowserMeshError } from '../domain/errors.js';
 import type {
-  AgentView,
-  JsonValue,
   Locator,
-  MessageType,
-  MessageView,
   OperationResult,
   PageView,
   SessionStatus,
@@ -33,18 +29,12 @@ interface SessionEntry {
   readonly createdAt: string;
   lastActivityAt: string;
   readonly metadata: Readonly<Record<string, string>>;
-  ownerAgentId: string | undefined;
   readonly restoredFrom: string | undefined;
   context: BrowserContextHandle | undefined;
   readonly pages: Map<string, PageEntry>;
   defaultPageId: string | undefined;
   readonly queue: SerialQueue;
   accepting: boolean;
-}
-
-interface AgentEntry {
-  readonly view: AgentView;
-  readonly mailbox: MessageView[];
 }
 
 export interface RuntimeOptions {
@@ -62,13 +52,11 @@ export interface RuntimeOptions {
 export interface OperationTarget {
   readonly sessionId: string;
   readonly pageId: string;
-  readonly agentId?: string;
   readonly timeoutMs?: number;
 }
 
 export class BrowserMeshRuntime {
   private readonly sessions = new Map<string, SessionEntry>();
-  private readonly agents = new Map<string, AgentEntry>();
   private accepting = true;
   private started = false;
   private shutdownPromise: Promise<void> | undefined;
@@ -90,7 +78,6 @@ export class BrowserMeshRuntime {
       readonly name?: string | undefined;
       readonly metadata?: Readonly<Record<string, string>> | undefined;
       readonly fromState?: string | undefined;
-      readonly ownerAgentId?: string | undefined;
     } = {},
   ): Promise<SessionView> {
     this.ensureAccepting();
@@ -100,7 +87,6 @@ export class BrowserMeshRuntime {
         `Maximum of ${String(this.options.maxSessions)} active sessions reached`,
       );
     }
-    if (input.ownerAgentId !== undefined) this.getAgentEntry(input.ownerAgentId);
     const id = this.options.ids.next('session');
     const timestamp = this.timestamp();
     const entry: SessionEntry = {
@@ -110,7 +96,6 @@ export class BrowserMeshRuntime {
       createdAt: timestamp,
       lastActivityAt: timestamp,
       metadata: { ...(input.metadata ?? {}) },
-      ownerAgentId: input.ownerAgentId,
       restoredFrom: input.fromState,
       context: undefined,
       pages: new Map(),
@@ -182,8 +167,8 @@ export class BrowserMeshRuntime {
     });
   }
 
-  async createPage(sessionId: string, agentId?: string): Promise<PageView> {
-    return this.withSession(sessionId, agentId, async (entry) => {
+  async createPage(sessionId: string): Promise<PageView> {
+    return this.withSession(sessionId, async (entry) => {
       if (entry.pages.size >= this.options.maxPagesPerSession) {
         throw new BrowserMeshError(
           'LIMIT_EXCEEDED',
@@ -197,13 +182,13 @@ export class BrowserMeshRuntime {
     });
   }
 
-  listPages(sessionId: string, agentId?: string): readonly PageView[] {
-    const entry = this.readySession(sessionId, agentId);
+  listPages(sessionId: string): readonly PageView[] {
+    const entry = this.readySession(sessionId);
     return Array.from(entry.pages.values(), (page) => this.pageView(entry, page));
   }
 
-  async closePage(sessionId: string, pageId: string, agentId?: string): Promise<void> {
-    await this.withSession(sessionId, agentId, async (entry) => {
+  async closePage(sessionId: string, pageId: string): Promise<void> {
+    await this.withSession(sessionId, async (entry) => {
       const page = this.getPageEntry(entry, pageId);
       await this.options.engine.closePage(page.handle);
       entry.pages.delete(pageId);
@@ -309,13 +294,9 @@ export class BrowserMeshRuntime {
     );
   }
 
-  async saveSessionState(
-    sessionId: string,
-    name: string,
-    agentId?: string,
-  ): Promise<SavedStateView> {
+  async saveSessionState(sessionId: string, name: string): Promise<SavedStateView> {
     this.ensurePersistence();
-    return this.withSession(sessionId, agentId, async (entry) =>
+    return this.withSession(sessionId, async (entry) =>
       this.options.stateRepository.save(
         name,
         await this.options.engine.storageState(this.requireContext(entry)),
@@ -331,110 +312,6 @@ export class BrowserMeshRuntime {
   async removeSavedState(name: string): Promise<void> {
     this.ensurePersistence();
     await this.options.stateRepository.remove(name);
-  }
-
-  createAgent(input: {
-    readonly name: string;
-    readonly metadata?: Readonly<Record<string, string>> | undefined;
-  }): AgentView {
-    this.ensureAccepting();
-    const view: AgentView = {
-      id: this.options.ids.next('agent'),
-      name: input.name,
-      status: 'active',
-      createdAt: this.timestamp(),
-      metadata: { ...(input.metadata ?? {}) },
-    };
-    this.agents.set(view.id, { view, mailbox: [] });
-    this.emit('agent.created', { agentId: view.id });
-    return { ...view, metadata: { ...view.metadata } };
-  }
-
-  getAgent(agentId: string): AgentView {
-    return this.cloneAgent(this.getAgentEntry(agentId).view);
-  }
-
-  listAgents(): readonly AgentView[] {
-    return Array.from(this.agents.values(), ({ view }) => this.cloneAgent(view));
-  }
-
-  removeAgent(agentId: string): void {
-    this.getAgentEntry(agentId);
-    for (const session of this.sessions.values())
-      if (session.ownerAgentId === agentId) session.ownerAgentId = undefined;
-    this.agents.delete(agentId);
-  }
-
-  assignSession(sessionId: string, agentId: string, currentOwnerAgentId?: string): SessionView {
-    const session = this.readySession(sessionId, currentOwnerAgentId);
-    this.getAgentEntry(agentId);
-    if (session.ownerAgentId !== undefined && session.ownerAgentId !== currentOwnerAgentId) {
-      throw new BrowserMeshError(
-        'SESSION_OWNED_BY_ANOTHER_AGENT',
-        'Only the current owner may hand off a session',
-      );
-    }
-    session.ownerAgentId = agentId;
-    this.emit('agent.assigned', { sessionId, agentId });
-    return this.sessionView(session);
-  }
-
-  releaseSession(sessionId: string, agentId: string): SessionView {
-    const session = this.readySession(sessionId, agentId);
-    if (session.ownerAgentId !== agentId)
-      throw new BrowserMeshError(
-        'SESSION_OWNED_BY_ANOTHER_AGENT',
-        'Only the owner may release a session',
-      );
-    session.ownerAgentId = undefined;
-    return this.sessionView(session);
-  }
-
-  sendMessage(input: {
-    readonly fromAgentId: string;
-    readonly toAgentId: string;
-    readonly type: MessageType;
-    readonly payload: JsonValue;
-    readonly correlationId?: string | undefined;
-    readonly replyTo?: string | undefined;
-  }): MessageView {
-    this.getAgentEntry(input.fromAgentId);
-    const recipient = this.getAgentEntry(input.toAgentId);
-    const message: MessageView = {
-      id: this.options.ids.next('message'),
-      fromAgentId: input.fromAgentId,
-      toAgentId: input.toAgentId,
-      type: input.type,
-      payload: input.payload,
-      createdAt: this.timestamp(),
-      correlationId: input.correlationId ?? this.options.ids.next('correlation'),
-      ...(input.replyTo === undefined ? {} : { replyTo: input.replyTo }),
-    };
-    recipient.mailbox.push(this.cloneMessage(message));
-    this.emit('message.sent', { agentId: input.fromAgentId });
-    return this.cloneMessage(message);
-  }
-
-  listMessages(agentId: string, unreadOnly = false): readonly MessageView[] {
-    const messages = this.getAgentEntry(agentId).mailbox;
-    return messages
-      .filter((message) => !unreadOnly || message.acknowledgedAt === undefined)
-      .map((message) => this.cloneMessage(message));
-  }
-
-  acknowledgeMessage(agentId: string, messageId: string): MessageView {
-    const mailbox = this.getAgentEntry(agentId).mailbox;
-    const index = mailbox.findIndex((message) => message.id === messageId);
-    const message = mailbox[index];
-    if (message === undefined)
-      throw new BrowserMeshError(
-        'MESSAGE_TARGET_NOT_FOUND',
-        `Message '${messageId}' was not found`,
-      );
-    if (message.acknowledgedAt !== undefined) return this.cloneMessage(message);
-    const acknowledged: MessageView = { ...message, acknowledgedAt: this.timestamp() };
-    mailbox[index] = acknowledged;
-    return this.cloneMessage(acknowledged);
   }
 
   shutdown(): Promise<void> {
@@ -485,7 +362,7 @@ export class BrowserMeshRuntime {
       pageId: target.pageId,
     });
     try {
-      const value = await this.withSession(target.sessionId, target.agentId, async (entry) => {
+      const value = await this.withSession(target.sessionId, async (entry) => {
         const page = this.getPageEntry(entry, target.pageId);
         return action(page.handle, timeoutMs);
       });
@@ -507,11 +384,10 @@ export class BrowserMeshRuntime {
 
   private async withSession<T>(
     sessionId: string,
-    agentId: string | undefined,
     action: (entry: SessionEntry) => Promise<T>,
   ): Promise<T> {
     this.ensureAccepting();
-    const entry = this.readySession(sessionId, agentId);
+    const entry = this.readySession(sessionId);
     if (!entry.accepting)
       throw new BrowserMeshError('SESSION_CLOSED', `Session '${sessionId}' is closing or closed`);
     return entry.queue.run(async () => {
@@ -523,18 +399,12 @@ export class BrowserMeshRuntime {
     });
   }
 
-  private readySession(sessionId: string, agentId?: string): SessionEntry {
+  private readySession(sessionId: string): SessionEntry {
     const entry = this.getSessionEntry(sessionId);
     if (entry.status === 'closed' || entry.status === 'closing')
       throw new BrowserMeshError('SESSION_CLOSED', `Session '${sessionId}' is closed`);
     if (entry.status !== 'ready')
       throw new BrowserMeshError('SESSION_NOT_READY', `Session '${sessionId}' is not ready`);
-    if (entry.ownerAgentId !== undefined && entry.ownerAgentId !== agentId) {
-      throw new BrowserMeshError(
-        'SESSION_OWNED_BY_ANOTHER_AGENT',
-        `Session '${sessionId}' is owned by another agent`,
-      );
-    }
     return entry;
   }
 
@@ -555,13 +425,6 @@ export class BrowserMeshRuntime {
     return page;
   }
 
-  private getAgentEntry(agentId: string): AgentEntry {
-    const agent = this.agents.get(agentId);
-    if (agent === undefined)
-      throw new BrowserMeshError('AGENT_NOT_FOUND', `Agent '${agentId}' was not found`);
-    return agent;
-  }
-
   private addPage(entry: SessionEntry, handle: BrowserPageHandle): PageEntry {
     const page: PageEntry = {
       id: this.options.ids.next('page'),
@@ -580,7 +443,6 @@ export class BrowserMeshRuntime {
       createdAt: entry.createdAt,
       lastActivityAt: entry.lastActivityAt,
       metadata: { ...entry.metadata },
-      ...(entry.ownerAgentId === undefined ? {} : { ownerAgentId: entry.ownerAgentId }),
       ...(entry.restoredFrom === undefined ? {} : { restoredFrom: entry.restoredFrom }),
     };
   }
@@ -593,14 +455,6 @@ export class BrowserMeshRuntime {
       url: this.options.engine.url(page.handle),
       isDefault: entry.defaultPageId === page.id,
     };
-  }
-
-  private cloneAgent(agent: AgentView): AgentView {
-    return { ...agent, metadata: { ...agent.metadata } };
-  }
-
-  private cloneMessage(message: MessageView): MessageView {
-    return { ...message, payload: structuredClone(message.payload) };
   }
 
   private requireContext(entry: SessionEntry): BrowserContextHandle {
@@ -653,7 +507,6 @@ export class BrowserMeshRuntime {
       readonly operationId?: string;
       readonly sessionId?: string;
       readonly pageId?: string;
-      readonly agentId?: string;
     },
   ): void {
     this.options.events.emit({ type, timestamp: this.timestamp(), ...identifiers });

@@ -27,21 +27,18 @@ const locatorSchema = z.discriminatedUnion('strategy', [
 const targetSchema = {
   sessionId: z.string().min(1),
   pageId: z.string().min(1),
-  agentId: z.string().min(1).optional(),
   timeoutMs: z.number().int().positive().max(300_000).optional(),
 };
-const sessionSchema = { sessionId: z.string().min(1), agentId: z.string().min(1).optional() };
+const sessionSchema = { sessionId: z.string().min(1) };
 
 function target(input: {
   sessionId: string;
   pageId: string;
-  agentId?: string | undefined;
   timeoutMs?: number | undefined;
 }): OperationTarget {
   return {
     sessionId: input.sessionId,
     pageId: input.pageId,
-    ...(input.agentId === undefined ? {} : { agentId: input.agentId }),
     ...(input.timeoutMs === undefined ? {} : { timeoutMs: input.timeoutMs }),
   };
 }
@@ -73,44 +70,61 @@ export function createMcpServer(runtime: BrowserMeshRuntime): McpServer {
   server.registerTool(
     'browser_session_create',
     {
-      description: 'Create an isolated browser session with an initial page',
+      description:
+        'Create a new isolated browser session with its own cookies, storage, and pages. Create a separate session whenever a task involves a different user, account, role, or independent browser state; never reuse one session for identities that must remain isolated. The response returns a sessionId; call browser_page_list to obtain its initial pageId.',
       inputSchema: {
         name: z.string().min(1).max(128).optional(),
         metadata: z.record(z.string(), z.string()).optional(),
         fromState: z.string().min(1).optional(),
-        ownerAgentId: z.string().min(1).optional(),
       },
     },
     (input) => result(() => runtime.createSession(input)),
   );
-  server.registerTool('browser_session_list', { description: 'List browser sessions' }, () =>
-    result(() => runtime.listSessions()),
+  server.registerTool(
+    'browser_session_list',
+    {
+      description:
+        'List every browser session with its explicit sessionId, lifecycle status, name, and neutral workflow metadata. Use this to recover the correct session for each role/account; there is no global active session.',
+    },
+    () => result(() => runtime.listSessions()),
   );
   server.registerTool(
     'browser_session_get',
-    { description: 'Get a browser session', inputSchema: { sessionId: z.string().min(1) } },
+    {
+      description:
+        'Inspect one explicitly addressed browser session. Session names and metadata are workflow labels, not internal AI agents or owners.',
+      inputSchema: { sessionId: z.string().min(1) },
+    },
     ({ sessionId }) => result(() => runtime.getSession(sessionId)),
   );
   server.registerTool(
     'browser_session_close',
-    { description: 'Close a browser session', inputSchema: { sessionId: z.string().min(1) } },
+    {
+      description:
+        'Close one explicitly addressed session and release all of its pages and isolated browser context. Close each role/account session when its workflow is complete.',
+      inputSchema: { sessionId: z.string().min(1) },
+    },
     ({ sessionId }) => result(() => runtime.closeSession(sessionId)),
   );
 
   server.registerTool(
     'browser_page_create',
     { description: 'Create a page in a session', inputSchema: sessionSchema },
-    ({ sessionId, agentId }) => result(() => runtime.createPage(sessionId, agentId)),
+    ({ sessionId }) => result(() => runtime.createPage(sessionId)),
   );
   server.registerTool(
     'browser_page_list',
-    { description: 'List explicitly managed pages in a session', inputSchema: sessionSchema },
-    ({ sessionId, agentId }) => result(() => runtime.listPages(sessionId, agentId)),
+    {
+      description:
+        'List pages belonging only to the addressed session. Call this after browser_session_create to obtain the deterministic initial pageId.',
+      inputSchema: sessionSchema,
+    },
+    ({ sessionId }) => result(() => runtime.listPages(sessionId)),
   );
   server.registerTool(
     'browser_page_close',
     { description: 'Close a page', inputSchema: { ...sessionSchema, pageId: z.string().min(1) } },
-    ({ sessionId, pageId, agentId }) => result(() => runtime.closePage(sessionId, pageId, agentId)),
+    ({ sessionId, pageId }) => result(() => runtime.closePage(sessionId, pageId)),
   );
 
   server.registerTool(
@@ -225,8 +239,7 @@ export function createMcpServer(runtime: BrowserMeshRuntime): McpServer {
       description: 'Save session authentication/storage state',
       inputSchema: { ...sessionSchema, name: z.string().min(1).max(128) },
     },
-    ({ sessionId, name, agentId }) =>
-      result(() => runtime.saveSessionState(sessionId, name, agentId)),
+    ({ sessionId, name }) => result(() => runtime.saveSessionState(sessionId, name)),
   );
   server.registerTool('browser_state_list', { description: 'List saved states' }, () =>
     result(() => runtime.listSavedStates()),
@@ -237,85 +250,5 @@ export function createMcpServer(runtime: BrowserMeshRuntime): McpServer {
     ({ name }) => result(() => runtime.removeSavedState(name)),
   );
 
-  server.registerTool(
-    'browser_agent_create',
-    {
-      description: 'Create an agent',
-      inputSchema: {
-        name: z.string().min(1).max(128),
-        metadata: z.record(z.string(), z.string()).optional(),
-      },
-    },
-    (input) => result(() => runtime.createAgent(input)),
-  );
-  server.registerTool('browser_agent_list', { description: 'List agents' }, () =>
-    result(() => runtime.listAgents()),
-  );
-  server.registerTool(
-    'browser_agent_get',
-    { description: 'Get an agent', inputSchema: { agentId: z.string().min(1) } },
-    ({ agentId }) => result(() => runtime.getAgent(agentId)),
-  );
-  server.registerTool(
-    'browser_agent_remove',
-    {
-      description: 'Remove an agent and release its sessions',
-      inputSchema: { agentId: z.string().min(1) },
-    },
-    ({ agentId }) => result(() => runtime.removeAgent(agentId)),
-  );
-  server.registerTool(
-    'browser_session_assign',
-    {
-      description: 'Assign or hand off a session to an agent',
-      inputSchema: {
-        sessionId: z.string().min(1),
-        agentId: z.string().min(1),
-        currentOwnerAgentId: z.string().min(1).optional(),
-      },
-    },
-    ({ sessionId, agentId, currentOwnerAgentId }) =>
-      result(() => runtime.assignSession(sessionId, agentId, currentOwnerAgentId)),
-  );
-  server.registerTool(
-    'browser_session_release',
-    {
-      description: 'Release an owned session',
-      inputSchema: { sessionId: z.string().min(1), agentId: z.string().min(1) },
-    },
-    ({ sessionId, agentId }) => result(() => runtime.releaseSession(sessionId, agentId)),
-  );
-
-  server.registerTool(
-    'browser_message_send',
-    {
-      description: 'Send a deterministic mailbox message',
-      inputSchema: {
-        fromAgentId: z.string().min(1),
-        toAgentId: z.string().min(1),
-        type: z.enum(['message', 'request', 'response', 'event', 'handoff']),
-        payload: z.json(),
-        correlationId: z.string().optional(),
-        replyTo: z.string().optional(),
-      },
-    },
-    (input) => result(() => runtime.sendMessage({ ...input, type: input.type })),
-  );
-  server.registerTool(
-    'browser_message_list',
-    {
-      description: 'List an agent mailbox',
-      inputSchema: { agentId: z.string().min(1), unreadOnly: z.boolean().default(false) },
-    },
-    ({ agentId, unreadOnly }) => result(() => runtime.listMessages(agentId, unreadOnly)),
-  );
-  server.registerTool(
-    'browser_message_acknowledge',
-    {
-      description: 'Acknowledge a mailbox message',
-      inputSchema: { agentId: z.string().min(1), messageId: z.string().min(1) },
-    },
-    ({ agentId, messageId }) => result(() => runtime.acknowledgeMessage(agentId, messageId)),
-  );
   return server;
 }

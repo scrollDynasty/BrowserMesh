@@ -1,7 +1,7 @@
 {
   "name": "browsermesh",
   "version": "0.1.0",
-  "description": "Local multi-session browser runtime for AI agents",
+  "description": "Local isolated multi-session browser runtime for external MCP clients",
   "type": "module",
   "license": "Apache-2.0",
   "engines": {

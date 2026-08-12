@@ -1,6 +1,4 @@
 export type SessionStatus = 'creating' | 'ready' | 'closing' | 'closed' | 'failed';
-export type AgentStatus = 'active' | 'removed';
-export type MessageType = 'message' | 'request' | 'response' | 'event' | 'handoff';
 
 export interface SessionView {
   readonly id: string;
@@ -9,7 +7,6 @@ export interface SessionView {
   readonly createdAt: string;
   readonly lastActivityAt: string;
   readonly metadata: Readonly<Record<string, string>>;
-  readonly ownerAgentId?: string;
   readonly restoredFrom?: string;
 }
 
@@ -19,26 +16,6 @@ export interface PageView {
   readonly createdAt: string;
   readonly url: string;
   readonly isDefault: boolean;
-}
-
-export interface AgentView {
-  readonly id: string;
-  readonly name: string;
-  readonly status: AgentStatus;
-  readonly createdAt: string;
-  readonly metadata: Readonly<Record<string, string>>;
-}
-
-export interface MessageView {
-  readonly id: string;
-  readonly fromAgentId: string;
-  readonly toAgentId: string;
-  readonly type: MessageType;
-  readonly payload: unknown;
-  readonly createdAt: string;
-  readonly correlationId: string;
-  readonly replyTo?: string;
-  readonly acknowledgedAt?: string;
 }
 
 export type Locator =
@@ -68,9 +45,6 @@ export interface OperationResult<T> {
   readonly pageId?: string;
   readonly value: T;
 }
-
-export type JsonPrimitive = string | number | boolean | null;
-export type JsonValue = JsonPrimitive | JsonValue[] | { readonly [key: string]: JsonValue };
 
 export interface BrowserStorageState {
   cookies: Array<{

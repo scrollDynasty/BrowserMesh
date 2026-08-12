@@ -1,5 +1,4 @@
 import { describe, expect, it } from 'vitest';
-import { BrowserMeshError } from '../../src/domain/errors.js';
 import { FakeEngine, testRuntime } from '../support/fakes.js';
 
 describe('BrowserMeshRuntime', () => {
@@ -49,32 +48,6 @@ describe('BrowserMeshRuntime', () => {
     });
     await runtime.closeSession(a.id);
     await expect(runtime.createPage(a.id)).rejects.toMatchObject({ code: 'SESSION_CLOSED' });
-    await runtime.shutdown();
-  });
-
-  it('enforces ownership, supports handoff, and orders mailboxes', async () => {
-    const { runtime } = testRuntime();
-    const buyer = runtime.createAgent({ name: 'buyer' });
-    const seller = runtime.createAgent({ name: 'seller' });
-    const session = await runtime.createSession({ ownerAgentId: buyer.id });
-    expect(() => runtime.listPages(session.id, seller.id)).toThrow(BrowserMeshError);
-    runtime.assignSession(session.id, seller.id, buyer.id);
-    expect(runtime.listPages(session.id, seller.id)).toHaveLength(1);
-    const first = runtime.sendMessage({
-      fromAgentId: buyer.id,
-      toAgentId: seller.id,
-      type: 'request',
-      payload: { order: 1 },
-    });
-    const second = runtime.sendMessage({
-      fromAgentId: buyer.id,
-      toAgentId: seller.id,
-      type: 'message',
-      payload: 'next',
-    });
-    expect(runtime.listMessages(seller.id).map(({ id }) => id)).toEqual([first.id, second.id]);
-    expect(runtime.acknowledgeMessage(seller.id, first.id).acknowledgedAt).toBeDefined();
-    expect(runtime.listMessages(seller.id, true)).toHaveLength(1);
     await runtime.shutdown();
   });
 

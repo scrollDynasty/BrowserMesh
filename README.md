@@ -1,8 +1,14 @@
 # BrowserMesh
 
-BrowserMesh is a local, open-source multi-session browser runtime for AI agents. It replaces an implicit “current page” with explicit `sessionId` + `pageId` addressing, isolates every session in its own Chromium `BrowserContext`, and exposes the runtime over MCP stdio.
+BrowserMesh is a local, open-source multi-session browser runtime for external AI clients. It replaces an implicit “current page” with explicit `sessionId` + `pageId` addressing, isolates every session in its own Chromium `BrowserContext`, and exposes the runtime over MCP stdio.
 
-Version 0.1 is a small modular monolith: one Node.js process, one Chromium process, many isolated contexts. It includes session/page lifecycle, browser actions, per-session concurrency control, storage-state persistence, agent ownership, deterministic mailboxes, and a tested buyer/seller demonstration.
+Version 0.1 is a small modular monolith: one Node.js process, one Chromium process, many isolated contexts. It includes session/page lifecycle, browser actions, per-session concurrency control, and storage-state persistence. Reasoning and workflow orchestration stay in Claude Code, Codex, Cursor, Qwen, or another MCP client.
+
+```text
+User → external AI client → MCP → BrowserMesh → isolated browser sessions
+```
+
+The normal setup is configure BrowserMesh once in your MCP client, then ask that AI client to perform browser tasks. BrowserMesh is not an internal Agent framework or message bus.
 
 ## Requirements and installation
 
@@ -39,9 +45,9 @@ Example client configuration after a local build:
 }
 ```
 
-Typical flow:
+Typical flow used by the external AI client:
 
-1. Call `browser_session_create`; its initial page is available through `browser_page_list`.
+1. Call `browser_session_create`; its initial page is available through `browser_page_list`. Create a separate session for every user, account, role, or authentication state that must remain isolated.
 2. Pass both returned `sessionId` and `pageId` to every page operation.
 3. Call `browser_session_close` when finished. Runtime shutdown also drains queued work and closes all contexts.
 
@@ -66,13 +72,9 @@ Persistence:
 - `browser_state_save`, `browser_state_list`, `browser_state_remove`
 - Restore with `browser_session_create.fromState`.
 
-Agents and messages:
-
-- `browser_agent_create`, `browser_agent_list`, `browser_agent_get`, `browser_agent_remove`
-- `browser_session_assign`, `browser_session_release`
-- `browser_message_send`, `browser_message_list`, `browser_message_acknowledge`
-
 Tool inputs are schema validated. Successful JSON responses have `{ "ok": true, "value": ... }`; application failures have `{ "ok": false, "error": { "code", "message", "details" } }` with MCP `isError: true`.
+
+Session `name` and string `metadata` are neutral workflow labels. For example, an external client can label independent sessions `role=buyer` and `role=seller`; BrowserMesh does not create internal Agent entities, assign ownership, or exchange messages between them.
 
 ## Locators
 
@@ -90,7 +92,7 @@ Actions accept semantic locators (`role`, `text`, `label`, `placeholder`, `testI
 | `BROWSERMESH_MAX_PAGES`    |           `20` | Per-session managed page limit                |
 | `BROWSERMESH_PERSISTENCE`  |         `true` | Enable storage-state persistence              |
 
-Logs are JSON lines on stderr so stdout remains reserved for MCP. They contain correlation/resource IDs, not cookies, tokens, page contents, message payloads, or form values.
+Logs are JSON lines on stderr so stdout remains reserved for MCP. They contain correlation/resource IDs, not cookies, tokens, page contents, or form values.
 
 ## Development
 
@@ -113,7 +115,7 @@ Integration/e2e tests use a local deterministic HTTP server and real Chromium. S
 - Local stdio transport only; no remote Streamable HTTP, authentication, or multi-tenant boundary.
 - One Node.js process and one browser process; no distributed workers or crash recovery of live operations.
 - Persistence covers Playwright cookies and localStorage state, not live contexts, active operations, or virtual WebAuthn credentials.
-- In-memory agents, ownership, events, and mailboxes are lost on process restart. Ownership has explicit handoff but not expiring leases yet.
+- No internal Agent entities, ownership, mailboxes, messaging, or LLM orchestration. Those responsibilities belong to the external MCP client. A future generic client/workflow lease may be added only if multi-client protection requires it.
 - No downloads, arbitrary filesystem paths, shell execution, web dashboard, network allowlist, or full Playwright API.
 
 These are future scope, not incomplete guarantees: within one runtime, explicitly addressed sessions are isolated and different sessions execute concurrently while changing operations in one session are serialized.

@@ -20,14 +20,14 @@ Test groups can be run separately with `npm test`, `npm run test:integration`, `
 
 - `src/domain`: public models and typed errors; no adapters.
 - `src/application/ports`: browser, persistence, and event interfaces.
-- `src/runtime`: lifecycle, routing, synchronization, ownership, and mailboxes.
+- `src/runtime`: session/page lifecycle, routing, synchronization, limits, persistence orchestration, and shutdown.
 - `src/adapters/playwright`: the only layer that imports Playwright.
 - `src/adapters/mcp`: schemas and transport-independent MCP server registration.
 - `src/adapters/persistence`: safe local state storage.
 - `src/infrastructure`: configuration, IDs, and structured logs.
 - `tests/unit`: deterministic tests with ports replaced by fakes.
 - `tests/integration`: real Chromium and in-memory MCP client/server transport.
-- `tests/e2e`: buyer/seller multi-agent scenario.
+- `tests/e2e`: an external-client multi-role scenario using two isolated sessions, with no internal Agent model.
 - `tests/stress`: bounded 50-session routing/cleanup test.
 
 ## Adding a browser operation

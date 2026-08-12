@@ -1,1538 +1,235 @@
-# BrowserMesh
+# BrowserMesh v0.1 — Technical Specification
 
-## Technical Specification
+Status: MVP responsibility boundary
 
-Version: 0.1
-Status: Initial MVP specification
+## 1. Product definition
 
----
+BrowserMesh is an open-source local runtime that exposes multiple isolated browser sessions over MCP.
 
-# 1. Product definition
+The intended flow is:
 
-BrowserMesh — open-source runtime для параллельного управления несколькими независимыми browser sessions AI-агентами.
+```text
+User → external AI client → MCP → BrowserMesh → isolated browser sessions
+```
 
-Система должна позволять нескольким AI agents одновременно использовать браузер, не вмешиваясь в состояние друг друга.
+Claude Code, Codex, Cursor, Qwen, or another MCP client performs reasoning and orchestration. BrowserMesh provides browser capabilities only. A user normally configures BrowserMesh once in the external client and asks that client to complete browser tasks.
 
-BrowserMesh не является LLM framework.
+BrowserMesh is not an LLM framework, an internal agent runtime, a message bus, a Playwright fork, or a browser GUI.
 
-BrowserMesh не является форком Playwright.
+## 2. Core guarantee
 
-BrowserMesh не является browser GUI.
+Browser actions within one BrowserSession are logically isolated from actions in every other BrowserSession. A session must not accidentally expose another session's:
 
-BrowserMesh предоставляет инфраструктурный runtime между AI agent и browser automation engine.
+- cookies or localStorage;
+- authentication state;
+- browser context;
+- pages or page references;
+- URLs, DOM snapshots, screenshots, or form state.
 
-Основной первый integration protocol — MCP.
+Each v0.1 session maps to a distinct Playwright `BrowserContext`. One Chromium process may host many contexts.
 
----
+## 3. Explicit addressing
 
-# 2. Главная проблема
+Every browser operation requires `sessionId`. Every page operation also requires `pageId`. There is no global current session, active page, current page, or current tab.
 
-Обычная browser automation часто основывается на неявном понятии:
+A newly created session has one deterministic initial page, returned by `browser_page_list` and marked `isDefault`. The default marker is informational; page operations remain explicitly addressed.
 
-`current browser / current page`.
+Session `name` and string `metadata` are optional neutral labels. An external client may use metadata such as `role=buyer` or `account=work` to organize workflows. Metadata does not create an internal Agent, owner, mailbox, permission boundary, or lease.
 
-Для single-agent automation это приемлемо.
+When a browser task involves different users, accounts, roles, or authentication states, the MCP client should create a separate session for each identity.
 
-Для multi-agent environment это создаёт:
+## 4. v0.1 scope
 
-* shared browser state;
-* race conditions;
-* переключение вкладок другим agent;
-* смешивание cookies;
-* смешивание authentication;
-* неправильное управление lifecycle;
-* потерю соответствия agent → session;
-* невозможность безопасного parallel execution.
+### Sessions
 
-BrowserMesh должен устранить этот класс проблем.
+- create, list, get, close;
+- unique immutable ID;
+- lifecycle statuses: creating, ready, closing, closed, failed;
+- optional name and metadata;
+- configurable active-session limit;
+- idempotent close.
 
----
+### Pages
 
-# 3. Основная гарантия
+- initial page per session;
+- create, list, close;
+- unique page ID;
+- configurable per-session page limit;
+- cross-session page IDs rejected.
 
-Главный invariant системы:
+### Browser actions
 
-> Browser actions внутри одной BrowserSession логически изолированы от browser actions других BrowserSessions.
+- navigate, back, forward, reload;
+- current URL and title;
+- semantic click, fill, press, select option;
+- accessibility-oriented snapshot and visible text;
+- PNG screenshot returned in memory.
 
-Session A не должна иметь возможности случайно получить:
+### Locator strategies
 
-* cookies session B;
-* localStorage session B;
-* pages session B;
-* page references session B;
-* текущий URL session B;
-* screenshots session B;
-* DOM snapshot session B.
+- role, text, label, placeholder, test ID;
+- CSS as an escape hatch;
+- extensible contract that does not expose Playwright locator objects.
 
----
+### Concurrency
 
-# 4. MVP
+- different sessions execute concurrently;
+- changing operations in one session are serialized by an independent per-session queue;
+- no global runtime lock;
+- every page operation has an operation ID;
+- blocking operations have configurable bounded timeouts.
 
-Первый MVP должен доказать:
+### Persistence
 
-`Agent/Client A → Session A`
+- save cookies/localStorage state;
+- create a new session from saved state;
+- list and remove saved states;
+- filesystem adapter beneath `.browsermesh/` by default;
+- safe logical state names, no arbitrary caller paths;
+- no attempt to serialize a live `BrowserContext`.
 
-и одновременно:
+### MCP
 
-`Agent/Client B → Session B`
+- TypeScript MCP SDK;
+- local stdio transport;
+- schema-validated tool inputs;
+- application service calls only, never direct Playwright calls from handlers;
+- typed error mapping with MCP `isError` responses;
+- tool descriptions sufficient for an AI client to choose separate sessions for separate identities.
 
-могут выполнять browser operations параллельно без пересечения состояния.
+## 5. Explicit non-scope
 
-MVP должен работать локально.
+BrowserMesh v0.1 does not contain:
 
----
+- Agent entities or an Agent registry;
+- agent creation/removal MCP tools;
+- internal LLM reasoning or prompt orchestration;
+- session ownership tied to an AI-agent abstraction;
+- agent mailboxes, messaging, handoff, request/response, or message correlation;
+- `browser_agent_*`, `browser_message_*`, session assign, or session release tools;
+- authentication service, web dashboard, database, Redis, queue, broker, workers, microservices, Docker, Kubernetes, or cloud infrastructure;
+- arbitrary shell execution, arbitrary filesystem reads, downloads, or a full Playwright API;
+- Firefox/WebKit parity or remote Streamable HTTP.
 
-# 5. Technology baseline
+Generic client/workflow leases may be considered later if a real multi-client protection requirement exists. They must remain independent of LLM/Agent concepts.
 
-Основной язык:
+## 6. Architecture
 
-TypeScript.
+BrowserMesh uses a modular monolith:
 
-Runtime:
+- **Domain**: session/page views, locators, operation results, typed errors. No Playwright, MCP, filesystem, or transport imports.
+- **Application ports**: browser engine, persistence, and event contracts.
+- **Runtime**: session/page registries, lifecycle, routing, per-session queues, limits, persistence orchestration, shutdown.
+- **Adapters**: Playwright, MCP, filesystem persistence.
+- **Infrastructure**: centralized configuration, IDs, structured logging.
 
-Node.js.
+Allowed dependency direction is adapters → runtime/application → domain. The Playwright adapter is the only layer that manipulates `Browser`, `BrowserContext`, and `Page`. MCP handlers call runtime/application services.
 
-Browser automation engine:
+## 7. Browser lifecycle and shutdown
 
-Playwright.
+BrowserMesh lazily starts or explicitly starts one Chromium process. On shutdown it:
 
-Initial browser:
+1. stops accepting new operations;
+2. drains operations already queued;
+3. closes sessions/contexts;
+4. closes Chromium;
+5. closes the transport/process connection;
+6. reports cleanup failures rather than swallowing them.
 
-Chromium.
+Session initialization is queued with lifecycle operations so shutdown cannot leak a context created concurrently.
 
-Initial external protocol:
+## 8. Error contract
 
-Model Context Protocol.
+Public error categories:
 
-Validation:
+- `SESSION_NOT_FOUND`, `SESSION_NOT_READY`, `SESSION_CLOSED`;
+- `PAGE_NOT_FOUND`;
+- `INVALID_ARGUMENT`, `LIMIT_EXCEEDED`;
+- `OPERATION_TIMEOUT`, `NAVIGATION_FAILED`, `ELEMENT_NOT_FOUND`;
+- `BROWSER_ERROR`, `RUNTIME_SHUTTING_DOWN`, `SAVED_STATE_NOT_FOUND`;
+- `INTERNAL_ERROR`.
 
-schema-based runtime input validation.
+Raw Playwright stacks are not public MCP contracts. Underlying causes may be retained internally but secrets must not be logged.
 
-Testing:
+## 9. Security
 
-unit + integration + end-to-end.
+- Configuration reads environment variables centrally.
+- Structured logs go to stderr and never include cookies, tokens, storage state, page content, form values, or screenshots.
+- Persistence paths are controlled by the configured data directory; state names cannot traverse directories.
+- `.browsermesh/` is ignored by Git and documented as sensitive.
+- Screenshots are returned as MCP image content, not written to caller-selected paths.
+- Navigation accepts absolute HTTP(S) URLs only.
+- BrowserMesh never exposes a shell tool.
 
----
+## 10. MCP tools
 
-# 6. Architecture
+Session/page:
 
-Использовать modular-monolith architecture.
+- `browser_session_create`, `browser_session_list`, `browser_session_get`, `browser_session_close`;
+- `browser_page_create`, `browser_page_list`, `browser_page_close`.
 
-Основные слои:
+Navigation/actions/inspection:
 
-## Domain
+- `browser_navigate`, `browser_back`, `browser_forward`, `browser_reload`;
+- `browser_get_url`, `browser_get_title`, `browser_snapshot`, `browser_visible_text`;
+- `browser_click`, `browser_fill`, `browser_press`, `browser_select_option`;
+- `browser_screenshot`.
 
-Содержит бизнес-модель BrowserMesh.
+Persistence:
 
-Не зависит от:
+- `browser_state_save`, `browser_state_list`, `browser_state_remove`;
+- `browser_session_create.fromState` restores state.
 
-* Playwright;
-* MCP;
-* filesystem implementation;
-* Node transport implementation.
+## 11. Configuration
 
-## Application
+- headless/headed Chromium;
+- default operation timeout;
+- data directory;
+- log level;
+- maximum active sessions;
+- maximum pages per session;
+- persistence enabled/disabled.
 
-Содержит use-cases и orchestration.
+## 12. Implementation phases
 
-Например:
+1. Foundation: strict TypeScript, formatting, lint, test framework, config, logging, docs.
+2. Browser engine: port, Playwright adapter, start/stop, graceful shutdown.
+3. Multi-session core: session registry/lifecycle, BrowserContext-per-session, cleanup.
+4. Pages: explicit IDs and lifecycle.
+5. Browser actions and semantic locators.
+6. Concurrency: per-session queues, cross-session parallelism, operation IDs, timeouts.
+7. MCP: stdio server, schemas, errors, real client integration.
+8. Persistence: safe storage-state save/restore/list/remove.
+9. External-client workflow demo: one MCP client coordinates multiple explicitly labeled sessions without any internal Agent model.
 
-* CreateSession;
-* CloseSession;
-* ListSessions;
-* Navigate;
-* CreatePage;
-* ClosePage;
-* SnapshotPage;
-* ExecutePageAction.
+## 13. Testing requirements
 
-## Runtime
+Unit tests cover session registry/lifecycle, queue ordering, limits, error mapping, input validation, and safe persistence naming without real Chromium where unnecessary.
 
-Управляет:
+Real Chromium integration tests cover:
 
-* active sessions;
-* concurrency;
-* lifecycle;
-* action serialization;
-* runtime references.
+- separate contexts, cookies, localStorage, pages, and URLs;
+- concurrent operations in different sessions;
+- deterministic serialization within one session;
+- page lifecycle, actions, snapshots, screenshots;
+- storage-state save/close/restore;
+- shutdown and resource cleanup.
 
-## Adapters
+MCP integration tests cover tool discovery, descriptions, validation, calls, structured errors, stdio process startup, and clean exit.
 
-Реализуют внешние interfaces:
+The external-client e2e scenario uses separate buyer and seller sessions as workflow labels only. BrowserMesh does not represent, reason for, own, or message between those roles.
 
-* Playwright browser engine;
-* MCP;
-* local persistence.
+Stress coverage scales to 50 bounded concurrent sessions and verifies routing and cleanup without turning the test into a local denial of service.
 
-## Infrastructure
+## 14. Acceptance criteria
 
-Общие технические компоненты:
+An external MCP client can:
 
-* config;
-* logging;
-* IDs;
-* time;
-* shutdown.
+1. create two independently labeled sessions for different roles/accounts;
+2. obtain explicit page IDs;
+3. navigate and interact with both concurrently;
+4. observe correct independent URLs, cookies, storage, pages, DOM, and screenshots;
+5. persist and restore supported browser state;
+6. close sessions and the server without resource leaks.
 
----
-
-# 7. Dependency direction
-
-Разрешается:
-
-`adapters → application → domain`
-
-`runtime → domain`
-
-`infrastructure → declared interfaces`
-
-Запрещается:
-
-`domain → Playwright`
-
-`domain → MCP`
-
-`application → MCP`
-
-`application → concrete Playwright implementation`
-
-MCP adapter вызывает application use-cases.
-
-Playwright adapter реализует browser engine port.
-
----
-
-# 8. Browser Engine abstraction
-
-BrowserMesh должен иметь abstraction для browser engine.
-
-Application layer не должен знать:
-
-* `Browser`;
-* `BrowserContext`;
-* `Page`;
-* Playwright locator implementation.
-
-Первая implementation использует Playwright.
-
-Архитектура должна потенциально позволять добавить другие browser engines.
-
----
-
-# 9. Browser lifecycle
-
-Runtime должен управлять browser process централизованно.
-
-Для MVP допускается:
-
-`1 Browser process → N BrowserContexts`.
-
-Browser process должен запускаться lazy либо при старте runtime согласно выбранному и документированному решению.
-
-При shutdown:
-
-1. прекратить принимать новые операции;
-2. корректно завершить pending operations;
-3. закрыть contexts;
-4. закрыть browser;
-5. завершить process.
-
-Resource leaks недопустимы.
-
----
-
-# 10. BrowserSession
-
-Каждая session имеет:
-
-* unique id;
-* optional human-readable name;
-* status;
-* createdAt;
-* lastActivityAt;
-* optional metadata;
-* persistence settings.
-
-Минимальные statuses:
-
-* creating;
-* ready;
-* closing;
-* closed;
-* failed.
-
----
-
-# 11. Session ID
-
-Session ID:
-
-* уникален внутри runtime;
-* immutable;
-* используется во всех browser operations;
-* не зависит от page URL;
-* не зависит от MCP connection;
-* не зависит от agent connection.
-
-Human-readable name не является primary identity.
-
----
-
-# 12. Isolation
-
-Каждая BrowserSession MVP соответствует отдельному Playwright BrowserContext.
-
-Нельзя использовать один BrowserContext одновременно как несколько независимых sessions.
-
----
-
-# 13. No global active session
-
-В проекте запрещены концепции:
-
-* global current session;
-* global active page;
-* global current page;
-* global current tab.
-
-Каждый operation contract должен однозначно определять target session.
-
----
-
-# 14. Pages
-
-Одна BrowserSession может содержать несколько pages.
-
-Page получает собственный unique pageId.
-
-Session должна иметь возможность:
-
-* list pages;
-* create page;
-* close page;
-* выбрать page явно через pageId.
-
-Допускается initial page, создаваемая автоматически.
-
----
-
-# 15. Default page semantics
-
-Если MVP временно предоставляет convenience operation без pageId:
-
-* поведение должно быть deterministic;
-* правило выбора default page должно быть явно задокументировано;
-* API должен позволять перейти к explicit pageId.
-
-Предпочтение отдаётся explicit addressing.
-
----
-
-# 16. Concurrency
-
-Разные sessions могут выполнять операции одновременно.
-
-Пример:
-
-`session-A.navigate()`
-
-и:
-
-`session-B.click()`
-
-не должны блокировать друг друга глобальным mutex.
-
----
-
-# 17. Per-session action queue
-
-Для одной session browser-changing operations должны сериализоваться либо управляться equivalent concurrency primitive.
-
-Цель:
-
-исключить логически несовместимые конкурентные действия над одной session.
-
-Не использовать один глобальный application-wide lock.
-
----
-
-# 18. Operation IDs
-
-Каждая browser operation должна иметь operationId.
-
-Он используется для:
-
-* logging;
-* correlation;
-* future tracing;
-* debugging;
-* event history.
-
----
-
-# 19. Timeouts
-
-Все potentially blocking browser operations должны поддерживать ограниченное время ожидания.
-
-Не допускаются бесконечные hangs.
-
-Timeout behavior должен быть:
-
-* configurable;
-* predictable;
-* возвращать structured error.
-
----
-
-# 20. Errors
-
-Ошибки должны быть типизированы на уровне приложения.
-
-Минимальные error categories:
-
-* SESSION_NOT_FOUND;
-* SESSION_NOT_READY;
-* PAGE_NOT_FOUND;
-* SESSION_CLOSED;
-* INVALID_ARGUMENT;
-* OPERATION_TIMEOUT;
-* NAVIGATION_FAILED;
-* ELEMENT_NOT_FOUND;
-* BROWSER_ERROR;
-* INTERNAL_ERROR.
-
-Позже:
-
-* SESSION_OWNED_BY_ANOTHER_AGENT;
-* AGENT_NOT_FOUND;
-* MESSAGE_TARGET_NOT_FOUND.
-
-Не отдавать наружу только raw Playwright stack как публичный контракт.
-
-Underlying cause может сохраняться в logs.
-
----
-
-# 21. Initial browser capabilities
-
-MVP должен поддерживать:
-
-## Session
-
-* create;
-* list;
-* get;
-* close.
-
-## Page
-
-* create;
-* list;
-* close.
-
-## Navigation
-
-* navigate;
-* get current URL;
-* back;
-* forward;
-* reload.
-
-## Interaction
-
-* click;
-* fill;
-* type when materially necessary;
-* press key;
-* select option where возможно.
-
-## Inspection
-
-* page title;
-* accessibility-oriented snapshot или эквивалентное структурированное представление;
-* visible text/query operations where necessary.
-
-## Capture
-
-* screenshot.
-
-Не нужно в первой версии реализовывать весь Playwright API.
-
----
-
-# 22. Locator strategy
-
-BrowserMesh не должен строиться исключительно вокруг brittle CSS selectors.
-
-API должен допускать semantic locator strategy:
-
-* role;
-* text;
-* label;
-* placeholder;
-* test id;
-* CSS only when required.
-
-Details могут эволюционировать, но protocol должен быть расширяемым.
-
----
-
-# 23. MCP layer
-
-MCP является adapter.
-
-MCP tool handlers:
-
-* валидируют input;
-* вызывают application services;
-* преобразуют application result в MCP result;
-* преобразуют application errors в понятное tool response.
-
-Они НЕ должны непосредственно выполнять Playwright operations.
-
----
-
-# 24. Initial MCP transport
-
-Initial local MVP:
-
-stdio.
-
-Architecture должна позволить позже добавить:
-
-Streamable HTTP.
-
-Business logic не должна зависеть от transport.
-
----
-
-# 25. MCP tools
-
-Минимальный набор:
-
-`browser_session_create`
-
-`browser_session_list`
-
-`browser_session_get`
-
-`browser_session_close`
-
-`browser_page_create`
-
-`browser_page_list`
-
-`browser_page_close`
-
-`browser_navigate`
-
-`browser_back`
-
-`browser_forward`
-
-`browser_reload`
-
-`browser_get_url`
-
-`browser_get_title`
-
-`browser_snapshot`
-
-`browser_click`
-
-`browser_fill`
-
-`browser_press`
-
-`browser_screenshot`
-
-Naming может корректироваться при реализации, если сохранена последовательность и читаемость API.
-
----
-
-# 26. Explicit session addressing
-
-Все browser-related MCP tools обязаны получать:
-
-`sessionId`.
-
-Page-specific operations также получают:
-
-`pageId`
-
-либо используют ясно определённый default page mechanism.
-
----
-
-# 27. Session persistence
-
-BrowserMesh должен уметь сохранять browser authentication/storage state.
-
-Минимальные операции позднего MVP:
-
-* save session state;
-* create session from saved state;
-* list saved states;
-* delete saved state.
-
----
-
-# 28. Persistent state security
-
-Authentication state может содержать чувствительные credentials.
-
-Поэтому:
-
-* storage directory должна игнорироваться Git;
-* state files нельзя случайно commit'ить;
-* documentation должна предупреждать о чувствительности файлов;
-* application logs не должны печатать cookies/tokens.
-
----
-
-# 29. Persistence model
-
-Не пытаться сериализовать live BrowserContext.
-
-Persistence означает:
-
-сохранить поддерживаемое browser storage/auth state и создать новый context из него после восстановления.
-
----
-
-# 30. Local storage
-
-Для первой версии достаточно filesystem adapter.
-
-Например internal data directory:
-
-`.browsermesh/`
-
-Но структура хранения является implementation detail.
-
-Domain layer не должен знать filesystem paths.
-
----
-
-# 31. Agents — Phase 2
-
-После стабильного multi-session runtime добавить Agent entity.
-
-Agent:
-
-* id;
-* name;
-* status;
-* createdAt;
-* metadata.
-
----
-
-# 32. Agent/session assignment
-
-Agent может получить BrowserSession.
-
-Не следует жёстко объединять Agent и BrowserSession в одну сущность.
-
-Причина:
-
-в будущем agent может:
-
-* не иметь browser;
-* иметь несколько sessions;
-* передать session другому agent;
-* получить временную session.
-
----
-
-# 33. Session ownership
-
-Добавить ownership/lease model.
-
-Session может быть:
-
-* unowned;
-* owned by agent.
-
-Browser operation от другого agent должна отклоняться либо требовать explicit handoff.
-
----
-
-# 34. Lease
-
-В будущем ownership должен использовать lease semantics, чтобы погибший agent не блокировал session навсегда.
-
-Lease может иметь:
-
-* ownerAgentId;
-* acquiredAt;
-* expiresAt;
-* generation/version.
-
-Для первого Agent MVP можно начать проще, но interface должен позволить evolution.
-
----
-
-# 35. Agent registry
-
-Необходимые operations:
-
-* create agent;
-* get agent;
-* list agents;
-* remove agent;
-* assign session;
-* release session.
-
----
-
-# 36. Messaging
-
-Agents должны иметь возможность общаться.
-
-Message entity:
-
-* id;
-* fromAgentId;
-* toAgentId;
-* type;
-* payload;
-* createdAt;
-* correlationId;
-* optional replyTo.
-
----
-
-# 37. Message types
-
-Первоначальные:
-
-* message;
-* request;
-* response;
-* event;
-* handoff.
-
----
-
-# 38. Agent mailbox
-
-Каждый Agent получает mailbox.
-
-Operations:
-
-* send;
-* receive/list unread;
-* acknowledge;
-* optionally reply.
-
-Первоначальная implementation:
-
-in-memory.
-
----
-
-# 39. Message ordering
-
-Message ordering внутри одного recipient mailbox должно быть deterministic.
-
-Не требуется глобальный ordering всех сообщений системы.
-
----
-
-# 40. Event system
-
-Runtime должен иметь lightweight internal event abstraction.
-
-Не использовать external broker для MVP.
-
-Events могут включать:
-
-* session.created;
-* session.closed;
-* page.created;
-* page.closed;
-* navigation.started;
-* navigation.completed;
-* operation.started;
-* operation.completed;
-* operation.failed;
-* agent.created;
-* agent.assigned;
-* message.sent.
-
----
-
-# 41. Observability
-
-Первоначально:
-
-structured logs.
-
-Каждая операция должна позволять связать:
-
-* operationId;
-* sessionId;
-* pageId;
-* agentId where available.
-
-Не логировать:
-
-* passwords;
-* auth tokens;
-* cookies;
-* raw secrets.
-
----
-
-# 42. Future tracing
-
-Architecture должна позволить позже подключить OpenTelemetry.
-
-OpenTelemetry не является обязательным для первого milestone.
-
----
-
-# 43. Configuration
-
-Configuration должна поддерживать:
-
-* browser engine;
-* headless/headed mode;
-* default timeout;
-* data directory;
-* log level;
-* max sessions;
-* persistence enable/disable.
-
-Config должен иметь validation.
-
----
-
-# 44. Environment
-
-Не использовать прямой `process.env` хаотически по всему проекту.
-
-Environment configuration читается централизованно.
-
----
-
-# 45. Limits
-
-Runtime должен иметь configurable:
-
-* maximum sessions;
-* maximum pages per session;
-* operation timeout.
-
-Это защищает от случайного resource exhaustion.
-
----
-
-# 46. Session cleanup
-
-При закрытии session должны закрываться:
-
-* pages;
-* BrowserContext;
-* associated runtime handles;
-* queues;
-* leases.
-
-Повторный close должен иметь predictable idempotent behavior либо documented error behavior.
-
----
-
-# 47. Crash behavior
-
-В MVP нет требования восстанавливать live operations после process crash.
-
-Persistent saved authentication state должен оставаться пригодным к восстановлению.
-
----
-
-# 48. Shutdown
-
-Обработать process shutdown signals.
-
-Graceful shutdown должен:
-
-1. остановить новые requests;
-2. завершить или корректно отменить активные операции;
-3. закрыть sessions;
-4. закрыть browser engine;
-5. завершить transports.
-
----
-
-# 49. Testing strategy
-
-Проект обязан иметь:
-
-* unit tests;
-* integration tests;
-* end-to-end tests.
-
----
-
-# 50. Unit tests
-
-Тестировать отдельно:
-
-* session registry;
-* lifecycle transitions;
-* queues/locks;
-* ownership rules;
-* error mapping;
-* validation.
-
-Unit tests не должны запускать реальный Chromium там, где это не требуется.
-
----
-
-# 51. Integration tests
-
-Использовать реальный Playwright там, где необходимо проверить:
-
-* BrowserContext isolation;
-* page lifecycle;
-* storage state;
-* concurrent sessions.
-
----
-
-# 52. Critical isolation test
-
-Обязательный тест:
-
-Создать:
-
-`session-a`
-
-`session-b`.
-
-Установить разные browser states.
-
-Проверить:
-
-state A недоступен в B.
-
-state B недоступен в A.
-
----
-
-# 53. Critical concurrency test
-
-Одновременно выполнить browser operations:
-
-Session A → page A.
-
-Session B → page B.
-
-Убедиться:
-
-operations не воздействуют на противоположную session.
-
----
-
-# 54. Same-session concurrency test
-
-Запустить конфликтующие operations над одной session.
-
-Убедиться, что per-session synchronization предотвращает nondeterministic corruption.
-
----
-
-# 55. Persistence test
-
-1. Создать session.
-2. Установить state.
-3. Сохранить state.
-4. Закрыть session.
-5. Создать новую session из сохранённого state.
-6. Проверить восстановление.
-
----
-
-# 56. MCP integration tests
-
-Проверить:
-
-* server starts;
-* tools discoverable;
-* tool input validation;
-* create session;
-* navigate;
-* inspect;
-* close session;
-* structured error responses.
-
----
-
-# 57. Test web application
-
-Для deterministic browser e2e tests предпочтительно использовать маленький локальный test web server вместо зависимости от Google/GitHub/сторонних сайтов.
-
-Он должен позволить проверять:
-
-* cookies;
-* local storage;
-* forms;
-* buttons;
-* navigation;
-* separate roles.
-
----
-
-# 58. Code quality
-
-Обязателен strict TypeScript.
-
-Избегать:
-
-* `any`;
-* unsafe casts;
-* hidden global mutable state;
-* empty catches;
-* swallowed promises;
-* fire-and-forget без обработки errors.
-
----
-
-# 59. Formatting/lint
-
-Проект должен иметь автоматические:
-
-* formatting;
-* lint;
-* typecheck.
-
-Выбранные tools должны быть документированы.
-
----
-
-# 60. Public contracts
-
-Public interfaces должны быть стабильнее внутренних implementation details.
-
-Не отдавать Playwright objects наружу.
-
-Не отдавать internal Map references наружу.
-
----
-
-# 61. Documentation
-
-Обязательные документы:
-
-`README.md`
-
-`docs/architecture.md`
-
-`docs/development.md`
-
-`docs/SPEC.md`
-
-`docs/decisions/`
-
----
-
-# 62. ADR
-
-Создавать Architecture Decision Record для значимых решений.
-
-Например:
-
-* BrowserContext-per-session;
-* modular monolith;
-* per-session queue;
-* persistence strategy;
-* MCP transport strategy.
-
----
-
-# 63. README
-
-README должен содержать:
-
-* что такое BrowserMesh;
-* какую проблему решает;
-* minimal architecture;
-* installation;
-* local usage;
-* MCP configuration example;
-* supported tools;
-* limitations;
-* development commands.
-
----
-
-# 64. Security
-
-Browser automation — privileged capability.
-
-Поэтому предусмотреть:
-
-* no secrets in logs;
-* safe state storage;
-* input validation;
-* no arbitrary local filesystem read through browser tools;
-* no implicit arbitrary command execution;
-* clear trust boundaries.
-
----
-
-# 65. No shell tool
-
-BrowserMesh browser API не должен автоматически превращаться в general-purpose remote shell.
-
-Не добавлять arbitrary shell execution в browser MCP server.
-
----
-
-# 66. Screenshots
-
-Screenshots должны быть привязаны к:
-
-* sessionId;
-* pageId;
-* operationId.
-
-Filesystem path handling должен быть безопасным.
-
-Не разрешать uncontrolled arbitrary overwrite paths.
-
----
-
-# 67. Browser downloads
-
-Downloads не обязательны для initial MVP.
-
-Если добавляются позже, требуется отдельная sandboxed download policy.
-
----
-
-# 68. Network policy
-
-Initial local MVP может использовать обычную network configuration пользователя.
-
-Но architecture должна позволять позже добавить:
-
-* allowed hosts;
-* blocked hosts;
-* proxy;
-* network interception.
-
----
-
-# 69. Multi-browser
-
-MVP:
-
-Chromium.
-
-Не тратить время на одинаковую поддержку:
-
-* Firefox;
-* WebKit.
-
-Добавить их после стабилизации engine abstraction.
-
----
-
-# 70. Headless/headed
-
-Оба режима должны быть возможны через configuration.
-
-Development удобно поддерживать headed mode для debugging.
-
----
-
-# 71. CLI
-
-Отдельный богатый CLI не нужен на первом этапе.
-
-Допустим минимальный runtime start command.
-
-Полноценный:
-
-`browsermesh sessions`
-
-`browsermesh agents`
-
-не является MVP.
-
----
-
-# 72. Web UI
-
-Не реализовывать в MVP.
-
-Dashboard появится только после доказательства runtime architecture.
-
----
-
-# 73. Database
-
-Не добавлять PostgreSQL в MVP.
-
-In-memory runtime state + filesystem persistence достаточны.
-
----
-
-# 74. Redis
-
-Не добавлять Redis до появления distributed workers.
-
----
-
-# 75. Docker
-
-Docker не является требованием initial implementation.
-
-Сначала runtime должен стабильно запускаться локально.
-
-Dockerization — отдельный будущий milestone.
-
----
-
-# 76. Distributed architecture
-
-Future version может разделить:
-
-* gateway;
-* coordinator;
-* browser workers;
-* state store;
-* message broker.
-
-Но public domain concepts текущего проекта должны позволять это сделать без полной переписи.
-
----
-
-# 77. Phases
-
-## Phase 0 — Foundation
-
-Создать:
-
-* TypeScript project;
-* strict configuration;
-* lint;
-* formatting;
-* tests;
-* directory architecture;
-* config;
-* logging;
-* basic docs;
-* CI-ready scripts.
-
-No browser functionality required beyond smoke preparation.
-
----
-
-## Phase 1 — Browser Engine
-
-Реализовать:
-
-* browser engine abstraction;
-* Playwright adapter;
-* browser start;
-* browser stop;
-* graceful shutdown.
-
-Tests обязательны.
-
----
-
-## Phase 2 — Multi-session Core
-
-Реализовать:
-
-* Session entity;
-* registry;
-* lifecycle;
-* create;
-* get;
-* list;
-* close;
-* BrowserContext-per-session;
-* resource cleanup.
-
-Это первый ключевой milestone продукта.
-
----
-
-## Phase 3 — Pages
-
-Реализовать:
-
-* page IDs;
-* create;
-* list;
-* get;
-* close;
-* deterministic default page behavior if retained.
-
----
-
-## Phase 4 — Basic Browser Actions
-
-Реализовать:
-
-* navigate;
-* back;
-* forward;
-* reload;
-* get URL;
-* title;
-* click;
-* fill;
-* press;
-* snapshot;
-* screenshot.
-
----
-
-## Phase 5 — Concurrency
-
-Реализовать:
-
-* per-session action serialization;
-* parallel execution across sessions;
-* operation IDs;
-* timeouts;
-* race-condition tests.
-
-После этого можно считать доказанной ключевую техническую гипотезу BrowserMesh.
-
----
-
-## Phase 6 — MCP
-
-Реализовать:
-
-* MCP adapter;
-* stdio transport;
-* tool schemas;
-* mapping errors;
-* MCP integration tests.
-
-После Phase 6 проект должен уже подключаться к MCP-compatible coding agent/client.
-
----
-
-## Phase 7 — Persistence
-
-Реализовать:
-
-* save storage/auth state;
-* restore session;
-* list states;
-* remove state;
-* filesystem storage;
-* secret-safe logging.
-
----
-
-## Phase 8 — Agents
-
-Реализовать:
-
-* Agent entity;
-* Agent registry;
-* session assignment;
-* ownership;
-* release/handoff.
-
----
-
-## Phase 9 — Messaging
-
-Реализовать:
-
-* mailbox;
-* send;
-* receive;
-* request;
-* response;
-* correlation;
-* handoff event.
-
----
-
-## Phase 10 — Multi-agent demo
-
-Создать deterministic demonstration.
-
-Scenario:
-
-Agent Buyer:
-
-1. получает buyer session;
-2. создаёт объект/заказ в test application;
-3. отправляет сообщение Seller.
-
-Agent Seller:
-
-1. имеет отдельную seller session;
-2. получает сообщение;
-3. находит созданный объект;
-4. выполняет действие;
-5. отвечает Buyer.
-
-Buyer:
-
-1. получает ответ;
-2. проверяет изменение состояния.
-
-Две browser sessions должны оставаться полностью изолированными.
-
----
-
-# 78. MVP acceptance criteria
-
-MVP считается успешным, если можно одновременно создать:
-
-`buyer`
-
-`seller`
-
-и выполнить независимые действия.
-
-Например:
-
-Buyer:
-
-`session buyer → page → site A`
-
-Seller:
-
-`session seller → page → site B`
-
-После параллельного выполнения:
-
-* URLs правильные;
-* cookies не смешались;
-* storage не смешался;
-* pages не смешались;
-* никакой global active page не использован.
-
----
-
-# 79. MCP acceptance criteria
-
-Внешний MCP client должен уметь:
-
-1. создать session;
-2. узнать sessionId;
-3. открыть page;
-4. navigate;
-5. получить snapshot/title/url;
-6. выполнить interaction;
-7. создать вторую session;
-8. работать с обеими независимо;
-9. закрыть их.
-
----
-
-# 80. Agent acceptance criteria
-
-После реализации Agent layer:
-
-* Agent A владеет session A;
-* Agent B владеет session B;
-* Agent B не может незаметно вмешаться в session A;
-* ownership можно безопасно передать;
-* agents могут отправлять сообщения друг другу.
-
----
-
-# 81. Non-goals for v0.1
-
-Не являются целями:
-
-* autonomous LLM reasoning;
-* собственная LLM;
-* prompt framework;
-* visual browser editor;
-* full Playwright API;
-* Selenium replacement;
-* browser cloud;
-* Kubernetes orchestration;
-* distributed execution;
-* SaaS billing;
-* user management;
-* production multi-tenant cloud.
-
----
-
-# 82. Product philosophy
-
-BrowserMesh должен следовать принципам:
-
-Explicit over implicit.
-
-Isolation by default.
-
-Concurrency where safe.
-
-Serialization where required.
-
-Small core.
-
-Adapters around the core.
-
-No global browser state.
-
-No unnecessary infrastructure.
-
-Test real concurrency.
-
-Fail visibly.
-
-Preserve debuggability.
-
-Design for multi-agent usage from the beginning.
-
----
-
-# 83. Definition of Done
-
-Для каждой phase:
-
-* implementation завершена;
-* TypeScript compile/typecheck проходит;
-* lint проходит;
-* tests проходят;
-* новые contracts покрыты tests;
-* resources закрываются;
-* errors обработаны;
-* docs обновлены;
-* архитектурные boundaries не нарушены.
-
----
-
-# 84. Final v0.1 result
-
-Конечный результат первой версии должен выглядеть концептуально так:
-
-`MCP Client A`
-→ `BrowserMesh`
-→ `Session A`
-→ `BrowserContext A`
-
-параллельно:
-
-`MCP Client B`
-→ `BrowserMesh`
-→ `Session B`
-→ `BrowserContext B`
-
-и затем:
-
-`Agent A ↔ Message Bus ↔ Agent B`
-
-при гарантированной browser-session isolation.
-
-Это является фундаментом BrowserMesh.
+No internal Agent/message/ownership API is present. Typecheck, lint, formatting, unit, integration, e2e, stress, build, stdio, and package-install verification must pass.
