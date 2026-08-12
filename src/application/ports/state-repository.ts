@@ -1,4 +1,4 @@
-import type { JsonValue } from '../../domain/models.js';
+import type { BrowserStorageState } from '../../domain/models.js';
 
 export interface SavedStateView {
   readonly name: string;
@@ -6,8 +6,8 @@ export interface SavedStateView {
 }
 
 export interface StateRepositoryPort {
-  save(name: string, state: JsonValue): Promise<SavedStateView>;
-  load(name: string): Promise<JsonValue>;
+  save(name: string, state: BrowserStorageState): Promise<SavedStateView>;
+  load(name: string): Promise<BrowserStorageState>;
   list(): Promise<readonly SavedStateView[]>;
   remove(name: string): Promise<void>;
 }

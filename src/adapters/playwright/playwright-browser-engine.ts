@@ -1,11 +1,17 @@
-import { chromium, type Browser, type BrowserContext, type Locator as PwLocator, type Page } from 'playwright';
+import {
+  chromium,
+  type Browser,
+  type BrowserContext,
+  type Locator as PwLocator,
+  type Page,
+} from 'playwright';
 import type {
   BrowserContextHandle,
   BrowserEnginePort,
   BrowserPageHandle,
 } from '../../application/ports/browser-engine.js';
 import { BrowserMeshError } from '../../domain/errors.js';
-import type { JsonValue, Locator } from '../../domain/models.js';
+import type { BrowserStorageState, Locator } from '../../domain/models.js';
 
 interface ContextHandle extends BrowserContextHandle {
   readonly kind: 'context';
@@ -41,11 +47,12 @@ export class PlaywrightBrowserEngine implements BrowserEnginePort {
 
   async createContext(options: {
     readonly timeoutMs: number;
-    readonly storageState?: JsonValue;
+    readonly storageState?: BrowserStorageState;
   }): Promise<BrowserContextHandle> {
     await this.start();
     const browser = this.browser;
-    if (browser === undefined) throw new BrowserMeshError('BROWSER_ERROR', 'Browser is unavailable');
+    if (browser === undefined)
+      throw new BrowserMeshError('BROWSER_ERROR', 'Browser is unavailable');
     try {
       const context = await browser.newContext(
         options.storageState === undefined ? {} : { storageState: options.storageState },
@@ -57,7 +64,9 @@ export class PlaywrightBrowserEngine implements BrowserEnginePort {
       context.once('close', () => this.dropContext(handle.id));
       return handle;
     } catch (error) {
-      throw new BrowserMeshError('BROWSER_ERROR', 'Failed to create browser context', { cause: error });
+      throw new BrowserMeshError('BROWSER_ERROR', 'Failed to create browser context', {
+        cause: error,
+      });
     }
   }
 
@@ -98,12 +107,20 @@ export class PlaywrightBrowserEngine implements BrowserEnginePort {
   }
 
   async title(handle: BrowserPageHandle, timeoutMs: number): Promise<string> {
-    return this.wrapAction(() => this.getPage(handle).title(), 'BROWSER_ERROR', 'Failed to get page title', timeoutMs);
+    return this.wrapAction(
+      () => this.getPage(handle).title(),
+      'BROWSER_ERROR',
+      'Failed to get page title',
+      timeoutMs,
+    );
   }
 
   async navigate(handle: BrowserPageHandle, url: string, timeoutMs: number): Promise<void> {
     await this.wrapAction(
-      () => this.getPage(handle).goto(url, { timeout: timeoutMs }).then(() => undefined),
+      () =>
+        this.getPage(handle)
+          .goto(url, { timeout: timeoutMs })
+          .then(() => undefined),
       'NAVIGATION_FAILED',
       `Navigation failed for ${url}`,
       timeoutMs,
@@ -111,38 +128,83 @@ export class PlaywrightBrowserEngine implements BrowserEnginePort {
   }
 
   async back(handle: BrowserPageHandle, timeoutMs: number): Promise<void> {
-    await this.wrapAction(() => this.getPage(handle).goBack({ timeout: timeoutMs }).then(() => undefined), 'NAVIGATION_FAILED', 'Back navigation failed', timeoutMs);
+    await this.wrapAction(
+      () =>
+        this.getPage(handle)
+          .goBack({ timeout: timeoutMs })
+          .then(() => undefined),
+      'NAVIGATION_FAILED',
+      'Back navigation failed',
+      timeoutMs,
+    );
   }
 
   async forward(handle: BrowserPageHandle, timeoutMs: number): Promise<void> {
-    await this.wrapAction(() => this.getPage(handle).goForward({ timeout: timeoutMs }).then(() => undefined), 'NAVIGATION_FAILED', 'Forward navigation failed', timeoutMs);
+    await this.wrapAction(
+      () =>
+        this.getPage(handle)
+          .goForward({ timeout: timeoutMs })
+          .then(() => undefined),
+      'NAVIGATION_FAILED',
+      'Forward navigation failed',
+      timeoutMs,
+    );
   }
 
   async reload(handle: BrowserPageHandle, timeoutMs: number): Promise<void> {
-    await this.wrapAction(() => this.getPage(handle).reload({ timeout: timeoutMs }).then(() => undefined), 'NAVIGATION_FAILED', 'Reload failed', timeoutMs);
+    await this.wrapAction(
+      () =>
+        this.getPage(handle)
+          .reload({ timeout: timeoutMs })
+          .then(() => undefined),
+      'NAVIGATION_FAILED',
+      'Reload failed',
+      timeoutMs,
+    );
   }
 
   async click(handle: BrowserPageHandle, locator: Locator, timeoutMs: number): Promise<void> {
     await this.locate(this.getPage(handle), locator).click({ timeout: timeoutMs });
   }
 
-  async fill(handle: BrowserPageHandle, locator: Locator, value: string, timeoutMs: number): Promise<void> {
+  async fill(
+    handle: BrowserPageHandle,
+    locator: Locator,
+    value: string,
+    timeoutMs: number,
+  ): Promise<void> {
     await this.locate(this.getPage(handle), locator).fill(value, { timeout: timeoutMs });
   }
 
-  async press(handle: BrowserPageHandle, locator: Locator, key: string, timeoutMs: number): Promise<void> {
+  async press(
+    handle: BrowserPageHandle,
+    locator: Locator,
+    key: string,
+    timeoutMs: number,
+  ): Promise<void> {
     await this.locate(this.getPage(handle), locator).press(key, { timeout: timeoutMs });
   }
 
-  async selectOption(handle: BrowserPageHandle, locator: Locator, value: string, timeoutMs: number): Promise<void> {
+  async selectOption(
+    handle: BrowserPageHandle,
+    locator: Locator,
+    value: string,
+    timeoutMs: number,
+  ): Promise<void> {
     await this.locate(this.getPage(handle), locator).selectOption(value, { timeout: timeoutMs });
   }
 
   async snapshot(handle: BrowserPageHandle, timeoutMs: number): Promise<string> {
-    return this.locate(this.getPage(handle), { strategy: 'css', value: 'body' }).ariaSnapshot({ timeout: timeoutMs });
+    return this.locate(this.getPage(handle), { strategy: 'css', value: 'body' }).ariaSnapshot({
+      timeout: timeoutMs,
+    });
   }
 
-  async visibleText(handle: BrowserPageHandle, locator: Locator, timeoutMs: number): Promise<string> {
+  async visibleText(
+    handle: BrowserPageHandle,
+    locator: Locator,
+    timeoutMs: number,
+  ): Promise<string> {
     return this.locate(this.getPage(handle), locator).innerText({ timeout: timeoutMs });
   }
 
@@ -150,27 +212,31 @@ export class PlaywrightBrowserEngine implements BrowserEnginePort {
     return this.getPage(handle).screenshot({ timeout: timeoutMs, type: 'png' });
   }
 
-  async storageState(handle: BrowserContextHandle): Promise<JsonValue> {
-    const state: unknown = await this.getContext(handle).storageState({ indexedDB: true });
-    return state as JsonValue;
+  async storageState(handle: BrowserContextHandle): Promise<BrowserStorageState> {
+    return this.getContext(handle).storageState();
   }
 
   private getContext(handle: BrowserContextHandle): BrowserContext {
     const context = this.contexts.get(handle.id);
-    if (context === undefined) throw new BrowserMeshError('BROWSER_ERROR', 'Browser context is closed');
+    if (context === undefined)
+      throw new BrowserMeshError('BROWSER_ERROR', 'Browser context is closed');
     return context;
   }
 
   private getPage(handle: BrowserPageHandle): Page {
     const page = this.pages.get(handle.id);
-    if (page === undefined || page.isClosed()) throw new BrowserMeshError('PAGE_NOT_FOUND', 'Browser page is closed');
+    if (page === undefined || page.isClosed())
+      throw new BrowserMeshError('PAGE_NOT_FOUND', 'Browser page is closed');
     return page;
   }
 
   private locate(page: Page, locator: Locator): PwLocator {
     switch (locator.strategy) {
       case 'role':
-        return page.getByRole(locator.value, locator.name === undefined ? {} : { name: locator.name });
+        return page.getByRole(
+          locator.value,
+          locator.name === undefined ? {} : { name: locator.name },
+        );
       case 'text':
         return page.getByText(locator.value, { exact: true });
       case 'label':
@@ -203,7 +269,11 @@ export class PlaywrightBrowserEngine implements BrowserEnginePort {
     } catch (error) {
       if (error instanceof BrowserMeshError) throw error;
       const timedOut = error instanceof Error && error.name === 'TimeoutError';
-      throw new BrowserMeshError(timedOut ? 'OPERATION_TIMEOUT' : code, timedOut ? `Operation exceeded ${timeoutMs}ms` : message, { cause: error });
+      throw new BrowserMeshError(
+        timedOut ? 'OPERATION_TIMEOUT' : code,
+        timedOut ? `Operation exceeded ${String(timeoutMs)}ms` : message,
+        { cause: error },
+      );
     }
   }
 }

@@ -57,7 +57,10 @@ export type Locator =
         | 'tab';
       readonly name?: string;
     }
-  | { readonly strategy: 'text' | 'label' | 'placeholder' | 'testId' | 'css'; readonly value: string };
+  | {
+      readonly strategy: 'text' | 'label' | 'placeholder' | 'testId' | 'css';
+      readonly value: string;
+    };
 
 export interface OperationResult<T> {
   readonly operationId: string;
@@ -68,3 +71,20 @@ export interface OperationResult<T> {
 
 export type JsonPrimitive = string | number | boolean | null;
 export type JsonValue = JsonPrimitive | JsonValue[] | { readonly [key: string]: JsonValue };
+
+export interface BrowserStorageState {
+  cookies: Array<{
+    name: string;
+    value: string;
+    domain: string;
+    path: string;
+    expires: number;
+    httpOnly: boolean;
+    secure: boolean;
+    sameSite: 'Strict' | 'Lax' | 'None';
+  }>;
+  origins: Array<{
+    origin: string;
+    localStorage: Array<{ name: string; value: string }>;
+  }>;
+}

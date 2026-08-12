@@ -1,9 +1,7 @@
 import { resolve } from 'node:path';
 import { z } from 'zod';
 
-const booleanString = z
-  .enum(['true', 'false'])
-  .transform((value) => value === 'true');
+const booleanString = z.enum(['true', 'false']).transform((value) => value === 'true');
 
 const environmentSchema = z.object({
   BROWSERMESH_HEADLESS: booleanString.default(true),

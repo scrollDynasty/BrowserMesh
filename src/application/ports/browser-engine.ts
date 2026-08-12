@@ -1,4 +1,4 @@
-import type { JsonValue, Locator } from '../../domain/models.js';
+import type { BrowserStorageState, Locator } from '../../domain/models.js';
 
 export interface BrowserPageHandle {
   readonly id: symbol;
@@ -13,7 +13,7 @@ export interface BrowserEnginePort {
   stop(): Promise<void>;
   createContext(options: {
     readonly timeoutMs: number;
-    readonly storageState?: JsonValue;
+    readonly storageState?: BrowserStorageState;
   }): Promise<BrowserContextHandle>;
   closeContext(context: BrowserContextHandle): Promise<void>;
   createPage(context: BrowserContextHandle): Promise<BrowserPageHandle>;
@@ -37,5 +37,5 @@ export interface BrowserEnginePort {
   snapshot(page: BrowserPageHandle, timeoutMs: number): Promise<string>;
   visibleText(page: BrowserPageHandle, locator: Locator, timeoutMs: number): Promise<string>;
   screenshot(page: BrowserPageHandle, timeoutMs: number): Promise<Uint8Array>;
-  storageState(context: BrowserContextHandle): Promise<JsonValue>;
+  storageState(context: BrowserContextHandle): Promise<BrowserStorageState>;
 }
