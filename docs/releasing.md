@@ -17,9 +17,12 @@ Conventional Commit PR title
 
 No ordinary push or feature PR publishes to npm.
 
-The v0.1 development line uses explicit beta prereleases. Release Please increments the
-prerelease counter (`0.1.0-beta.0` to `0.1.0-beta.1`) while this mode is enabled. The publish
-workflow sends prerelease versions to the npm `beta` dist-tag and stable versions to `latest`.
+BrowserMesh is promoting the manually published `0.1.0-beta.0` package to the stable `0.1.0`
+release. A one-time `Release-As: 0.1.0` commit selects that exact stable version. Subsequent
+versions follow the repository's normal Conventional Commit and pre-1.0 SemVer policy.
+
+The publish workflow sends prerelease versions to the npm `beta` dist-tag and stable versions to
+`latest`; the stable promotion therefore becomes the default version installed by npm users.
 
 The initial `bootstrap-sha` records the source boundary of the manually published
 `0.1.0-beta.0` package so the first automated changelog does not repeat the entire repository
@@ -113,10 +116,8 @@ npm view multi-agent-browser-mcp version dist-tags --json
 npx -y multi-agent-browser-mcp@latest
 ```
 
-Before promoting the first stable release, change the release configuration deliberately in a
-reviewed PR: disable prerelease mode, remove the prerelease versioning strategy/type, and select
-the intended stable version with a one-time `Release-As` directive. Do not publish a stable
-version merely by editing an npm dist-tag.
+Future prerelease cycles must be introduced deliberately in a reviewed configuration PR. Do not
+create a prerelease merely by editing an npm dist-tag.
 
 Use an MCP client for the final real-world smoke; `npx` remains running because it is an stdio server, so stop it by closing the MCP client rather than treating that as a hang.
 

@@ -9,12 +9,10 @@
       "package-name": "multi-agent-browser-mcp",
       "changelog-path": "CHANGELOG.md",
       "always-update": true,
-      "versioning": "prerelease",
-      "prerelease-type": "beta",
       "bump-minor-pre-major": true,
       "bump-patch-for-minor-pre-major": true,
       "draft": false,
-      "prerelease": true
+      "prerelease": false
     }
   }
 }
