@@ -70,9 +70,9 @@ jobs:
       - name: Install Chromium
         run: npx playwright install --with-deps chromium
       - name: Run Chromium and MCP integration tests
-        run: npm run test:integration
+        run: xvfb-run --auto-servernum npm run test:integration
       - name: Run external-client e2e tests
-        run: npm run test:e2e
+        run: xvfb-run --auto-servernum npm run test:e2e
 
   stress:
     name: stress
@@ -102,7 +102,7 @@ jobs:
       - name: Install Chromium
         run: npx playwright install --with-deps chromium
       - name: Verify installed npm tarball
-        run: npm run verify:package
+        run: xvfb-run --auto-servernum npm run verify:package
 
   all-checks-passed:
     name: all-checks-passed

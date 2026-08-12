@@ -14,7 +14,6 @@ describe('stdio executable', () => {
       args: ['--import', 'tsx', 'src/cli.ts'],
       cwd: process.cwd(),
       env: {
-        BROWSERMESH_HEADLESS: 'true',
         BROWSERMESH_LOG_LEVEL: 'silent',
         BROWSERMESH_PERSISTENCE: 'false',
         BROWSERMESH_DATA_DIR: dataDirectory,

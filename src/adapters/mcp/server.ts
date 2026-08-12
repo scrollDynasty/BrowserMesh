@@ -229,7 +229,7 @@ export function createMcpServer(runtime: BrowserMeshRuntime): McpServer {
     'browser_press',
     {
       description:
-        'Press a key on a locator within one explicitly addressed page, preserving deterministic ordering with other operations in that session.',
+        'Press a key on a locator within one explicitly addressed page, preserving deterministic ordering with other operations in that session. A missing or unsuitable element returns OPERATION_TIMEOUT within timeoutMs (10 seconds by default) without closing MCP or browser sessions.',
       inputSchema: { ...targetSchema, locator: locatorSchema, key: z.string().min(1).max(64) },
     },
     (input) => result(() => runtime.press(target(input), input.locator as Locator, input.key)),
@@ -238,7 +238,7 @@ export function createMcpServer(runtime: BrowserMeshRuntime): McpServer {
     'browser_select_option',
     {
       description:
-        'Select an option on one explicitly addressed page using a semantic or CSS locator. The interaction is isolated to the supplied session.',
+        'Select an option on one explicitly addressed page using a semantic or CSS locator. A missing or unsuitable select returns OPERATION_TIMEOUT within timeoutMs (10 seconds by default), and the supplied session plus all other sessions remain usable.',
       inputSchema: { ...targetSchema, locator: locatorSchema, value: z.string() },
     },
     (input) =>

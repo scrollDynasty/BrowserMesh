@@ -389,9 +389,9 @@ Operation IDs do not grant permissions and are not secrets.
 - safe message;
 - optional safe details.
 
-Raw Playwright stacks are not part of the public MCP contract.
-
-Underlying exceptions may be retained internally for debugging as long as secrets are not logged.
+Raw Playwright stacks are not part of the public MCP contract. A bounded cause summary and safe
+operation context are returned for browser and locator failures. Rejected operations leave the MCP
+transport, runtime, and unrelated sessions available.
 
 Important lifecycle/concurrency errors include:
 

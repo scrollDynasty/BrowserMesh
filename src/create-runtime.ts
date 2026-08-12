@@ -7,7 +7,7 @@ import { BrowserMeshRuntime } from './runtime/browsermesh-runtime.js';
 
 export function createRuntime(config: BrowserMeshConfig): BrowserMeshRuntime {
   return new BrowserMeshRuntime({
-    engine: new PlaywrightBrowserEngine(config.headless),
+    engine: new PlaywrightBrowserEngine(),
     stateRepository: new FileSystemStateRepository(config.dataDirectory),
     events: new StructuredLogger(config.logLevel),
     ids: uuidGenerator,

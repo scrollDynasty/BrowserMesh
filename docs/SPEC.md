@@ -538,9 +538,10 @@ Public error categories include:
 
 The implementation may refine the list through ADR/API contracts when necessary, but public codes must remain stable and safe.
 
-Raw Playwright stack traces are not public MCP contracts.
-
-Underlying causes may be retained internally for debugging provided secrets are not logged.
+Raw Playwright stack traces are not public MCP contracts. Browser and element failures expose a
+bounded cause summary and safe operation context (for example URL, locator strategy/value,
+operation, and timeout) so callers can distinguish connection, DNS, timeout, and locator failures.
+A rejected operation must not disconnect MCP, destroy the runtime, or invalidate unrelated sessions.
 
 ## 14. Architecture
 
@@ -654,7 +655,7 @@ Browser automation is a privileged capability and future remote/multi-tenant mod
 
 v0.1 configuration includes:
 
-- headless/headed mode;
+- visible headed Chromium launched by the CLI;
 - default operation timeout;
 - data directory;
 - log level;

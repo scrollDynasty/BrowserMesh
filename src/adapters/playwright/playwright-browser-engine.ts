@@ -29,7 +29,7 @@ export class PlaywrightBrowserEngine implements BrowserEnginePort {
   private readonly contexts = new Map<symbol, BrowserContext>();
   private readonly pages = new Map<symbol, Page>();
 
-  constructor(private readonly headless: boolean) {}
+  constructor(private readonly headless = false) {}
 
   onDisconnected(listener: () => void): () => void {
     this.disconnectedListeners.add(listener);
@@ -152,6 +152,7 @@ export class PlaywrightBrowserEngine implements BrowserEnginePort {
       'NAVIGATION_FAILED',
       `Navigation failed for ${url}`,
       timeoutMs,
+      { url },
     );
   }
 
@@ -194,6 +195,8 @@ export class PlaywrightBrowserEngine implements BrowserEnginePort {
   async click(handle: BrowserPageHandle, locator: Locator, timeoutMs: number): Promise<void> {
     await this.wrapElement(
       () => this.locate(this.getPage(handle), locator).click({ timeout: timeoutMs }),
+      'click',
+      locator,
       timeoutMs,
     );
   }
@@ -206,6 +209,8 @@ export class PlaywrightBrowserEngine implements BrowserEnginePort {
   ): Promise<void> {
     await this.wrapElement(
       () => this.locate(this.getPage(handle), locator).fill(value, { timeout: timeoutMs }),
+      'fill',
+      locator,
       timeoutMs,
     );
   }
@@ -218,6 +223,8 @@ export class PlaywrightBrowserEngine implements BrowserEnginePort {
   ): Promise<void> {
     await this.wrapElement(
       () => this.locate(this.getPage(handle), locator).press(key, { timeout: timeoutMs }),
+      'press',
+      locator,
       timeoutMs,
     );
   }
@@ -233,6 +240,8 @@ export class PlaywrightBrowserEngine implements BrowserEnginePort {
         this.locate(this.getPage(handle), locator)
           .selectOption(value, { timeout: timeoutMs })
           .then(() => undefined),
+      'select option',
+      locator,
       timeoutMs,
     );
   }
@@ -256,6 +265,8 @@ export class PlaywrightBrowserEngine implements BrowserEnginePort {
   ): Promise<string> {
     return this.wrapElement(
       () => this.locate(this.getPage(handle), locator).innerText({ timeout: timeoutMs }),
+      'read visible text',
+      locator,
       timeoutMs,
     );
   }
@@ -332,30 +343,42 @@ export class PlaywrightBrowserEngine implements BrowserEnginePort {
     code: 'BROWSER_ERROR' | 'NAVIGATION_FAILED',
     message: string,
     timeoutMs: number,
+    details: Readonly<Record<string, unknown>> = {},
   ): Promise<T> {
     try {
       return await action();
     } catch (error) {
       if (error instanceof BrowserMeshError) throw error;
       const timedOut = error instanceof Error && error.name === 'TimeoutError';
+      const cause = errorMessage(error);
       throw new BrowserMeshError(
         timedOut ? 'OPERATION_TIMEOUT' : code,
-        timedOut ? `Operation exceeded ${String(timeoutMs)}ms` : message,
-        { cause: error },
+        `${timedOut ? `Operation exceeded ${String(timeoutMs)}ms` : message}: ${cause}`,
+        { cause: error, details: { ...details, timeoutMs, cause } },
       );
     }
   }
 
-  private async wrapElement<T>(action: () => Promise<T>, timeoutMs: number): Promise<T> {
+  private async wrapElement<T>(
+    action: () => Promise<T>,
+    operation: string,
+    locator: Locator,
+    timeoutMs: number,
+  ): Promise<T> {
     try {
       return await action();
     } catch (error) {
       if (error instanceof BrowserMeshError) throw error;
       const timedOut = error instanceof Error && error.name === 'TimeoutError';
+      const cause = errorMessage(error);
+      const locatorDescription = describeLocator(locator);
       throw new BrowserMeshError(
         timedOut ? 'OPERATION_TIMEOUT' : 'ELEMENT_NOT_FOUND',
-        timedOut ? `Element operation exceeded ${String(timeoutMs)}ms` : 'Element operation failed',
-        { cause: error },
+        `${timedOut ? `Element operation exceeded ${String(timeoutMs)}ms` : `Unable to ${operation}`} for ${locatorDescription}: ${cause}`,
+        {
+          cause: error,
+          details: { operation, locator, timeoutMs, cause },
+        },
       );
     }
   }
@@ -368,4 +391,15 @@ export class PlaywrightBrowserEngine implements BrowserEnginePort {
       throw new BrowserMeshError('BROWSER_ERROR', message, { cause: error });
     }
   }
+}
+
+function describeLocator(locator: Locator): string {
+  const name =
+    locator.strategy === 'role' && locator.name !== undefined ? `, name=${locator.name}` : '';
+  return `${locator.strategy}=${locator.value}${name}`;
+}
+
+function errorMessage(error: unknown): string {
+  const message = error instanceof Error ? error.message : String(error);
+  return message.replaceAll(/\s+/g, ' ').trim().slice(0, 2_000) || 'Unknown Playwright error';
 }
