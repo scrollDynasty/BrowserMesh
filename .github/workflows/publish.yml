@@ -34,9 +34,9 @@ jobs:
       - name: Install Chromium
         run: npx playwright install --with-deps chromium
       - name: Run full verification
-        run: npm run verify
+        run: xvfb-run --auto-servernum npm run verify
       - name: Verify installed npm tarball
-        run: npm run verify:package
+        run: xvfb-run --auto-servernum npm run verify:package
       - name: Verify version matches tag and select npm dist-tag
         id: version
         run: |
