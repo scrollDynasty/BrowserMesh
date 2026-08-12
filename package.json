@@ -1,6 +1,6 @@
 {
   "name": "multi-agent-browser-mcp",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Local isolated multi-session browser runtime for external MCP clients",
   "type": "module",
   "license": "Apache-2.0",
