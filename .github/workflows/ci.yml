@@ -16,6 +16,23 @@ permissions:
   contents: read
 
 jobs:
+  dependency-review:
+    name: dependency-review
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - name: Review dependency changes
+        if: github.event_name == 'pull_request'
+        uses: actions/dependency-review-action@a1d282b36b6f3519aa1f3fc636f609c47dddb294 # v5.0.0
+        with:
+          fail-on-severity: low
+          fail-on-scopes: runtime, development, unknown
+      - name: Explain non-PR run
+        if: github.event_name != 'pull_request'
+        run: echo "Dependency diff review applies to pull requests; protected PRs already passed it."
+
   static-checks:
     name: static-checks
     runs-on: ubuntu-latest
@@ -60,6 +77,10 @@ jobs:
     name: browser-tests
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        node-version: [22, 24]
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -67,6 +88,8 @@ jobs:
           persist-credentials: false
       - name: Setup
         uses: ./.github/actions/setup
+        with:
+          node-version: ${{ matrix.node-version }}
       - name: Install Chromium
         run: npx playwright install --with-deps chromium
       - name: Run Chromium and MCP integration tests
@@ -85,11 +108,13 @@ jobs:
           persist-credentials: false
       - name: Setup
         uses: ./.github/actions/setup
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
       - name: Run bounded concurrency stress tests
-        run: npm run test:stress
+        run: xvfb-run --auto-servernum npm run test:stress
 
-  package-smoke:
-    name: package-smoke
+  coverage:
+    name: coverage
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -101,8 +126,42 @@ jobs:
         uses: ./.github/actions/setup
       - name: Install Chromium
         run: npx playwright install --with-deps chromium
-      - name: Verify installed npm tarball
+      - name: Enforce coverage thresholds
+        run: xvfb-run --auto-servernum npm run test:coverage
+
+  package-smoke:
+    name: package-smoke
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            node-version: 24
+          - os: windows-latest
+            node-version: 22
+    runs-on: ${{ matrix.os }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Setup
+        uses: ./.github/actions/setup
+        with:
+          node-version: ${{ matrix.node-version }}
+      - name: Install Chromium with Linux dependencies
+        if: runner.os == 'Linux'
+        run: npx playwright install --with-deps chromium
+      - name: Install Chromium on Windows
+        if: runner.os == 'Windows'
+        run: npx playwright install chromium
+      - name: Verify installed npm tarball on Linux
+        if: runner.os == 'Linux'
         run: xvfb-run --auto-servernum npm run verify:package
+      - name: Verify installed npm tarball on Windows
+        if: runner.os == 'Windows'
+        run: npm run verify:package
 
   all-checks-passed:
     name: all-checks-passed
@@ -110,21 +169,25 @@ jobs:
     permissions: {}
     if: always()
     needs:
+      - dependency-review
       - static-checks
       - unit-and-build
       - browser-tests
       - stress
+      - coverage
       - package-smoke
     steps:
       - name: Check all jobs passed
         env:
+          DEPENDENCY_REVIEW: ${{ needs.dependency-review.result }}
           STATIC_CHECKS: ${{ needs.static-checks.result }}
           UNIT_AND_BUILD: ${{ needs.unit-and-build.result }}
           BROWSER_TESTS: ${{ needs.browser-tests.result }}
           STRESS: ${{ needs.stress.result }}
+          COVERAGE: ${{ needs.coverage.result }}
           PACKAGE_SMOKE: ${{ needs.package-smoke.result }}
         run: |
-          for result in "$STATIC_CHECKS" "$UNIT_AND_BUILD" "$BROWSER_TESTS" "$STRESS" "$PACKAGE_SMOKE"; do
+          for result in "$DEPENDENCY_REVIEW" "$STATIC_CHECKS" "$UNIT_AND_BUILD" "$BROWSER_TESTS" "$STRESS" "$COVERAGE" "$PACKAGE_SMOKE"; do
             if [ "$result" != "success" ]; then
               echo "One or more required checks failed."
               exit 1

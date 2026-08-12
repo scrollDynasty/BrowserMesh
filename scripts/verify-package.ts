@@ -4,8 +4,10 @@ import {
   StdioClientTransport,
 } from '@modelcontextprotocol/sdk/client/stdio.js';
 import { execFile } from 'node:child_process';
+import { once } from 'node:events';
 import { constants } from 'node:fs';
 import { access, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { createServer, type Server } from 'node:http';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { promisify } from 'node:util';
@@ -31,6 +33,7 @@ const mcpEnvelopeSchema = z.object({
     operationId: z.string().min(1),
     sessionId: z.string().min(1),
     pageId: z.string().min(1),
+    value: z.unknown(),
   }),
 });
 const installedManifestSchema = z.object({
@@ -53,6 +56,7 @@ async function main(): Promise<void> {
   const temporaryRoot = await mkdtemp(join(tmpdir(), 'browsermesh-package-'));
   let client: Client | undefined;
   let transport: StdioClientTransport | undefined;
+  let webServer: PackageTestServer | undefined;
   try {
     const packOutput = await execFileAsync(
       process.execPath,
@@ -137,12 +141,61 @@ async function main(): Promise<void> {
       arguments: { name: 'package-smoke' },
     });
     const createdIds = readSuccessfulTextResult(created);
-    const url = await client.callTool({
-      name: 'browser_get_url',
-      arguments: { sessionId: createdIds.sessionId, pageId: createdIds.pageId },
-    });
-    if (url.isError === true || !JSON.stringify(url).includes('about:blank')) {
-      throw new Error('Packaged MCP browser URL smoke call failed');
+    webServer = await startPackageTestServer();
+    readSuccessfulTextResult(
+      await client.callTool({
+        name: 'browser_navigate',
+        arguments: {
+          sessionId: createdIds.sessionId,
+          pageId: createdIds.pageId,
+          url: webServer.url,
+        },
+      }),
+    );
+    const initialStatus = readSuccessfulTextResult(
+      await client.callTool({
+        name: 'browser_visible_text',
+        arguments: {
+          sessionId: createdIds.sessionId,
+          pageId: createdIds.pageId,
+          locator: { strategy: 'testId', value: 'status' },
+        },
+      }),
+    );
+    if (initialStatus.value !== 'ready') {
+      throw new Error('Packaged MCP browser did not read the expected DOM state');
+    }
+    readSuccessfulTextResult(
+      await client.callTool({
+        name: 'browser_click',
+        arguments: {
+          sessionId: createdIds.sessionId,
+          pageId: createdIds.pageId,
+          locator: { strategy: 'role', value: 'button', name: 'Run package action' },
+        },
+      }),
+    );
+    const updatedStatus = readSuccessfulTextResult(
+      await client.callTool({
+        name: 'browser_visible_text',
+        arguments: {
+          sessionId: createdIds.sessionId,
+          pageId: createdIds.pageId,
+          locator: { strategy: 'testId', value: 'status' },
+        },
+      }),
+    );
+    if (updatedStatus.value !== 'clicked') {
+      throw new Error('Packaged MCP browser action did not update the DOM');
+    }
+    const url = readSuccessfulTextResult(
+      await client.callTool({
+        name: 'browser_get_url',
+        arguments: { sessionId: createdIds.sessionId, pageId: createdIds.pageId },
+      }),
+    );
+    if (url.value !== webServer.url) {
+      throw new Error('Packaged MCP browser URL did not match the test server');
     }
     const closed = await client.callTool({
       name: 'browser_session_close',
@@ -152,6 +205,7 @@ async function main(): Promise<void> {
   } finally {
     await client?.close();
     await transport?.close();
+    await webServer?.close();
     await rm(temporaryRoot, {
       recursive: true,
       force: true,
@@ -159,6 +213,34 @@ async function main(): Promise<void> {
       retryDelay: 100,
     });
   }
+}
+
+interface PackageTestServer {
+  readonly url: string;
+  close(): Promise<void>;
+}
+
+async function startPackageTestServer(): Promise<PackageTestServer> {
+  const server: Server = createServer((_request, response) => {
+    response.setHeader('content-type', 'text/html; charset=utf-8');
+    response.end(
+      '<!doctype html><title>Package smoke</title><button aria-label="Run package action" onclick="document.querySelector(`[data-testid=status]`).textContent=`clicked`">Run</button><div data-testid="status">ready</div>',
+    );
+  });
+  server.listen(0, '127.0.0.1');
+  await once(server, 'listening');
+  const address = server.address();
+  if (address === null || typeof address === 'string') {
+    server.close();
+    throw new Error('Package test server did not bind to TCP');
+  }
+  return {
+    url: `http://127.0.0.1:${String(address.port)}/`,
+    async close(): Promise<void> {
+      server.close();
+      await once(server, 'close');
+    },
+  };
 }
 
 async function assertInstalledBin(binPath: string, installedCliPath: string): Promise<void> {

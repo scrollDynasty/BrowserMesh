@@ -954,6 +954,8 @@ The project must pass:
 - isolation tests;
 - persistence tests;
 - stress tests;
+- enforced source coverage thresholds;
+- dependency review for pull-request dependency changes;
 - build;
 - MCP stdio verification;
 - package-install verification.

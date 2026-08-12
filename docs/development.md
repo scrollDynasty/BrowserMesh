@@ -65,11 +65,14 @@ npm test
 npm run test:integration
 npm run test:e2e
 npm run test:stress
+npm run test:coverage
 npm run build
 npm run verify
 ```
 
-`npm run verify` is the canonical local full-project verification entry point.
+`npm run verify` is the canonical local full-project verification entry point. It runs the complete
+suite with V8 coverage and enforces the repository's statement, branch, function, and line
+thresholds.
 
 It should run all required non-destructive checks needed for v0.1 release confidence, including:
 

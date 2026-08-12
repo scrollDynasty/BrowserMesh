@@ -5,3 +5,6 @@ paths-ignore:
   - '**/dist/**'
   - '**/coverage/**'
   - '**/.browsermesh/**'
+
+queries:
+  - uses: security-extended
