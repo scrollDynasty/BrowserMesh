@@ -18,7 +18,12 @@ const role = z.enum([
   'tab',
 ]);
 const locatorSchema = z.discriminatedUnion('strategy', [
-  z.object({ strategy: z.literal('role'), value: role, name: z.string().optional() }),
+  z.object({
+    strategy: z.literal('role'),
+    value: role,
+    name: z.string().optional(),
+    exact: z.boolean().optional().default(true),
+  }),
   z.object({
     strategy: z.enum(['text', 'label', 'placeholder', 'testId', 'css']),
     value: z.string().min(1),
@@ -193,7 +198,7 @@ export function createMcpServer(runtime: BrowserMeshRuntime): McpServer {
     'browser_snapshot',
     {
       description:
-        'Inspect an accessibility-oriented snapshot of one explicitly addressed page. Use it to understand page structure before semantic interaction while preserving session isolation.',
+        'Inspect an accessibility-oriented snapshot of one explicitly addressed page. Non-empty password-input values are redacted before content crosses MCP. Use the snapshot to understand page structure before semantic interaction while preserving session isolation.',
       inputSchema: targetSchema,
     },
     (input) => result(() => runtime.snapshot(target(input))),
@@ -211,7 +216,7 @@ export function createMcpServer(runtime: BrowserMeshRuntime): McpServer {
     'browser_click',
     {
       description:
-        'Click a semantic or CSS locator on one explicitly addressed page. Prefer semantic locators and keep the IDs associated with the intended user/account session.',
+        'Click a semantic or CSS locator on one explicitly addressed page. Role locator names match exactly by default for deterministic selection; pass exact=false only for intentional partial matching. An ambiguous locator returns LOCATOR_AMBIGUOUS without damaging the session. Prefer semantic locators and keep the IDs associated with the intended user/account session.',
       inputSchema: { ...targetSchema, locator: locatorSchema },
     },
     (input) => result(() => runtime.click(target(input), input.locator as Locator)),

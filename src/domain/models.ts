@@ -33,6 +33,8 @@ export type Locator =
         | 'option'
         | 'tab';
       readonly name?: string;
+      /** Exact accessible-name matching is the deterministic default. Set false only for deliberate partial matching. */
+      readonly exact?: boolean;
     }
   | {
       readonly strategy: 'text' | 'label' | 'placeholder' | 'testId' | 'css';

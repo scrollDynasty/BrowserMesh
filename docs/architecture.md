@@ -401,9 +401,15 @@ Important lifecycle/concurrency errors include:
 - `SESSION_CLOSED`;
 - `PAGE_NOT_FOUND`;
 - `OPERATION_TIMEOUT`;
+- `LOCATOR_AMBIGUOUS`;
 - `BROWSER_ERROR`;
 - `BROWSER_DISCONNECTED`;
 - `RUNTIME_SHUTTING_DOWN`.
+
+The stdio adapter connects before Chromium is needed. Browser launch is lazy at session creation,
+so missing Playwright binaries produce a structured MCP error with the exact installation command.
+Accessibility snapshots redact password-input values inside the Playwright adapter before the
+result reaches the runtime or MCP boundary.
 
 ## Persistence
 

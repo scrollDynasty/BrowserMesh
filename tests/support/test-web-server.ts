@@ -79,6 +79,28 @@ export async function startTestWebServer(): Promise<TestWebServer> {
       );
       return;
     }
+    if (url.pathname === '/password') {
+      response.end(
+        page(
+          'Password',
+          '<label>Password <input type="password" aria-label="Password" /></label><label>Confirm password <input type="password" aria-label="Confirm password" /></label>',
+        ),
+      );
+      return;
+    }
+    if (url.pathname === '/ambiguous') {
+      response.end(
+        page(
+          'Ambiguous',
+          '<a href="/exact">Employees</a><a href="/overview">Employees overview</a>',
+        ),
+      );
+      return;
+    }
+    if (url.pathname === '/exact') {
+      response.end(page('Exact', '<div data-testid="status">exact</div>'));
+      return;
+    }
     const value = url.searchParams.get('value');
     if (value !== null)
       response.setHeader(

@@ -219,6 +219,12 @@ The public contract must remain extensible.
 
 It must not expose Playwright `Locator` objects.
 
+Role locator names match exactly by default. Callers may explicitly request partial matching.
+Multiple matches return `LOCATOR_AMBIGUOUS` rather than being misclassified as a missing element.
+
+Accessibility snapshots must redact non-empty values held by password inputs before returning
+content across MCP.
+
 ### 5.6 Navigation policy
 
 `browser_navigate` accepts absolute HTTP(S) URLs.
@@ -529,6 +535,7 @@ Public error categories include:
 - `OPERATION_TIMEOUT`
 - `NAVIGATION_FAILED`
 - `ELEMENT_NOT_FOUND`
+- `LOCATOR_AMBIGUOUS`
 - `BROWSER_ERROR`
 - `BROWSER_DISCONNECTED`
 - `RUNTIME_SHUTTING_DOWN`
@@ -655,7 +662,7 @@ Browser automation is a privileged capability and future remote/multi-tenant mod
 
 v0.1 configuration includes:
 
-- visible headed Chromium launched by the CLI;
+- visible headed Chromium launched lazily for the first browser session;
 - default operation timeout;
 - data directory;
 - log level;
@@ -664,6 +671,9 @@ v0.1 configuration includes:
 - persistence enabled/disabled.
 
 Configuration is validated centrally.
+
+MCP negotiation and tool discovery do not depend on a successful Chromium launch. A missing
+Playwright browser binary is reported by `browser_session_create` as an actionable `BROWSER_ERROR`.
 
 Scattered direct `process.env` access across the application is forbidden.
 
