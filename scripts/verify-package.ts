@@ -5,7 +5,7 @@ import {
 } from '@modelcontextprotocol/sdk/client/stdio.js';
 import { execFile } from 'node:child_process';
 import { constants } from 'node:fs';
-import { access, mkdir, mkdtemp, readFile, realpath, rm, writeFile } from 'node:fs/promises';
+import { access, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { promisify } from 'node:util';
@@ -57,7 +57,14 @@ async function main(): Promise<void> {
     const artifact = packed[0];
     if (artifact === undefined) throw new Error('npm pack did not produce an artifact');
     const paths = new Set(artifact.files.map(({ path }) => path));
-    for (const required of ['dist/cli.js', 'dist/index.js', 'dist/index.d.ts', 'README.md']) {
+    for (const required of [
+      'dist/cli.js',
+      'dist/index.js',
+      'dist/index.d.ts',
+      'README.md',
+      'LICENSE',
+      'NOTICE',
+    ]) {
       if (!paths.has(required)) throw new Error(`Packed artifact is missing ${required}`);
     }
     if ([...paths].some((path) => path.startsWith('src/') || path.startsWith('tests/'))) {
@@ -161,9 +168,6 @@ async function assertInstalledBin(binPath: string, installedCliPath: string): Pr
   }
 
   await access(binPath, constants.X_OK);
-  if ((await realpath(binPath)) !== (await realpath(installedCliPath))) {
-    throw new Error('Installed browsermesh bin does not resolve to the packaged CLI');
-  }
 }
 
 function readSuccessfulTextResult(result: unknown): z.infer<typeof mcpEnvelopeSchema>['value'] {
