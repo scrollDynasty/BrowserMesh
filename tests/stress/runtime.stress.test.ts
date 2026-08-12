@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { testRuntime } from '../support/fakes.js';
 
-describe('runtime stress', () => {
+describe('runtime concurrency stress with a deterministic engine', () => {
   it('routes 50 concurrent sessions without cross-session leakage or leaked handles', async () => {
     const { runtime, engine } = testRuntime();
     engine.delayMs = 1;

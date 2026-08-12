@@ -87,6 +87,7 @@ For browser/runtime/MCP changes:
 npm run test:integration
 npm run test:e2e
 npm run test:stress
+npm run test:coverage
 npm run verify:package
 ```
 
@@ -103,16 +104,18 @@ If dependencies change, commit the updated `package-lock.json`. CI runs `npm ci`
 
 Every PR to `master` runs:
 
-| Check                | Coverage                                                          |
-| -------------------- | ----------------------------------------------------------------- |
-| `static-checks`      | Typecheck, ESLint, Prettier                                       |
-| `unit-and-build`     | Unit tests/build on Node.js 22 and 24                             |
-| `browser-tests`      | Real Chromium integration and external-client e2e                 |
-| `stress`             | Bounded 50-session routing/concurrency/cleanup                    |
-| `package-smoke`      | Generated tarball install, bin, MCP discovery, real browser smoke |
-| `CodeQL`             | JavaScript/TypeScript and GitHub Actions security analysis        |
-| `conventional-title` | Conventional Commit PR-title contract                             |
-| `all-checks-passed`  | Stable aggregate branch-protection gate                           |
+| Check                | Coverage                                                        |
+| -------------------- | --------------------------------------------------------------- |
+| `static-checks`      | Typecheck, ESLint, Prettier                                     |
+| `unit-and-build`     | Unit tests/build on Node.js 22 and 24                           |
+| `browser-tests`      | Real Chromium integration/e2e on Node.js 22 and 24              |
+| `stress`             | Deterministic 50-session plus bounded real-Chromium stress      |
+| `coverage`           | Complete suite with enforced V8 coverage thresholds             |
+| `dependency-review`  | Reject newly introduced vulnerable dependencies                 |
+| `package-smoke`      | Linux/Windows tarball install and packaged MCP browser workflow |
+| `CodeQL`             | Extended JavaScript/TypeScript and Actions security analysis    |
+| `conventional-title` | Conventional Commit PR-title contract                           |
+| `all-checks-passed`  | Stable aggregate branch-protection gate                         |
 
 Tests in the standard directories are discovered automatically; ordinary test additions do not require workflow edits.
 

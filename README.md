@@ -467,6 +467,7 @@ npm test
 npm run test:integration
 npm run test:e2e
 npm run test:stress
+npm run test:coverage
 npm run build
 npm run verify
 ```

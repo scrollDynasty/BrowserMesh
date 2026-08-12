@@ -17,13 +17,15 @@ The current `docs/SPEC.md` defines implementation phases 0 through 9. Its testin
 | 6 — MCP                      | Complete | Stdio server, schemas, safe success/error mapping, complete discovery descriptions, exact v0.1 tool-set contract test, real subprocess routing/validation/clean-exit test.          |
 | 7 — Persistence              | Complete | Logical `stateId`, safe names, save/list/remove/restore, private application path, atomic replacement, same-state write serialization, failure recovery, no state contents in logs. |
 | 8 — External-client workflow | Complete | A real MCP `Client` coordinates isolated buyer and seller sessions in the deterministic local workflow e2e; BrowserMesh creates no internal agents.                                 |
-| 9 — Release readiness        | Complete | Node 22/24 CI, clean install, full suite/build, npm tarball install, manifest/public import/bin validation, packaged MCP discovery, real packaged Chromium smoke.                   |
+| 9 — Release readiness        | Complete | Node 22/24 real-browser CI, Windows package smoke, coverage gates, npm tarball install, manifest/public import/bin validation, and packaged MCP browser workflow.                   |
 
 ## Contribution and release automation
 
 - Pull requests use templates, Conventional Commit title validation, a stable aggregate branch-protection check, and CodeQL advanced analysis.
-- CI separates static, Node 22/24, real-Chromium integration/e2e, bounded stress, and installed-package smoke jobs.
-- Dependabot covers npm and pinned GitHub Actions dependencies.
+- CI separates static, Node 22/24 real-Chromium integration/e2e, deterministic and real-browser
+  stress, coverage, dependency review, and Linux/Windows installed-package smoke jobs.
+- Dependabot covers npm and pinned GitHub Actions dependencies; vulnerability alerts and automated
+  security updates are enabled in the repository.
 - Release Please prepares reviewed version/changelog PRs from merged contributor changes.
 - A protected `vX.Y.Z` tag runs the complete verification gates and publishes with npm Trusted Publishing (GitHub OIDC); ordinary pushes and feature PRs cannot publish.
 - Contributor, conduct, security, and maintainer release/setup documentation is present in the repository root and `docs/releasing.md`.
@@ -33,8 +35,10 @@ The current `docs/SPEC.md` defines implementation phases 0 through 9. Its testin
 - Real-Chromium integration covers isolated cookies, localStorage, pages, URLs, DOM reads, screenshots, page lifecycle, history navigation, interactions, persistence restoration, same-session ordering, cross-session parallelism, timeout recovery, queued close/shutdown, initialization shutdown, disconnect, and handle cleanup.
 - Unit tests cover lifecycle/limits, terminal-record bounds, operation correlation, queue recovery, navigation policy, persistence naming/atomic concurrency, configuration, structured logging, and architecture dependency rules.
 - MCP tests cover the exact public tool set, descriptions, schema rejection, safe structured errors, successful calls, explicit routing, subprocess stdio negotiation, and exit.
-- The bounded 50-session stress test verifies routing, concurrent independence, and cleanup.
-- `scripts/verify-package.ts` tests the generated npm tarball rather than source-tree execution.
+- The deterministic 50-session stress test verifies runtime routing and cleanup, while a separate
+  eight-context real-Chromium stress test verifies bounded adapter isolation and resource release.
+- `scripts/verify-package.ts` tests the generated npm tarball rather than source-tree execution and
+  performs stdio MCP navigation, DOM inspection, and interaction through the installed executable.
 
 ## Responsibility boundary
 
@@ -48,12 +52,13 @@ User → external AI client → MCP → BrowserMesh → isolated browser session
 
 ## Verification
 
-- `npm ci`: passed; 220 packages installed, 0 reported vulnerabilities.
+- `npm ci`: passed with 0 reported vulnerabilities.
 - `npm run verify`: passed after the clean install.
   - TypeScript typecheck: passed.
   - ESLint: passed.
   - Prettier check: passed.
-  - Vitest: 11 test files and 41 tests passed.
+  - Vitest: 15 test files and 53 tests passed.
+  - V8 coverage thresholds: statements 90%, branches 75%, functions 95%, lines 90%.
   - Production build: passed.
 - `npm run verify:package`: passed after the clean install, including installed tarball MCP/Chromium smoke.
 - Release configuration JSON and all repository YAML files parsed successfully.
