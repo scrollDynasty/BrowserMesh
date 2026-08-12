@@ -483,7 +483,17 @@ See:
 - [Technical specification](docs/SPEC.md)
 - [Architecture](docs/architecture.md)
 - [Development](docs/development.md)
+- [Contributing](CONTRIBUTING.md)
+- [Release process](docs/releasing.md)
+- [Security policy](SECURITY.md)
 - [Architecture decisions](docs/decisions/)
+
+Pull request titles follow Conventional Commits. Every PR is checked by the full test matrix,
+package-install smoke tests, semantic-title validation, and CodeQL. Releases are prepared by
+Release Please and published to npm through GitHub OIDC only after a maintainer merges the
+generated Release PR.
+
+BrowserMesh is distributed under the [Apache License 2.0](LICENSE).
 
 ## Intentional v0.1 limitations
 

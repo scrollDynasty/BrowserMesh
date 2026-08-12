@@ -1,0 +1,60 @@
+name: publish
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+concurrency:
+  group: npm-publish-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  publish:
+    name: publish
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: npm
+    steps:
+      - name: Checkout release tag
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Verify tag commit belongs to master
+        run: |
+          git fetch origin master
+          git merge-base --is-ancestor "$GITHUB_SHA" origin/master
+      - name: Setup
+        uses: ./.github/actions/setup
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+      - name: Run full verification
+        run: npm run verify
+      - name: Verify installed npm tarball
+        run: npm run verify:package
+      - name: Verify version matches tag
+        run: |
+          PACKAGE_VERSION=$(node -p "require('./package.json').version")
+          TAG_VERSION="${GITHUB_REF_NAME#v}"
+          echo "package.json: $PACKAGE_VERSION"
+          echo "git tag:      $TAG_VERSION"
+          test "$PACKAGE_VERSION" = "$TAG_VERSION"
+      - name: Verify npm supports trusted publishing
+        run: |
+          NPM_VERSION="$(npm --version)"
+          echo "npm: $NPM_VERSION"
+          node -e "const [major, minor] = process.argv[1].split('.').map(Number); if (major < 11 || (major === 11 && minor < 5)) { console.error('npm 11.5.1 or newer is required for trusted publishing'); process.exit(1); }" "$NPM_VERSION"
+      - name: Publish to npm with OIDC
+        run: npm publish --access public
+      - name: Write release summary
+        run: |
+          echo "## Published to npm" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Package: multi-agent-browser-mcp" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Version: $GITHUB_REF_NAME" >> "$GITHUB_STEP_SUMMARY"
+          echo "- npm: https://www.npmjs.com/package/multi-agent-browser-mcp" >> "$GITHUB_STEP_SUMMARY"

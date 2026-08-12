@@ -19,6 +19,15 @@ The current `docs/SPEC.md` defines implementation phases 0 through 9. Its testin
 | 8 — External-client workflow | Complete | A real MCP `Client` coordinates isolated buyer and seller sessions in the deterministic local workflow e2e; BrowserMesh creates no internal agents.                                 |
 | 9 — Release readiness        | Complete | Node 22/24 CI, clean install, full suite/build, npm tarball install, manifest/public import/bin validation, packaged MCP discovery, real packaged Chromium smoke.                   |
 
+## Contribution and release automation
+
+- Pull requests use templates, Conventional Commit title validation, a stable aggregate branch-protection check, and CodeQL advanced analysis.
+- CI separates static, Node 22/24, real-Chromium integration/e2e, bounded stress, and installed-package smoke jobs.
+- Dependabot covers npm and pinned GitHub Actions dependencies.
+- Release Please prepares reviewed version/changelog PRs from merged contributor changes.
+- A protected `vX.Y.Z` tag runs the complete verification gates and publishes with npm Trusted Publishing (GitHub OIDC); ordinary pushes and feature PRs cannot publish.
+- Contributor, conduct, security, and maintainer release/setup documentation is present in the repository root and `docs/releasing.md`.
+
 ## Acceptance evidence
 
 - Real-Chromium integration covers isolated cookies, localStorage, pages, URLs, DOM reads, screenshots, page lifecycle, history navigation, interactions, persistence restoration, same-session ordering, cross-session parallelism, timeout recovery, queued close/shutdown, initialization shutdown, disconnect, and handle cleanup.
@@ -47,6 +56,7 @@ User → external AI client → MCP → BrowserMesh → isolated browser session
   - Vitest: 11 test files and 41 tests passed.
   - Production build: passed.
 - `npm run verify:package`: passed after the clean install, including installed tarball MCP/Chromium smoke.
+- Release configuration JSON and all repository YAML files parsed successfully.
 - `git diff --check`: passed.
 
 Known blockers: none.

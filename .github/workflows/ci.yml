@@ -2,32 +2,132 @@ name: CI
 
 on:
   push:
+    branches: [master]
   pull_request:
+    branches: [master]
+  merge_group:
+    types: [checks_requested]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
 
 jobs:
-  verify:
+  static-checks:
+    name: static-checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+        with:
+          persist-credentials: false
+      - name: Setup
+        uses: ./.github/actions/setup
+      - name: Typecheck
+        run: npm run typecheck
+      - name: Lint
+        run: npm run lint
+      - name: Check formatting
+        run: npm run format:check
+
+  unit-and-build:
+    name: unit-and-build (Node ${{ matrix.node-version }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
     strategy:
+      fail-fast: false
       matrix:
         node-version: [22, 24]
-    runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - name: Checkout
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+        with:
+          persist-credentials: false
+      - name: Setup
+        uses: ./.github/actions/setup
         with:
           node-version: ${{ matrix.node-version }}
-          cache: npm
-      - run: npm ci
-      - run: npx playwright install --with-deps chromium
-      - run: npm run verify
+      - name: Run unit tests
+        run: npm test
+      - name: Build package
+        run: npm run build
+
+  browser-tests:
+    name: browser-tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+        with:
+          persist-credentials: false
+      - name: Setup
+        uses: ./.github/actions/setup
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+      - name: Run Chromium and MCP integration tests
+        run: npm run test:integration
+      - name: Run external-client e2e tests
+        run: npm run test:e2e
+
+  stress:
+    name: stress
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+        with:
+          persist-credentials: false
+      - name: Setup
+        uses: ./.github/actions/setup
+      - name: Run bounded concurrency stress tests
+        run: npm run test:stress
 
   package-smoke:
+    name: package-smoke
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - name: Checkout
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
         with:
-          node-version: 24
-          cache: npm
-      - run: npm ci
-      - run: npx playwright install --with-deps chromium
-      - run: npm run verify:package
+          persist-credentials: false
+      - name: Setup
+        uses: ./.github/actions/setup
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+      - name: Verify installed npm tarball
+        run: npm run verify:package
+
+  all-checks-passed:
+    name: all-checks-passed
+    runs-on: ubuntu-latest
+    permissions: {}
+    if: always()
+    needs:
+      - static-checks
+      - unit-and-build
+      - browser-tests
+      - stress
+      - package-smoke
+    steps:
+      - name: Check all jobs passed
+        env:
+          STATIC_CHECKS: ${{ needs.static-checks.result }}
+          UNIT_AND_BUILD: ${{ needs.unit-and-build.result }}
+          BROWSER_TESTS: ${{ needs.browser-tests.result }}
+          STRESS: ${{ needs.stress.result }}
+          PACKAGE_SMOKE: ${{ needs.package-smoke.result }}
+        run: |
+          for result in "$STATIC_CHECKS" "$UNIT_AND_BUILD" "$BROWSER_TESTS" "$STRESS" "$PACKAGE_SMOKE"; do
+            if [ "$result" != "success" ]; then
+              echo "One or more required checks failed."
+              exit 1
+            fi
+          done
+          echo "All checks passed."

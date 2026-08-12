@@ -1,0 +1,7 @@
+name: browsermesh
+
+paths-ignore:
+  - '**/node_modules/**'
+  - '**/dist/**'
+  - '**/coverage/**'
+  - '**/.browsermesh/**'

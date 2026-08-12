@@ -35,11 +35,17 @@ const mcpEnvelopeSchema = z.object({
 });
 const installedManifestSchema = z.object({
   name: z.literal(packageName),
+  version: z.string().min(1),
   type: z.literal('module'),
+  license: z.literal('Apache-2.0'),
   main: z.never().optional(),
   bin: z.object({ browsermesh: z.literal('dist/cli.js') }),
   exports: z.object({
     '.': z.object({ import: z.literal('./dist/index.js'), types: z.literal('./dist/index.d.ts') }),
+  }),
+  publishConfig: z.object({
+    access: z.literal('public'),
+    registry: z.literal('https://registry.npmjs.org/'),
   }),
 });
 
@@ -62,6 +68,7 @@ async function main(): Promise<void> {
       'dist/index.js',
       'dist/index.d.ts',
       'README.md',
+      'CHANGELOG.md',
       'LICENSE',
       'NOTICE',
     ]) {

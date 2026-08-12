@@ -1,6 +1,6 @@
 {
   "name": "multi-agent-browser-mcp",
-  "version": "0.1.0",
+  "version": "0.1.0-beta.0",
   "description": "Local isolated multi-session browser runtime for external MCP clients",
   "type": "module",
   "license": "Apache-2.0",
@@ -19,9 +19,14 @@
   "files": [
     "dist",
     "README.md",
+    "CHANGELOG.md",
     "LICENSE",
     "NOTICE"
   ],
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org/"
+  },
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
     "dev": "tsx src/cli.ts",
@@ -57,8 +62,15 @@
     "type": "git",
     "url": "git+https://github.com/scrollDynasty/multi-agent-browser-mcp.git"
   },
-  "keywords": [],
-  "author": "",
+  "keywords": [
+    "browser",
+    "mcp",
+    "model-context-protocol",
+    "playwright",
+    "automation",
+    "multi-session"
+  ],
+  "author": "BrowserMesh contributors",
   "bugs": {
     "url": "https://github.com/scrollDynasty/multi-agent-browser-mcp/issues"
   },

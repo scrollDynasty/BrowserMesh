@@ -548,13 +548,18 @@ Preparing release automation is allowed.
 
 Actually performing external release actions requires explicit authorization.
 
-Do not automatically:
+Normal CI and ordinary feature PRs must not:
 
 - `npm publish`;
 - create GitHub Releases;
 - push tags;
 - publish Docker images;
 - deploy servers.
+
+The configured release automation is gated by an explicit maintainer action: merging the
+Release Please PR. That merge may create the version tag and GitHub Release, and the protected
+tag then triggers npm publication through Trusted Publishing. See
+[`docs/releasing.md`](releasing.md) for setup and recovery procedures.
 
 The expected future distribution model is:
 
