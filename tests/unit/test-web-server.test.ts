@@ -54,6 +54,7 @@ describe('test web server input boundaries', () => {
     const response = await fetch(`${server.baseUrl}/?value=${encodeURIComponent(payload)}`);
     const body = await response.text();
 
+    expect(body).not.toContain('</script><script>');
     expect(body).not.toContain(`data-identity="${payload}"`);
     expect(body).not.toContain(`localStorage.setItem('identity', "${payload}")`);
     expect(body).toContain(
