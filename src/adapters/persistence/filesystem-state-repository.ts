@@ -38,26 +38,29 @@ export class FileSystemStateRepository implements StateRepositoryPort {
     this.statesDirectory = join(dataDirectory, 'states');
   }
 
-  async save(name: string, state: BrowserStorageState): Promise<SavedStateView> {
-    this.validateName(name);
+  async save(stateId: string, state: BrowserStorageState): Promise<SavedStateView> {
+    this.validateStateId(stateId);
     await mkdir(this.statesDirectory, { recursive: true, mode: 0o700 });
-    const target = this.pathFor(name);
+    const target = this.pathFor(stateId);
     const temporary = `${target}.${String(process.pid)}.tmp`;
     await writeFile(temporary, JSON.stringify(state), { encoding: 'utf8', mode: 0o600 });
     await rename(temporary, target);
-    return { name, createdAt: (await stat(target)).mtime.toISOString() };
+    return { stateId, createdAt: (await stat(target)).mtime.toISOString() };
   }
 
-  async load(name: string): Promise<BrowserStorageState> {
-    this.validateName(name);
+  async load(stateId: string): Promise<BrowserStorageState> {
+    this.validateStateId(stateId);
     try {
-      const content = await readFile(this.pathFor(name), 'utf8');
+      const content = await readFile(this.pathFor(stateId), 'utf8');
       return storageStateSchema.parse(JSON.parse(content));
     } catch (error) {
       if (this.isNotFound(error))
-        throw new BrowserMeshError('SAVED_STATE_NOT_FOUND', `Saved state '${name}' was not found`);
+        throw new BrowserMeshError(
+          'SAVED_STATE_NOT_FOUND',
+          `Saved state '${stateId}' was not found`,
+        );
       if (error instanceof SyntaxError || error instanceof z.ZodError)
-        throw new BrowserMeshError('BROWSER_ERROR', `Saved state '${name}' is corrupted`, {
+        throw new BrowserMeshError('BROWSER_ERROR', `Saved state '${stateId}' is corrupted`, {
           cause: error,
         });
       throw error;
@@ -71,37 +74,40 @@ export class FileSystemStateRepository implements StateRepositoryPort {
         entries
           .filter((entry) => entry.isFile() && entry.name.endsWith('.json'))
           .map(async (entry) => ({
-            name: entry.name.slice(0, -5),
+            stateId: entry.name.slice(0, -5),
             createdAt: (await stat(join(this.statesDirectory, entry.name))).mtime.toISOString(),
           })),
       );
-      return states.sort((left, right) => left.name.localeCompare(right.name));
+      return states.sort((left, right) => left.stateId.localeCompare(right.stateId));
     } catch (error) {
       if (this.isNotFound(error)) return [];
       throw error;
     }
   }
 
-  async remove(name: string): Promise<void> {
-    this.validateName(name);
+  async remove(stateId: string): Promise<void> {
+    this.validateStateId(stateId);
     try {
-      await rm(this.pathFor(name));
+      await rm(this.pathFor(stateId));
     } catch (error) {
       if (this.isNotFound(error))
-        throw new BrowserMeshError('SAVED_STATE_NOT_FOUND', `Saved state '${name}' was not found`);
+        throw new BrowserMeshError(
+          'SAVED_STATE_NOT_FOUND',
+          `Saved state '${stateId}' was not found`,
+        );
       throw error;
     }
   }
 
-  private pathFor(name: string): string {
-    return join(this.statesDirectory, `${name}.json`);
+  private pathFor(stateId: string): string {
+    return join(this.statesDirectory, `${stateId}.json`);
   }
 
-  private validateName(name: string): void {
-    if (!safeName.test(name))
+  private validateStateId(stateId: string): void {
+    if (!safeName.test(stateId))
       throw new BrowserMeshError(
         'INVALID_ARGUMENT',
-        'State name must be 1-128 safe filename characters',
+        'stateId must be 1-128 safe identifier characters',
       );
   }
 

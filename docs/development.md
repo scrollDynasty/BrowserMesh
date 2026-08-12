@@ -501,10 +501,10 @@ Before calling v0.1 complete:
 
 ```sh
 npm run build
-npm pack
+npm run verify:package
 ```
 
-Then use the generated tarball in a clean temporary environment.
+The package verifier creates an npm tarball and installs it in a clean temporary environment.
 
 Verify:
 

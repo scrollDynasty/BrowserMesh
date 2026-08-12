@@ -407,15 +407,15 @@ BrowserMesh never attempts to serialize a live `BrowserContext`, open pages, pen
 
 ## Configuration
 
-| Environment variable | Default | Meaning |
-|---|---:|---|
-| `BROWSERMESH_HEADLESS` | `true` | Run Chromium headless |
-| `BROWSERMESH_TIMEOUT_MS` | `30000` | Default bounded operation timeout |
-| `BROWSERMESH_DATA_DIR` | `.browsermesh` | Private local data directory |
-| `BROWSERMESH_LOG_LEVEL` | `info` | `debug`, `info`, `warn`, `error`, or `silent` |
-| `BROWSERMESH_MAX_SESSIONS` | `50` | Active session limit |
-| `BROWSERMESH_MAX_PAGES` | `20` | Managed pages per session |
-| `BROWSERMESH_PERSISTENCE` | `true` | Enable saved browser state |
+| Environment variable       |        Default | Meaning                                       |
+| -------------------------- | -------------: | --------------------------------------------- |
+| `BROWSERMESH_HEADLESS`     |         `true` | Run Chromium headless                         |
+| `BROWSERMESH_TIMEOUT_MS`   |        `30000` | Default bounded operation timeout             |
+| `BROWSERMESH_DATA_DIR`     | `.browsermesh` | Private local data directory                  |
+| `BROWSERMESH_LOG_LEVEL`    |         `info` | `debug`, `info`, `warn`, `error`, or `silent` |
+| `BROWSERMESH_MAX_SESSIONS` |           `50` | Active session limit                          |
+| `BROWSERMESH_MAX_PAGES`    |           `20` | Managed pages per session                     |
+| `BROWSERMESH_PERSISTENCE`  |         `true` | Enable saved browser state                    |
 
 Configuration is read and validated centrally.
 

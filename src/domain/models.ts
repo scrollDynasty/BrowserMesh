@@ -7,7 +7,7 @@ export interface SessionView {
   readonly createdAt: string;
   readonly lastActivityAt: string;
   readonly metadata: Readonly<Record<string, string>>;
-  readonly restoredFrom?: string;
+  readonly restoredFromStateId?: string;
 }
 
 export interface PageView {
@@ -41,7 +41,7 @@ export type Locator =
 
 export interface OperationResult<T> {
   readonly operationId: string;
-  readonly sessionId: string;
+  readonly sessionId?: string;
   readonly pageId?: string;
   readonly value: T;
 }

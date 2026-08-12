@@ -10,15 +10,15 @@ describe('runtime stress', () => {
     );
     await Promise.all(
       sessions.map(async (session, index) => {
-        const page = runtime.listPages(session.id)[0];
-        if (page === undefined) throw new Error('missing page');
+        if (session.sessionId === undefined || session.pageId === undefined)
+          throw new Error('missing explicit IDs');
         await runtime.navigate(
-          { sessionId: session.id, pageId: page.id },
+          { sessionId: session.sessionId, pageId: session.pageId },
           `https://example.test/${index}`,
         );
-        expect((await runtime.getUrl({ sessionId: session.id, pageId: page.id })).value).toBe(
-          `https://example.test/${index}`,
-        );
+        expect(
+          (await runtime.getUrl({ sessionId: session.sessionId, pageId: session.pageId })).value,
+        ).toBe(`https://example.test/${index}`);
       }),
     );
     expect(engine.maxActiveGlobal).toBeGreaterThan(25);

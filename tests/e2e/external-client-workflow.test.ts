@@ -1,36 +1,38 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import type { BrowserMeshRuntime } from '../../src/runtime/browsermesh-runtime.js';
-import { realRuntime } from '../support/real-runtime.js';
+import { createRealRuntimeHarness, type RealRuntimeHarness } from '../support/real-runtime.js';
 import { startTestWebServer, type TestWebServer } from '../support/test-web-server.js';
 
 describe('external MCP client multi-role workflow', () => {
   let runtime: BrowserMeshRuntime;
+  let harness: RealRuntimeHarness;
   let web: TestWebServer;
 
   beforeEach(async () => {
-    runtime = await realRuntime();
+    harness = await createRealRuntimeHarness();
+    runtime = harness.runtime;
     web = await startTestWebServer();
   });
 
   afterEach(async () => {
-    await runtime.shutdown();
-    await web.close();
+    await Promise.all([harness.cleanup(), web.close()]);
   });
 
   it('uses independent buyer and seller sessions without internal agent orchestration', async () => {
-    const buyerSession = await runtime.createSession({
+    const buyer = await runtime.createSession({
       name: 'buyer',
       metadata: { role: 'buyer', account: 'buyer@example.test' },
     });
-    const sellerSession = await runtime.createSession({
+    const seller = await runtime.createSession({
       name: 'seller',
       metadata: { role: 'seller', account: 'seller@example.test' },
     });
-    const buyerPage = runtime.listPages(buyerSession.id)[0];
-    const sellerPage = runtime.listPages(sellerSession.id)[0];
-    if (buyerPage === undefined || sellerPage === undefined) throw new Error('missing pages');
-    const buyerTarget = { sessionId: buyerSession.id, pageId: buyerPage.id };
-    const sellerTarget = { sessionId: sellerSession.id, pageId: sellerPage.id };
+    if (buyer.sessionId === undefined || buyer.pageId === undefined)
+      throw new Error('missing buyer IDs');
+    if (seller.sessionId === undefined || seller.pageId === undefined)
+      throw new Error('missing seller IDs');
+    const buyerTarget = { sessionId: buyer.sessionId, pageId: buyer.pageId };
+    const sellerTarget = { sessionId: seller.sessionId, pageId: seller.pageId };
 
     await runtime.navigate(buyerTarget, `${web.baseUrl}/buyer`);
     await runtime.fill(buyerTarget, { strategy: 'label', value: 'Item' }, 'book');
@@ -50,9 +52,9 @@ describe('external MCP client multi-role workflow', () => {
       (await runtime.visibleText(buyerTarget, { strategy: 'testId', value: 'status' })).value,
     ).toBe('approved');
     await expect(
-      runtime.getUrl({ sessionId: buyerSession.id, pageId: sellerPage.id }),
+      runtime.getUrl({ sessionId: buyer.sessionId, pageId: seller.pageId }),
     ).rejects.toMatchObject({ code: 'PAGE_NOT_FOUND' });
-    expect(runtime.getSession(buyerSession.id).metadata).toEqual({
+    expect((await runtime.getSession(buyer.sessionId)).value.metadata).toEqual({
       role: 'buyer',
       account: 'buyer@example.test',
     });

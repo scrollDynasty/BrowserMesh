@@ -24,11 +24,18 @@ describe('MCP adapter', () => {
     ).toBe(false);
     const createTool = tools.tools.find(({ name }) => name === 'browser_session_create');
     expect(createTool?.description).toContain('different user, account, role');
+    expect(createTool?.description).toContain('independent parallel workflow');
     const created = await client.callTool({
       name: 'browser_session_create',
       arguments: { name: 'mcp' },
     });
     expect(created.isError).not.toBe(true);
+    const serializedCreated = JSON.stringify(created);
+    expect(serializedCreated).toContain('operation_');
+    expect(serializedCreated).toContain('session_');
+    expect(serializedCreated).toContain('page_');
+    expect(createTool?.inputSchema).toHaveProperty('properties.stateId');
+    expect(createTool?.inputSchema).not.toHaveProperty('properties.fromState');
     const missing = await client.callTool({
       name: 'browser_session_get',
       arguments: { sessionId: 'missing' },

@@ -29,12 +29,13 @@ interface SessionEntry {
   readonly createdAt: string;
   lastActivityAt: string;
   readonly metadata: Readonly<Record<string, string>>;
-  readonly restoredFrom: string | undefined;
+  readonly restoredFromStateId: string | undefined;
   context: BrowserContextHandle | undefined;
   readonly pages: Map<string, PageEntry>;
   defaultPageId: string | undefined;
   readonly queue: SerialQueue;
   accepting: boolean;
+  disconnected: boolean;
 }
 
 export interface RuntimeOptions {
@@ -61,9 +62,13 @@ export class BrowserMeshRuntime {
   private started = false;
   private shutdownPromise: Promise<void> | undefined;
   private readonly now: () => Date;
+  private readonly removeDisconnectListener: () => void;
 
   constructor(private readonly options: RuntimeOptions) {
     this.now = options.now ?? (() => new Date());
+    this.removeDisconnectListener = options.engine.onDisconnected(() =>
+      this.handleEngineDisconnected(),
+    );
   }
 
   async start(): Promise<void> {
@@ -77,9 +82,9 @@ export class BrowserMeshRuntime {
     input: {
       readonly name?: string | undefined;
       readonly metadata?: Readonly<Record<string, string>> | undefined;
-      readonly fromState?: string | undefined;
+      readonly stateId?: string | undefined;
     } = {},
-  ): Promise<SessionView> {
+  ): Promise<OperationResult<SessionView>> {
     this.ensureAccepting();
     if (this.activeSessionCount() >= this.options.maxSessions) {
       throw new BrowserMeshError(
@@ -96,105 +101,115 @@ export class BrowserMeshRuntime {
       createdAt: timestamp,
       lastActivityAt: timestamp,
       metadata: { ...(input.metadata ?? {}) },
-      restoredFrom: input.fromState,
+      restoredFromStateId: input.stateId,
       context: undefined,
       pages: new Map(),
       defaultPageId: undefined,
       queue: new SerialQueue(),
       accepting: true,
+      disconnected: false,
     };
     this.sessions.set(id, entry);
-    return entry.queue.run(async () => {
-      try {
-        const storageState =
-          input.fromState === undefined ? undefined : await this.loadState(input.fromState);
-        entry.context = await this.options.engine.createContext({
-          timeoutMs: this.options.defaultTimeoutMs,
-          ...(storageState === undefined ? {} : { storageState }),
-        });
-        const initialPage = await this.options.engine.createPage(entry.context);
-        const page = this.addPage(entry, initialPage);
-        entry.defaultPageId = page.id;
-        entry.status = 'ready';
-        this.emit('session.created', { sessionId: id });
-        return this.sessionView(entry);
-      } catch (error) {
-        entry.status = 'failed';
-        entry.accepting = false;
-        if (entry.context !== undefined) {
+    return this.runOperation(
+      { sessionId: id },
+      () =>
+        entry.queue.run(async () => {
           try {
-            await this.options.engine.closeContext(entry.context);
-          } catch (cleanupError) {
+            const storageState =
+              input.stateId === undefined ? undefined : await this.loadState(input.stateId);
+            entry.context = await this.options.engine.createContext({
+              timeoutMs: this.options.defaultTimeoutMs,
+              ...(storageState === undefined ? {} : { storageState }),
+            });
+            const initialPage = await this.options.engine.createPage(entry.context);
+            const page = this.addPage(entry, initialPage);
+            entry.defaultPageId = page.id;
+            entry.status = 'ready';
+            this.emit('session.created', { sessionId: id, pageId: page.id });
+            return this.sessionView(entry);
+          } catch (error) {
+            entry.status = 'failed';
+            entry.accepting = false;
+            if (entry.context !== undefined) {
+              try {
+                await this.options.engine.closeContext(entry.context);
+              } catch (cleanupError) {
+                throw new BrowserMeshError(
+                  'BROWSER_ERROR',
+                  'Session creation and context cleanup both failed',
+                  { cause: new AggregateError([error, cleanupError]) },
+                );
+              }
+            }
+            throw error;
+          }
+        }),
+      () => (entry.defaultPageId === undefined ? {} : { pageId: entry.defaultPageId }),
+    );
+  }
+
+  listSessions(): Promise<OperationResult<readonly SessionView[]>> {
+    return this.runOperation({}, () => {
+      this.ensureAccepting();
+      return Array.from(this.sessions.values(), (entry) => this.sessionView(entry));
+    });
+  }
+
+  getSession(sessionId: string): Promise<OperationResult<SessionView>> {
+    return this.runOperation({ sessionId }, () => {
+      this.ensureAccepting();
+      return this.sessionView(this.getSessionEntry(sessionId));
+    });
+  }
+
+  closeSession(sessionId: string): Promise<OperationResult<SessionView>> {
+    return this.runOperation({ sessionId }, () => {
+      this.ensureAccepting();
+      const entry = this.getSessionEntry(sessionId);
+      if (entry.status !== 'closed' && entry.status !== 'failed') entry.accepting = false;
+      return this.closeSessionEntry(entry);
+    });
+  }
+
+  createPage(sessionId: string): Promise<OperationResult<PageView>> {
+    return this.runOperation(
+      { sessionId },
+      () =>
+        this.withSession(sessionId, async (entry) => {
+          if (entry.pages.size >= this.options.maxPagesPerSession) {
             throw new BrowserMeshError(
-              'BROWSER_ERROR',
-              'Session creation and context cleanup both failed',
-              { cause: new AggregateError([error, cleanupError]) },
+              'LIMIT_EXCEEDED',
+              `Maximum of ${String(this.options.maxPagesPerSession)} pages per session reached`,
             );
           }
-        }
-        throw error;
-      }
-    });
+          const context = this.requireContext(entry);
+          const page = this.addPage(entry, await this.options.engine.createPage(context));
+          this.emit('page.created', { sessionId, pageId: page.id });
+          return this.pageView(entry, page);
+        }),
+      (page) => ({ pageId: page.id }),
+    );
   }
 
-  listSessions(): readonly SessionView[] {
-    return Array.from(this.sessions.values(), (entry) => this.sessionView(entry));
+  listPages(sessionId: string): Promise<OperationResult<readonly PageView[]>> {
+    return this.runOperation({ sessionId }, () =>
+      this.withSession(sessionId, (entry) =>
+        Promise.resolve(Array.from(entry.pages.values(), (page) => this.pageView(entry, page))),
+      ),
+    );
   }
 
-  getSession(sessionId: string): SessionView {
-    return this.sessionView(this.getSessionEntry(sessionId));
-  }
-
-  async closeSession(sessionId: string): Promise<SessionView> {
-    const entry = this.getSessionEntry(sessionId);
-    if (entry.status === 'closed') return this.sessionView(entry);
-    if (entry.status === 'failed') return this.closeFailedSession(entry);
-    if (!entry.accepting) {
-      await entry.queue.idle();
-      return this.sessionView(entry);
-    }
-    entry.accepting = false;
-    return entry.queue.run(async () => {
-      entry.status = 'closing';
-      if (entry.context !== undefined) await this.options.engine.closeContext(entry.context);
-      entry.pages.clear();
-      entry.defaultPageId = undefined;
-      entry.context = undefined;
-      entry.status = 'closed';
-      entry.lastActivityAt = this.timestamp();
-      this.emit('session.closed', { sessionId });
-      return this.sessionView(entry);
-    });
-  }
-
-  async createPage(sessionId: string): Promise<PageView> {
-    return this.withSession(sessionId, async (entry) => {
-      if (entry.pages.size >= this.options.maxPagesPerSession) {
-        throw new BrowserMeshError(
-          'LIMIT_EXCEEDED',
-          `Maximum of ${String(this.options.maxPagesPerSession)} pages per session reached`,
-        );
-      }
-      const context = this.requireContext(entry);
-      const page = this.addPage(entry, await this.options.engine.createPage(context));
-      this.emit('page.created', { sessionId, pageId: page.id });
-      return this.pageView(entry, page);
-    });
-  }
-
-  listPages(sessionId: string): readonly PageView[] {
-    const entry = this.readySession(sessionId);
-    return Array.from(entry.pages.values(), (page) => this.pageView(entry, page));
-  }
-
-  async closePage(sessionId: string, pageId: string): Promise<void> {
-    await this.withSession(sessionId, async (entry) => {
-      const page = this.getPageEntry(entry, pageId);
-      await this.options.engine.closePage(page.handle);
-      entry.pages.delete(pageId);
-      if (entry.defaultPageId === pageId) entry.defaultPageId = entry.pages.keys().next().value;
-      this.emit('page.closed', { sessionId, pageId });
-    });
+  closePage(sessionId: string, pageId: string): Promise<OperationResult<null>> {
+    return this.runOperation({ sessionId, pageId }, () =>
+      this.withSession(sessionId, async (entry) => {
+        const page = this.getPageEntry(entry, pageId);
+        await this.options.engine.closePage(page.handle);
+        entry.pages.delete(pageId);
+        if (entry.defaultPageId === pageId) entry.defaultPageId = entry.pages.keys().next().value;
+        this.emit('page.closed', { sessionId, pageId });
+        return null;
+      }),
+    );
   }
 
   async navigate(target: OperationTarget, url: string): Promise<OperationResult<string>> {
@@ -294,24 +309,34 @@ export class BrowserMeshRuntime {
     );
   }
 
-  async saveSessionState(sessionId: string, name: string): Promise<SavedStateView> {
-    this.ensurePersistence();
-    return this.withSession(sessionId, async (entry) =>
-      this.options.stateRepository.save(
-        name,
-        await this.options.engine.storageState(this.requireContext(entry)),
-      ),
-    );
+  saveSessionState(sessionId: string, stateId: string): Promise<OperationResult<SavedStateView>> {
+    return this.runOperation({ sessionId }, async () => {
+      this.ensureAccepting();
+      this.ensurePersistence();
+      return this.withSession(sessionId, async (entry) =>
+        this.options.stateRepository.save(
+          stateId,
+          await this.options.engine.storageState(this.requireContext(entry)),
+        ),
+      );
+    });
   }
 
-  async listSavedStates(): Promise<readonly SavedStateView[]> {
-    this.ensurePersistence();
-    return this.options.stateRepository.list();
+  listSavedStates(): Promise<OperationResult<readonly SavedStateView[]>> {
+    return this.runOperation({}, () => {
+      this.ensureAccepting();
+      this.ensurePersistence();
+      return this.options.stateRepository.list();
+    });
   }
 
-  async removeSavedState(name: string): Promise<void> {
-    this.ensurePersistence();
-    await this.options.stateRepository.remove(name);
+  removeSavedState(stateId: string): Promise<OperationResult<null>> {
+    return this.runOperation({}, async () => {
+      this.ensureAccepting();
+      this.ensurePersistence();
+      await this.options.stateRepository.remove(stateId);
+      return null;
+    });
   }
 
   shutdown(): Promise<void> {
@@ -321,8 +346,9 @@ export class BrowserMeshRuntime {
       const active = Array.from(this.sessions.values()).filter(
         (entry) => entry.status !== 'closed',
       );
+      for (const entry of active) entry.accepting = false;
       const closeResults = await Promise.allSettled(
-        active.map((entry) => this.closeSession(entry.id)),
+        active.map((entry) => this.closeSessionEntry(entry)),
       );
       let stopFailure: unknown;
       try {
@@ -331,6 +357,7 @@ export class BrowserMeshRuntime {
         stopFailure = error;
       }
       this.started = false;
+      this.removeDisconnectListener();
       const failures: unknown[] = [];
       for (const result of closeResults) {
         if (result.status === 'rejected') {
@@ -342,6 +369,39 @@ export class BrowserMeshRuntime {
       if (failures.length > 0) throw new AggregateError(failures, 'BrowserMesh shutdown failed');
     })();
     return this.shutdownPromise;
+  }
+
+  private runOperation<T>(
+    identifiers: { readonly sessionId?: string; readonly pageId?: string },
+    action: () => T | Promise<T>,
+    identifyValue?: (value: T) => { readonly sessionId?: string; readonly pageId?: string },
+  ): Promise<OperationResult<T>> {
+    const operationId = this.options.ids.next('operation');
+    this.emit('operation.started', { operationId, ...identifiers });
+    let pending: Promise<T>;
+    try {
+      pending = Promise.resolve(action());
+    } catch (error) {
+      this.emit('operation.failed', { operationId, ...identifiers });
+      return Promise.reject(
+        error instanceof Error
+          ? error
+          : new BrowserMeshError('INTERNAL_ERROR', 'Operation failed with a non-error value', {
+              cause: error,
+            }),
+      );
+    }
+    return pending.then(
+      (value) => {
+        const resolved = { ...identifiers, ...(identifyValue?.(value) ?? {}) };
+        this.emit('operation.completed', { operationId, ...resolved });
+        return { operationId, ...resolved, value };
+      },
+      (error: unknown) => {
+        this.emit('operation.failed', { operationId, ...identifiers });
+        throw error;
+      },
+    );
   }
 
   private async pageOperation<T>(
@@ -391,6 +451,11 @@ export class BrowserMeshRuntime {
     if (!entry.accepting)
       throw new BrowserMeshError('SESSION_CLOSED', `Session '${sessionId}' is closing or closed`);
     return entry.queue.run(async () => {
+      if (entry.disconnected)
+        throw new BrowserMeshError(
+          'BROWSER_DISCONNECTED',
+          `Session '${sessionId}' failed because Chromium disconnected`,
+        );
       if (entry.status !== 'ready')
         throw new BrowserMeshError('SESSION_NOT_READY', `Session '${sessionId}' is not ready`);
       const result = await action(entry);
@@ -401,8 +466,15 @@ export class BrowserMeshRuntime {
 
   private readySession(sessionId: string): SessionEntry {
     const entry = this.getSessionEntry(sessionId);
-    if (entry.status === 'closed' || entry.status === 'closing')
+    if (entry.status === 'closing' || (entry.status === 'ready' && !entry.accepting))
+      throw new BrowserMeshError('SESSION_CLOSING', `Session '${sessionId}' is closing`);
+    if (entry.status === 'closed')
       throw new BrowserMeshError('SESSION_CLOSED', `Session '${sessionId}' is closed`);
+    if (entry.status === 'failed' && entry.disconnected)
+      throw new BrowserMeshError(
+        'BROWSER_DISCONNECTED',
+        `Session '${sessionId}' failed because Chromium disconnected`,
+      );
     if (entry.status !== 'ready')
       throw new BrowserMeshError('SESSION_NOT_READY', `Session '${sessionId}' is not ready`);
     return entry;
@@ -443,7 +515,9 @@ export class BrowserMeshRuntime {
       createdAt: entry.createdAt,
       lastActivityAt: entry.lastActivityAt,
       metadata: { ...entry.metadata },
-      ...(entry.restoredFrom === undefined ? {} : { restoredFrom: entry.restoredFrom }),
+      ...(entry.restoredFromStateId === undefined
+        ? {}
+        : { restoredFromStateId: entry.restoredFromStateId }),
     };
   }
 
@@ -481,7 +555,7 @@ export class BrowserMeshRuntime {
 
   private ensurePersistence(): void {
     if (!this.options.persistenceEnabled)
-      throw new BrowserMeshError('INVALID_ARGUMENT', 'Persistence is disabled');
+      throw new BrowserMeshError('PERSISTENCE_DISABLED', 'Persistence is disabled');
   }
 
   private ensureAccepting(): void {
@@ -494,7 +568,56 @@ export class BrowserMeshRuntime {
     entry.accepting = false;
     entry.pages.clear();
     entry.context = undefined;
+    this.rememberClosedSession(entry);
     return this.sessionView(entry);
+  }
+
+  private async closeSessionEntry(entry: SessionEntry): Promise<SessionView> {
+    if (entry.status === 'closed') return this.sessionView(entry);
+    if (entry.status === 'failed') return this.closeFailedSession(entry);
+    return entry.queue.run(async () => {
+      if (entry.status === 'closed') return this.sessionView(entry);
+      if (entry.status === 'failed') return this.closeFailedSession(entry);
+      entry.status = 'closing';
+      if (entry.context !== undefined) await this.options.engine.closeContext(entry.context);
+      entry.pages.clear();
+      entry.defaultPageId = undefined;
+      entry.context = undefined;
+      entry.status = 'closed';
+      entry.lastActivityAt = this.timestamp();
+      this.emit('session.closed', { sessionId: entry.id });
+      this.rememberClosedSession(entry);
+      return this.sessionView(entry);
+    });
+  }
+
+  private rememberClosedSession(entry: SessionEntry): void {
+    this.sessions.delete(entry.id);
+    this.sessions.set(entry.id, entry);
+    const retentionLimit = Math.max(1, this.options.maxSessions);
+    const closedIds = Array.from(this.sessions.values())
+      .filter((candidate) => candidate.status === 'closed')
+      .map((candidate) => candidate.id);
+    for (const expiredId of closedIds.slice(0, -retentionLimit)) {
+      this.sessions.delete(expiredId);
+    }
+  }
+
+  private handleEngineDisconnected(): void {
+    this.started = false;
+    for (const entry of this.sessions.values()) {
+      if (entry.status === 'creating' || entry.status === 'ready' || entry.status === 'closing') {
+        entry.status = 'failed';
+        entry.accepting = false;
+        entry.disconnected = true;
+        entry.context = undefined;
+        entry.pages.clear();
+        entry.defaultPageId = undefined;
+        entry.lastActivityAt = this.timestamp();
+        this.emit('session.failed', { sessionId: entry.id });
+      }
+    }
+    this.emit('browser.disconnected', {});
   }
 
   private timestamp(): string {

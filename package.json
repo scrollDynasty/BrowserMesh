@@ -1,5 +1,5 @@
 {
-  "name": "browsermesh",
+  "name": "multi-agent-browser-mcp",
   "version": "0.1.0",
   "description": "Local isolated multi-session browser runtime for external MCP clients",
   "type": "module",
@@ -34,6 +34,7 @@
     "test:e2e": "vitest run tests/e2e",
     "test:stress": "vitest run tests/stress",
     "test:all": "vitest run",
+    "verify:package": "npm run build && tsx scripts/verify-package.ts",
     "verify": "npm run typecheck && npm run lint && npm run format:check && npm run test:all && npm run build"
   },
   "dependencies": {
@@ -50,5 +51,20 @@
     "typescript": "^6.0.3",
     "typescript-eslint": "^8.56.1",
     "vitest": "^4.1.0"
-  }
+  },
+  "main": "eslint.config.js",
+  "directories": {
+    "doc": "docs",
+    "test": "tests"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/scrollDynasty/multi-agent-browser-mcp.git"
+  },
+  "keywords": [],
+  "author": "",
+  "bugs": {
+    "url": "https://github.com/scrollDynasty/multi-agent-browser-mcp/issues"
+  },
+  "homepage": "https://github.com/scrollDynasty/multi-agent-browser-mcp#readme"
 }

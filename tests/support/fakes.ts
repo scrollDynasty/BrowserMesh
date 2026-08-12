@@ -11,7 +11,7 @@ import type {
 import { BrowserMeshError } from '../../src/domain/errors.js';
 import type { BrowserStorageState, Locator } from '../../src/domain/models.js';
 import type { IdGenerator } from '../../src/infrastructure/id.js';
-import { BrowserMeshRuntime } from '../../src/runtime/browsermesh-runtime.js';
+import { BrowserMeshRuntime, type RuntimeOptions } from '../../src/runtime/browsermesh-runtime.js';
 
 interface FakeContext extends BrowserContextHandle {
   pages: Set<symbol>;
@@ -32,6 +32,22 @@ export class FakeEngine implements BrowserEnginePort {
   private readonly activeByContext = new Map<symbol, number>();
   delayMs = 5;
   started = false;
+  failNextNavigation = false;
+  navigationGate: Promise<void> | undefined;
+  onNavigationStart: (() => void) | undefined;
+  private readonly disconnectedListeners = new Set<() => void>();
+
+  onDisconnected(listener: () => void): () => void {
+    this.disconnectedListeners.add(listener);
+    return () => this.disconnectedListeners.delete(listener);
+  }
+
+  disconnect(): void {
+    this.started = false;
+    this.contexts.clear();
+    this.pages.clear();
+    for (const listener of this.disconnectedListeners) listener();
+  }
 
   async start(): Promise<void> {
     this.started = true;
@@ -85,7 +101,13 @@ export class FakeEngine implements BrowserEnginePort {
   }
   async navigate(handle: BrowserPageHandle, url: string): Promise<void> {
     const page = this.page(handle);
+    this.onNavigationStart?.();
     await this.concurrent(page.contextId, async () => {
+      if (this.navigationGate !== undefined) await this.navigationGate;
+      if (this.failNextNavigation) {
+        this.failNextNavigation = false;
+        throw new BrowserMeshError('NAVIGATION_FAILED', 'simulated navigation failure');
+      }
       page.currentUrl = url;
     });
   }
@@ -135,27 +157,35 @@ export class FakeEngine implements BrowserEnginePort {
 
 export class MemoryStates implements StateRepositoryPort {
   readonly states = new Map<string, BrowserStorageState>();
-  async save(name: string, state: BrowserStorageState): Promise<SavedStateView> {
-    this.states.set(name, state);
-    return { name, createdAt: new Date(0).toISOString() };
+  async save(stateId: string, state: BrowserStorageState): Promise<SavedStateView> {
+    this.states.set(stateId, state);
+    return { stateId, createdAt: new Date(0).toISOString() };
   }
-  async load(name: string): Promise<BrowserStorageState> {
-    const state = this.states.get(name);
-    if (state === undefined) throw new BrowserMeshError('SAVED_STATE_NOT_FOUND', name);
+  async load(stateId: string): Promise<BrowserStorageState> {
+    const state = this.states.get(stateId);
+    if (state === undefined) throw new BrowserMeshError('SAVED_STATE_NOT_FOUND', stateId);
     return state;
   }
   async list(): Promise<readonly SavedStateView[]> {
-    return Array.from(this.states.keys(), (name) => ({
-      name,
+    return Array.from(this.states.keys(), (stateId) => ({
+      stateId,
       createdAt: new Date(0).toISOString(),
     }));
   }
-  async remove(name: string): Promise<void> {
-    this.states.delete(name);
+  async remove(stateId: string): Promise<void> {
+    this.states.delete(stateId);
   }
 }
 
-export function testRuntime(engine = new FakeEngine()): {
+export function testRuntime(
+  engine = new FakeEngine(),
+  overrides: Partial<
+    Pick<
+      RuntimeOptions,
+      'defaultTimeoutMs' | 'maxSessions' | 'maxPagesPerSession' | 'persistenceEnabled'
+    >
+  > = {},
+): {
   runtime: BrowserMeshRuntime;
   engine: FakeEngine;
 } {
@@ -173,6 +203,7 @@ export function testRuntime(engine = new FakeEngine()): {
       maxSessions: 50,
       maxPagesPerSession: 5,
       persistenceEnabled: true,
+      ...overrides,
     }),
     engine,
   };

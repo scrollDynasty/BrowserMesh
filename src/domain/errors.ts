@@ -1,6 +1,7 @@
 export const errorCodes = [
   'SESSION_NOT_FOUND',
   'SESSION_NOT_READY',
+  'SESSION_CLOSING',
   'PAGE_NOT_FOUND',
   'SESSION_CLOSED',
   'INVALID_ARGUMENT',
@@ -8,10 +9,12 @@ export const errorCodes = [
   'NAVIGATION_FAILED',
   'ELEMENT_NOT_FOUND',
   'BROWSER_ERROR',
+  'BROWSER_DISCONNECTED',
   'INTERNAL_ERROR',
   'LIMIT_EXCEEDED',
   'RUNTIME_SHUTTING_DOWN',
   'SAVED_STATE_NOT_FOUND',
+  'PERSISTENCE_DISABLED',
 ] as const;
 
 export type BrowserMeshErrorCode = (typeof errorCodes)[number];

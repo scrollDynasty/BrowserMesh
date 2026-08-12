@@ -9,6 +9,7 @@ export interface BrowserContextHandle {
 }
 
 export interface BrowserEnginePort {
+  onDisconnected(listener: () => void): () => void;
   start(): Promise<void>;
   stop(): Promise<void>;
   createContext(options: {

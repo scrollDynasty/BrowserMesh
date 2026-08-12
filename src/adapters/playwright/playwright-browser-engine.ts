@@ -24,17 +24,26 @@ interface PageHandle extends BrowserPageHandle {
 export class PlaywrightBrowserEngine implements BrowserEnginePort {
   private browser: Browser | undefined;
   private startPromise: Promise<void> | undefined;
+  private stopping = false;
+  private readonly disconnectedListeners = new Set<() => void>();
   private readonly contexts = new Map<symbol, BrowserContext>();
   private readonly pages = new Map<symbol, Page>();
 
   constructor(private readonly headless: boolean) {}
+
+  onDisconnected(listener: () => void): () => void {
+    this.disconnectedListeners.add(listener);
+    return () => this.disconnectedListeners.delete(listener);
+  }
 
   async start(): Promise<void> {
     if (this.browser?.isConnected() === true) return;
     if (this.startPromise !== undefined) return this.startPromise;
     this.startPromise = (async () => {
       try {
-        this.browser = await chromium.launch({ headless: this.headless });
+        const browser = await chromium.launch({ headless: this.headless });
+        browser.once('disconnected', () => this.handleDisconnected(browser));
+        this.browser = browser;
       } catch (error) {
         throw new BrowserMeshError('BROWSER_ERROR', 'Failed to launch Chromium', {
           cause: error,
@@ -47,11 +56,16 @@ export class PlaywrightBrowserEngine implements BrowserEnginePort {
   }
 
   async stop(): Promise<void> {
+    this.stopping = true;
     const browser = this.browser;
     this.browser = undefined;
     this.pages.clear();
     this.contexts.clear();
-    if (browser !== undefined) await browser.close();
+    try {
+      if (browser !== undefined) await browser.close();
+    } finally {
+      this.stopping = false;
+    }
   }
 
   async createContext(options: {
@@ -280,6 +294,15 @@ export class PlaywrightBrowserEngine implements BrowserEnginePort {
       for (const [id, page] of this.pages) if (page.context() === context) this.pages.delete(id);
     }
     this.contexts.delete(contextId);
+  }
+
+  private handleDisconnected(browser: Browser): void {
+    if (this.browser !== browser) return;
+    this.browser = undefined;
+    this.pages.clear();
+    this.contexts.clear();
+    if (this.stopping) return;
+    for (const listener of this.disconnectedListeners) listener();
   }
 
   private async wrapAction<T>(

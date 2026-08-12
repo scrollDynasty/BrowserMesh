@@ -1,4 +1,4 @@
-import { mkdtemp } from 'node:fs/promises';
+import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { PlaywrightBrowserEngine } from '../../src/adapters/playwright/playwright-browser-engine.js';
@@ -6,10 +6,17 @@ import { FileSystemStateRepository } from '../../src/adapters/persistence/filesy
 import { uuidGenerator } from '../../src/infrastructure/id.js';
 import { BrowserMeshRuntime } from '../../src/runtime/browsermesh-runtime.js';
 
-export async function realRuntime(): Promise<BrowserMeshRuntime> {
+export interface RealRuntimeHarness {
+  readonly runtime: BrowserMeshRuntime;
+  readonly engine: PlaywrightBrowserEngine;
+  cleanup(): Promise<void>;
+}
+
+export async function createRealRuntimeHarness(): Promise<RealRuntimeHarness> {
   const dataDirectory = await mkdtemp(join(tmpdir(), 'browsermesh-integration-'));
-  return new BrowserMeshRuntime({
-    engine: new PlaywrightBrowserEngine(true),
+  const engine = new PlaywrightBrowserEngine(true);
+  const runtime = new BrowserMeshRuntime({
+    engine,
     stateRepository: new FileSystemStateRepository(dataDirectory),
     events: { emit: () => undefined },
     ids: uuidGenerator,
@@ -18,4 +25,15 @@ export async function realRuntime(): Promise<BrowserMeshRuntime> {
     maxPagesPerSession: 10,
     persistenceEnabled: true,
   });
+  return {
+    runtime,
+    engine,
+    async cleanup(): Promise<void> {
+      try {
+        await runtime.shutdown();
+      } finally {
+        await rm(dataDirectory, { recursive: true, force: true });
+      }
+    },
+  };
 }

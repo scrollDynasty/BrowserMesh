@@ -71,11 +71,11 @@ export function createMcpServer(runtime: BrowserMeshRuntime): McpServer {
     'browser_session_create',
     {
       description:
-        'Create a new isolated browser session with its own cookies, storage, and pages. Create a separate session whenever a task involves a different user, account, role, or independent browser state; never reuse one session for identities that must remain isolated. The response returns a sessionId; call browser_page_list to obtain its initial pageId.',
+        'Create a new isolated browser session with its own cookies, storage, and pages. Create a separate session whenever a task involves a different user, account, role, authentication state, or independent parallel workflow; never reuse one session for identities that must remain isolated. The response directly returns both sessionId and the deterministic initial pageId for immediate navigation. Pass stateId only to restore previously saved browser state.',
       inputSchema: {
         name: z.string().min(1).max(128).optional(),
         metadata: z.record(z.string(), z.string()).optional(),
-        fromState: z.string().min(1).optional(),
+        stateId: z.string().min(1).optional(),
       },
     },
     (input) => result(() => runtime.createSession(input)),
@@ -116,7 +116,7 @@ export function createMcpServer(runtime: BrowserMeshRuntime): McpServer {
     'browser_page_list',
     {
       description:
-        'List pages belonging only to the addressed session. Call this after browser_session_create to obtain the deterministic initial pageId.',
+        'List pages belonging only to the addressed session. Session creation already returns the initial pageId; use this tool to rediscover or inspect all pages in that session.',
       inputSchema: sessionSchema,
     },
     ({ sessionId }) => result(() => runtime.listPages(sessionId)),
@@ -237,17 +237,20 @@ export function createMcpServer(runtime: BrowserMeshRuntime): McpServer {
     'browser_state_save',
     {
       description: 'Save session authentication/storage state',
-      inputSchema: { ...sessionSchema, name: z.string().min(1).max(128) },
+      inputSchema: { ...sessionSchema, stateId: z.string().min(1).max(128) },
     },
-    ({ sessionId, name }) => result(() => runtime.saveSessionState(sessionId, name)),
+    ({ sessionId, stateId }) => result(() => runtime.saveSessionState(sessionId, stateId)),
   );
   server.registerTool('browser_state_list', { description: 'List saved states' }, () =>
     result(() => runtime.listSavedStates()),
   );
   server.registerTool(
     'browser_state_remove',
-    { description: 'Delete a saved state', inputSchema: { name: z.string().min(1).max(128) } },
-    ({ name }) => result(() => runtime.removeSavedState(name)),
+    {
+      description: 'Delete a saved browser state by its logical stateId',
+      inputSchema: { stateId: z.string().min(1).max(128) },
+    },
+    ({ stateId }) => result(() => runtime.removeSavedState(stateId)),
   );
 
   return server;
