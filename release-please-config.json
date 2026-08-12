@@ -1,11 +1,14 @@
 {
+  "$schema": "https://raw.githubusercontent.com/googleapis/release-please/main/schemas/config.json",
   "release-type": "node",
   "include-component-in-tag": false,
+  "bootstrap-sha": "7e073e67a2b29b8650702e56c73fa6bff15796f2",
   "packages": {
     ".": {
       "release-type": "node",
       "package-name": "multi-agent-browser-mcp",
       "changelog-path": "CHANGELOG.md",
+      "always-update": true,
       "bump-minor-pre-major": true,
       "bump-patch-for-minor-pre-major": true,
       "draft": false,
