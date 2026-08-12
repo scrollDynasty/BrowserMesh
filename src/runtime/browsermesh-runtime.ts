@@ -119,26 +119,37 @@ export class BrowserMeshRuntime {
       accepting: true,
     };
     this.sessions.set(id, entry);
-    try {
-      const storageState =
-        input.fromState === undefined ? undefined : await this.loadState(input.fromState);
-      entry.context = await this.options.engine.createContext({
-        timeoutMs: this.options.defaultTimeoutMs,
-        ...(storageState === undefined ? {} : { storageState }),
-      });
-      const initialPage = await this.options.engine.createPage(entry.context);
-      const page = this.addPage(entry, initialPage);
-      entry.defaultPageId = page.id;
-      entry.status = 'ready';
-      this.emit('session.created', { sessionId: id });
-      return this.sessionView(entry);
-    } catch (error) {
-      entry.status = 'failed';
-      entry.accepting = false;
-      if (entry.context !== undefined)
-        await this.options.engine.closeContext(entry.context).catch(() => undefined);
-      throw error;
-    }
+    return entry.queue.run(async () => {
+      try {
+        const storageState =
+          input.fromState === undefined ? undefined : await this.loadState(input.fromState);
+        entry.context = await this.options.engine.createContext({
+          timeoutMs: this.options.defaultTimeoutMs,
+          ...(storageState === undefined ? {} : { storageState }),
+        });
+        const initialPage = await this.options.engine.createPage(entry.context);
+        const page = this.addPage(entry, initialPage);
+        entry.defaultPageId = page.id;
+        entry.status = 'ready';
+        this.emit('session.created', { sessionId: id });
+        return this.sessionView(entry);
+      } catch (error) {
+        entry.status = 'failed';
+        entry.accepting = false;
+        if (entry.context !== undefined) {
+          try {
+            await this.options.engine.closeContext(entry.context);
+          } catch (cleanupError) {
+            throw new BrowserMeshError(
+              'BROWSER_ERROR',
+              'Session creation and context cleanup both failed',
+              { cause: new AggregateError([error, cleanupError]) },
+            );
+          }
+        }
+        throw error;
+      }
+    });
   }
 
   listSessions(): readonly SessionView[] {
@@ -399,16 +410,16 @@ export class BrowserMeshRuntime {
       correlationId: input.correlationId ?? this.options.ids.next('correlation'),
       ...(input.replyTo === undefined ? {} : { replyTo: input.replyTo }),
     };
-    recipient.mailbox.push(message);
+    recipient.mailbox.push(this.cloneMessage(message));
     this.emit('message.sent', { agentId: input.fromAgentId });
-    return { ...message };
+    return this.cloneMessage(message);
   }
 
   listMessages(agentId: string, unreadOnly = false): readonly MessageView[] {
     const messages = this.getAgentEntry(agentId).mailbox;
     return messages
       .filter((message) => !unreadOnly || message.acknowledgedAt === undefined)
-      .map((message) => ({ ...message }));
+      .map((message) => this.cloneMessage(message));
   }
 
   acknowledgeMessage(agentId: string, messageId: string): MessageView {
@@ -420,10 +431,10 @@ export class BrowserMeshRuntime {
         'MESSAGE_TARGET_NOT_FOUND',
         `Message '${messageId}' was not found`,
       );
-    if (message.acknowledgedAt !== undefined) return { ...message };
+    if (message.acknowledgedAt !== undefined) return this.cloneMessage(message);
     const acknowledged: MessageView = { ...message, acknowledgedAt: this.timestamp() };
     mailbox[index] = acknowledged;
-    return { ...acknowledged };
+    return this.cloneMessage(acknowledged);
   }
 
   shutdown(): Promise<void> {
@@ -433,9 +444,25 @@ export class BrowserMeshRuntime {
       const active = Array.from(this.sessions.values()).filter(
         (entry) => entry.status !== 'closed',
       );
-      await Promise.allSettled(active.map((entry) => this.closeSession(entry.id)));
-      await this.options.engine.stop();
+      const closeResults = await Promise.allSettled(
+        active.map((entry) => this.closeSession(entry.id)),
+      );
+      let stopFailure: unknown;
+      try {
+        await this.options.engine.stop();
+      } catch (error) {
+        stopFailure = error;
+      }
       this.started = false;
+      const failures: unknown[] = [];
+      for (const result of closeResults) {
+        if (result.status === 'rejected') {
+          const reason: unknown = result.reason;
+          failures.push(reason);
+        }
+      }
+      if (stopFailure !== undefined) failures.push(stopFailure);
+      if (failures.length > 0) throw new AggregateError(failures, 'BrowserMesh shutdown failed');
     })();
     return this.shutdownPromise;
   }
@@ -570,6 +597,10 @@ export class BrowserMeshRuntime {
 
   private cloneAgent(agent: AgentView): AgentView {
     return { ...agent, metadata: { ...agent.metadata } };
+  }
+
+  private cloneMessage(message: MessageView): MessageView {
+    return { ...message, payload: structuredClone(message.payload) };
   }
 
   private requireContext(entry: SessionEntry): BrowserContextHandle {

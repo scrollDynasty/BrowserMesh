@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { BrowserMeshError } from '../../src/domain/errors.js';
-import { testRuntime } from '../support/fakes.js';
+import { FakeEngine, testRuntime } from '../support/fakes.js';
 
 describe('BrowserMeshRuntime', () => {
   it('creates isolated sessions and closes idempotently', async () => {
@@ -76,5 +76,27 @@ describe('BrowserMeshRuntime', () => {
     expect(runtime.acknowledgeMessage(seller.id, first.id).acknowledgedAt).toBeDefined();
     expect(runtime.listMessages(seller.id, true)).toHaveLength(1);
     await runtime.shutdown();
+  });
+
+  it('queues shutdown behind session creation and does not leak its context', async () => {
+    let releaseCreation: (() => void) | undefined;
+    const gate = new Promise<void>((resolve) => {
+      releaseCreation = resolve;
+    });
+    class SlowEngine extends FakeEngine {
+      override async createContext() {
+        await gate;
+        return super.createContext();
+      }
+    }
+    const { runtime, engine } = testRuntime(new SlowEngine());
+    const creation = runtime.createSession();
+    await Promise.resolve();
+    const shutdown = runtime.shutdown();
+    releaseCreation?.();
+    await creation;
+    await shutdown;
+    expect(engine.contexts.size).toBe(0);
+    expect(engine.pages.size).toBe(0);
   });
 });

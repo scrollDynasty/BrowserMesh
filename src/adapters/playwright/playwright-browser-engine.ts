@@ -23,6 +23,7 @@ interface PageHandle extends BrowserPageHandle {
 
 export class PlaywrightBrowserEngine implements BrowserEnginePort {
   private browser: Browser | undefined;
+  private startPromise: Promise<void> | undefined;
   private readonly contexts = new Map<symbol, BrowserContext>();
   private readonly pages = new Map<symbol, Page>();
 
@@ -30,11 +31,19 @@ export class PlaywrightBrowserEngine implements BrowserEnginePort {
 
   async start(): Promise<void> {
     if (this.browser?.isConnected() === true) return;
-    try {
-      this.browser = await chromium.launch({ headless: this.headless });
-    } catch (error) {
-      throw new BrowserMeshError('BROWSER_ERROR', 'Failed to launch Chromium', { cause: error });
-    }
+    if (this.startPromise !== undefined) return this.startPromise;
+    this.startPromise = (async () => {
+      try {
+        this.browser = await chromium.launch({ headless: this.headless });
+      } catch (error) {
+        throw new BrowserMeshError('BROWSER_ERROR', 'Failed to launch Chromium', {
+          cause: error,
+        });
+      } finally {
+        this.startPromise = undefined;
+      }
+    })();
+    return this.startPromise;
   }
 
   async stop(): Promise<void> {
@@ -164,7 +173,10 @@ export class PlaywrightBrowserEngine implements BrowserEnginePort {
   }
 
   async click(handle: BrowserPageHandle, locator: Locator, timeoutMs: number): Promise<void> {
-    await this.locate(this.getPage(handle), locator).click({ timeout: timeoutMs });
+    await this.wrapElement(
+      () => this.locate(this.getPage(handle), locator).click({ timeout: timeoutMs }),
+      timeoutMs,
+    );
   }
 
   async fill(
@@ -173,7 +185,10 @@ export class PlaywrightBrowserEngine implements BrowserEnginePort {
     value: string,
     timeoutMs: number,
   ): Promise<void> {
-    await this.locate(this.getPage(handle), locator).fill(value, { timeout: timeoutMs });
+    await this.wrapElement(
+      () => this.locate(this.getPage(handle), locator).fill(value, { timeout: timeoutMs }),
+      timeoutMs,
+    );
   }
 
   async press(
@@ -182,7 +197,10 @@ export class PlaywrightBrowserEngine implements BrowserEnginePort {
     key: string,
     timeoutMs: number,
   ): Promise<void> {
-    await this.locate(this.getPage(handle), locator).press(key, { timeout: timeoutMs });
+    await this.wrapElement(
+      () => this.locate(this.getPage(handle), locator).press(key, { timeout: timeoutMs }),
+      timeoutMs,
+    );
   }
 
   async selectOption(
@@ -191,7 +209,13 @@ export class PlaywrightBrowserEngine implements BrowserEnginePort {
     value: string,
     timeoutMs: number,
   ): Promise<void> {
-    await this.locate(this.getPage(handle), locator).selectOption(value, { timeout: timeoutMs });
+    await this.wrapElement(
+      () =>
+        this.locate(this.getPage(handle), locator)
+          .selectOption(value, { timeout: timeoutMs })
+          .then(() => undefined),
+      timeoutMs,
+    );
   }
 
   async snapshot(handle: BrowserPageHandle, timeoutMs: number): Promise<string> {
@@ -272,6 +296,20 @@ export class PlaywrightBrowserEngine implements BrowserEnginePort {
       throw new BrowserMeshError(
         timedOut ? 'OPERATION_TIMEOUT' : code,
         timedOut ? `Operation exceeded ${String(timeoutMs)}ms` : message,
+        { cause: error },
+      );
+    }
+  }
+
+  private async wrapElement(action: () => Promise<void>, timeoutMs: number): Promise<void> {
+    try {
+      await action();
+    } catch (error) {
+      if (error instanceof BrowserMeshError) throw error;
+      const timedOut = error instanceof Error && error.name === 'TimeoutError';
+      throw new BrowserMeshError(
+        timedOut ? 'OPERATION_TIMEOUT' : 'ELEMENT_NOT_FOUND',
+        timedOut ? `Element operation exceeded ${String(timeoutMs)}ms` : 'Element operation failed',
         { cause: error },
       );
     }

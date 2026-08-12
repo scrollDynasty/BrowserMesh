@@ -15,6 +15,13 @@ async function shutdown(): Promise<void> {
   await runtime.shutdown();
 }
 
+server.server.onclose = () => {
+  void shutdown().catch((error: unknown) => {
+    process.stderr.write(`${error instanceof Error ? error.message : String(error)}\n`);
+    process.exitCode = 1;
+  });
+};
+
 for (const signal of ['SIGINT', 'SIGTERM'] as const) {
   process.once(signal, () => {
     void shutdown().then(
