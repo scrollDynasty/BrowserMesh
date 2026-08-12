@@ -1,188 +1,660 @@
 # BrowserMesh v0.1 — Technical Specification
 
-Status: MVP responsibility boundary
+Status: MVP responsibility and behavioral contract
 
 ## 1. Product definition
 
 BrowserMesh is an open-source local runtime that exposes multiple isolated browser sessions over MCP.
 
-The intended flow is:
+The intended responsibility boundary is:
 
 ```text
-User → external AI client → MCP → BrowserMesh → isolated browser sessions
+User
+  ↓
+external AI client
+  ↓ MCP
+BrowserMesh
+  ↓
+isolated browser sessions
 ```
 
-Claude Code, Codex, Cursor, Qwen, or another MCP client performs reasoning and orchestration. BrowserMesh provides browser capabilities only. A user normally configures BrowserMesh once in the external client and asks that client to complete browser tasks.
+Claude Code, Codex, Cursor, Qwen, or another MCP-compatible client performs reasoning and workflow orchestration.
 
-BrowserMesh is not an LLM framework, an internal agent runtime, a message bus, a Playwright fork, or a browser GUI.
+BrowserMesh provides deterministic browser capabilities.
+
+A normal user configures BrowserMesh once in their external AI client and then asks that client to complete browser tasks.
+
+BrowserMesh is not:
+
+- an LLM framework;
+- an internal AI-agent runtime;
+- an internal Agent registry;
+- a message bus;
+- a prompt orchestration framework;
+- a Playwright fork;
+- a browser GUI;
+- an interactive shell that is required for normal usage.
+
+The primary BrowserMesh interface for v0.1 is MCP stdio.
 
 ## 2. Core guarantee
 
-Browser actions within one BrowserSession are logically isolated from actions in every other BrowserSession. A session must not accidentally expose another session's:
+Browser actions within one `BrowserSession` are logically isolated from actions in every other `BrowserSession`.
 
-- cookies or localStorage;
-- authentication state;
+A session must not accidentally expose another session's:
+
+- cookies;
+- browser storage/authentication state;
 - browser context;
-- pages or page references;
-- URLs, DOM snapshots, screenshots, or form state.
+- pages;
+- page references;
+- URLs;
+- DOM snapshots;
+- screenshots;
+- form state.
 
-Each v0.1 session maps to a distinct Playwright `BrowserContext`. One Chromium process may host many contexts.
+Each ready v0.1 session maps to a distinct Playwright `BrowserContext`.
+
+One Chromium process may host many isolated contexts.
+
+BrowserMesh does not expose Playwright objects in its public contracts.
 
 ## 3. Explicit addressing
 
-Every browser operation requires `sessionId`. Every page operation also requires `pageId`. There is no global current session, active page, current page, or current tab.
+Every browser operation requires `sessionId`.
 
-A newly created session has one deterministic initial page, returned by `browser_page_list` and marked `isDefault`. The default marker is informational; page operations remain explicitly addressed.
+Every page-specific operation also requires `pageId`.
 
-Session `name` and string `metadata` are optional neutral labels. An external client may use metadata such as `role=buyer` or `account=work` to organize workflows. Metadata does not create an internal Agent, owner, mailbox, permission boundary, or lease.
+There is no global:
 
-When a browser task involves different users, accounts, roles, or authentication states, the MCP client should create a separate session for each identity.
+- current session;
+- active session;
+- current page;
+- active page;
+- current tab.
 
-## 4. v0.1 scope
+A newly created session contains one deterministic initial page.
 
-### Sessions
+`browser_session_create` returns:
 
-- create, list, get, close;
-- unique immutable ID;
-- lifecycle statuses: creating, ready, closing, closed, failed;
-- optional name and metadata;
-- configurable active-session limit;
-- idempotent close.
+- the new session identity;
+- the initial page identity.
 
-### Pages
+The initial page also appears in `browser_page_list` and is marked `isDefault`.
+
+The default marker is informational only. Page operations remain explicitly addressed with `pageId`.
+
+A `pageId` belonging to one session must be rejected when used with a different `sessionId`.
+
+The public failure for cross-session page addressing is `PAGE_NOT_FOUND` unless a more specific safe public error is deliberately introduced by a future specification.
+
+## 4. Neutral labels
+
+Sessions may have:
+
+- an optional human-readable `name`;
+- optional string metadata.
+
+An external client may use metadata such as:
+
+```text
+role=buyer
+role=seller
+account=work
+```
+
+to organize its own workflow.
+
+Metadata does not create:
+
+- an internal Agent;
+- an owner principal;
+- a mailbox;
+- a permission boundary;
+- a message channel;
+- a lease.
+
+When a browser task involves different users, accounts, roles, or authentication states, MCP tool descriptions must give the external client enough information to infer that a separate BrowserMesh session should normally be created for each identity.
+
+## 5. v0.1 scope
+
+### 5.1 Sessions
+
+BrowserMesh supports:
+
+- create;
+- list;
+- get;
+- close.
+
+Each session has:
+
+- a unique immutable ID;
+- lifecycle status;
+- creation time;
+- last-activity information where useful;
+- optional name;
+- optional string metadata.
+
+Minimum lifecycle states:
+
+- `creating`;
+- `ready`;
+- `closing`;
+- `closed`;
+- `failed`.
+
+The runtime enforces a configurable active-session limit.
+
+A close request against a known closing or closed session is idempotent.
+
+A completely unknown session ID returns `SESSION_NOT_FOUND`.
+
+Implementation may retain a bounded lightweight tombstone/view for recently closed sessions in order to provide deterministic idempotent-close behavior.
+
+Closed sessions must not retain live Playwright handles.
+
+### 5.2 Session creation result
+
+`browser_session_create` creates one deterministic initial page and returns enough information for the caller to perform a page operation immediately.
+
+The result must include at minimum:
+
+- `sessionId`;
+- initial `pageId`.
+
+The caller must not be forced to invoke `browser_page_list` before the first navigation.
+
+### 5.3 Pages
+
+BrowserMesh supports:
 
 - initial page per session;
-- create, list, close;
-- unique page ID;
-- configurable per-session page limit;
-- cross-session page IDs rejected.
+- create;
+- list;
+- close.
 
-### Browser actions
+Each page has:
 
-- navigate, back, forward, reload;
-- current URL and title;
-- semantic click, fill, press, select option;
-- accessibility-oriented snapshot and visible text;
-- PNG screenshot returned in memory.
+- a unique runtime-generated page ID;
+- a session association;
+- an optional `isDefault` informational marker.
 
-### Locator strategies
+The runtime enforces a configurable per-session page limit.
 
-- role, text, label, placeholder, test ID;
-- CSS as an escape hatch;
-- extensible contract that does not expose Playwright locator objects.
+Public callers never receive Playwright `Page` objects.
 
-### Concurrency
+### 5.4 Browser actions
 
-- different sessions execute concurrently;
-- changing operations in one session are serialized by an independent per-session queue;
-- no global runtime lock;
-- every page operation has an operation ID;
-- blocking operations have configurable bounded timeouts.
+v0.1 supports:
+
+- navigate;
+- back;
+- forward;
+- reload;
+- current URL;
+- title;
+- semantic click;
+- fill;
+- press;
+- select option;
+- accessibility-oriented snapshot;
+- visible text;
+- screenshot returned in memory.
+
+BrowserMesh does not attempt to expose the complete Playwright API.
+
+### 5.5 Locator strategies
+
+v0.1 supports engine-independent locator contracts for:
+
+- role;
+- text;
+- label;
+- placeholder;
+- test ID;
+- CSS as an escape hatch.
+
+The public contract must remain extensible.
+
+It must not expose Playwright `Locator` objects.
+
+### 5.6 Navigation policy
+
+`browser_navigate` accepts absolute HTTP(S) URLs.
+
+BrowserMesh v0.1 does not expose arbitrary navigation to:
+
+- `file:`;
+- `javascript:`;
+- caller-controlled local filesystem resources.
+
+Loopback HTTP(S) URLs remain valid and are used by deterministic tests.
+
+## 6. Concurrency
+
+Concurrency semantics are a core BrowserMesh guarantee.
+
+### 6.1 Per-session serialization
+
+Every operation targeting the live browser state of one session must pass through that session's independent serial operation queue.
+
+This includes, where applicable:
+
+- navigation;
+- interactions;
+- inspection;
+- screenshots;
+- page creation;
+- page closing;
+- state saving;
+- browser-backed session lifecycle work.
+
+Read-style browser operations such as snapshot, title, URL, or visible-text inspection must not bypass the session queue while another browser operation for that session is active.
+
+Registry-only immutable session/page listing may use a safe deterministic snapshot without entering the browser-operation queue when it does not touch live engine state.
+
+### 6.2 Cross-session parallelism
+
+Different sessions use independent queues.
+
+There is no global browser-operation mutex.
+
+Operations targeting different sessions may execute concurrently.
+
+### 6.3 Queue failure isolation
+
+A failed, rejected, or timed-out operation must not poison a session queue.
+
+After the failed operation has settled, later operations that were validly accepted must continue processing normally.
+
+The implementation must explicitly test this property.
+
+### 6.4 Operation IDs
+
+Every externally initiated BrowserMesh runtime operation receives a unique `operationId`.
+
+This includes MCP operations for:
+
+- sessions;
+- pages;
+- browser actions;
+- persistence.
+
+`operationId` is used for:
+
+- structured logging;
+- correlation;
+- debugging;
+- future tracing.
+
+### 6.5 Timeouts
+
+Potentially blocking browser operations have bounded timeouts.
+
+Timeout behavior is:
+
+- centrally configurable;
+- optionally overridable where the public contract permits;
+- deterministic;
+- mapped to safe typed public errors.
+
+BrowserMesh must not intentionally permit infinite browser-operation waits.
+
+## 7. Session close semantics
+
+When closing a ready session:
+
+1. the session transitions to `closing`;
+2. it stops accepting new session-targeted browser operations;
+3. previously accepted queued operations are drained;
+4. its pages are closed;
+5. its `BrowserContext` is closed;
+6. live opaque engine handles are removed;
+7. the session becomes `closed`.
+
+Operations arriving after a session begins closing are rejected with a documented safe session-lifecycle error.
+
+Close must not race with initialization in a way that leaks a newly created context.
+
+Session initialization participates in lifecycle synchronization.
+
+## 8. Browser lifecycle
+
+BrowserMesh v0.1 uses one local Chromium process at a time under normal operation.
+
+The process may start lazily or through an explicit runtime startup method according to the implementation ADR.
+
+The selected behavior must remain deterministic and documented.
+
+### 8.1 Graceful shutdown
+
+On BrowserMesh shutdown:
+
+1. stop accepting new externally initiated operations;
+2. mark runtime shutdown state;
+3. drain accepted work according to queue semantics;
+4. close active sessions/contexts;
+5. remove live page/context handles;
+6. close Chromium;
+7. close transport/process resources;
+8. report cleanup failures instead of silently swallowing them.
+
+Independent session cleanup may occur concurrently when safe.
+
+### 8.2 Unexpected Chromium disconnect
+
+BrowserMesh must detect an unexpected Chromium disconnect.
+
+Affected live sessions transition to `failed`.
+
+Their engine handles become invalid and must be cleaned from the runtime.
+
+BrowserMesh must **not** silently reconstruct existing live sessions.
+
+Silent reconstruction would make browser state ambiguous.
+
+The runtime may start a fresh Chromium process for subsequently created new sessions if it can safely recover.
+
+Existing failed sessions remain failed.
+
+Automatic reconstruction of live sessions is outside v0.1 scope.
+
+## 9. Persistence
+
+BrowserMesh supports:
+
+- save browser storage/auth state;
+- create a new session using previously saved state;
+- list saved states;
+- remove saved states.
+
+### 9.1 Session creation from state
+
+`browser_session_create` accepts an optional logical `stateId`.
+
+Without `stateId`:
+
+- create a fresh isolated context.
+
+With `stateId`:
+
+- load previously saved BrowserMesh state;
+- create a new isolated context initialized from that state.
+
+There is no separate public tool named `browser_session_create.fromState`.
+
+### 9.2 State identifiers
+
+External callers provide logical state identifiers, not filesystem paths.
+
+State identifiers must be validated using a conservative format.
+
+Path traversal and caller-selected arbitrary locations are forbidden.
+
+### 9.3 Save synchronization
+
+Saving state from a live session is a session-targeted browser operation.
+
+It must pass through the session's serial operation queue so that storage-state capture occurs at a deterministic point relative to navigation and interactions.
+
+### 9.4 State storage
+
+The initial implementation uses a filesystem repository beneath the configured BrowserMesh data directory.
+
+Writes should use safe temporary-file + atomic-replace semantics where supported.
+
+Saved state may contain sensitive authentication material.
+
+The runtime must not log serialized state.
+
+### 9.5 Persistence semantics
+
+Persistence represents serialized browser storage/authentication state supported by the BrowserMesh Playwright adapter.
+
+BrowserMesh does not serialize:
+
+- a live `BrowserContext`;
+- open `Page` objects;
+- current DOM runtime;
+- active operations;
+- locks/queues;
+- Chromium process state.
+
+## 10. MCP
+
+BrowserMesh v0.1 exposes its public runtime through MCP stdio.
+
+MCP is an adapter/transport boundary.
+
+MCP handlers:
+
+1. validate tool input;
+2. call runtime/application services;
+3. map successful results;
+4. map typed application errors into safe MCP error results.
+
+MCP handlers must never directly manipulate:
+
+- Playwright `Browser`;
+- Playwright `BrowserContext`;
+- Playwright `Page`;
+- Playwright locators.
+
+The MCP layer must not contain BrowserMesh domain logic.
+
+## 11. MCP tool descriptions
+
+Tool descriptions are part of the public product contract.
+
+Descriptions must explain:
+
+- what the tool does;
+- when an AI client should use it;
+- important isolation/addressing semantics.
+
+`browser_session_create` must explicitly communicate that separate sessions should normally be created for:
+
+- different users;
+- different accounts;
+- different application roles;
+- different authentication states;
+- independent parallel workflows.
+
+The goal is to make natural-language workflows discoverable without requiring the human user to manually specify BrowserMesh tool calls.
+
+An AI client given a task such as:
+
+> Test this flow simultaneously as a buyer and an administrator.
+
+should receive enough MCP tool metadata to infer that separate sessions are appropriate.
+
+LLM behavior itself is not deterministic and is not required as a CI assertion.
+
+Tool-description semantics must instead be covered through contract review/tests.
+
+## 12. MCP tools
+
+### Sessions/pages
+
+- `browser_session_create`
+- `browser_session_list`
+- `browser_session_get`
+- `browser_session_close`
+- `browser_page_create`
+- `browser_page_list`
+- `browser_page_close`
+
+### Navigation/actions/inspection
+
+- `browser_navigate`
+- `browser_back`
+- `browser_forward`
+- `browser_reload`
+- `browser_get_url`
+- `browser_get_title`
+- `browser_snapshot`
+- `browser_visible_text`
+- `browser_click`
+- `browser_fill`
+- `browser_press`
+- `browser_select_option`
+- `browser_screenshot`
 
 ### Persistence
 
-- save cookies/localStorage state;
-- create a new session from saved state;
-- list and remove saved states;
-- filesystem adapter beneath `.browsermesh/` by default;
-- safe logical state names, no arbitrary caller paths;
-- no attempt to serialize a live `BrowserContext`.
+- `browser_state_save`
+- `browser_state_list`
+- `browser_state_remove`
 
-### MCP
+`browser_session_create` supports optional `stateId` restoration.
 
-- TypeScript MCP SDK;
-- local stdio transport;
-- schema-validated tool inputs;
-- application service calls only, never direct Playwright calls from handlers;
-- typed error mapping with MCP `isError` responses;
-- tool descriptions sufficient for an AI client to choose separate sessions for separate identities.
+## 13. Result and error contract
 
-## 5. Explicit non-scope
+MCP inputs are schema validated.
 
-BrowserMesh v0.1 does not contain:
+Successful JSON-oriented results follow one consistent public shape.
 
-- Agent entities or an Agent registry;
-- agent creation/removal MCP tools;
-- internal LLM reasoning or prompt orchestration;
-- session ownership tied to an AI-agent abstraction;
-- agent mailboxes, messaging, handoff, request/response, or message correlation;
-- `browser_agent_*`, `browser_message_*`, session assign, or session release tools;
-- authentication service, web dashboard, database, Redis, queue, broker, workers, microservices, Docker, Kubernetes, or cloud infrastructure;
-- arbitrary shell execution, arbitrary filesystem reads, downloads, or a full Playwright API;
-- Firefox/WebKit parity or remote Streamable HTTP.
+Application failures follow one consistent safe public error shape and set MCP `isError: true`.
 
-Generic client/workflow leases may be considered later if a real multi-client protection requirement exists. They must remain independent of LLM/Agent concepts.
+Public error categories include:
 
-## 6. Architecture
+- `SESSION_NOT_FOUND`
+- `SESSION_NOT_READY`
+- `SESSION_CLOSING`
+- `SESSION_CLOSED`
+- `PAGE_NOT_FOUND`
+- `INVALID_ARGUMENT`
+- `LIMIT_EXCEEDED`
+- `OPERATION_TIMEOUT`
+- `NAVIGATION_FAILED`
+- `ELEMENT_NOT_FOUND`
+- `BROWSER_ERROR`
+- `BROWSER_DISCONNECTED`
+- `RUNTIME_SHUTTING_DOWN`
+- `SAVED_STATE_NOT_FOUND`
+- `PERSISTENCE_DISABLED`
+- `INTERNAL_ERROR`
 
-BrowserMesh uses a modular monolith:
+The implementation may refine the list through ADR/API contracts when necessary, but public codes must remain stable and safe.
 
-- **Domain**: session/page views, locators, operation results, typed errors. No Playwright, MCP, filesystem, or transport imports.
-- **Application ports**: browser engine, persistence, and event contracts.
-- **Runtime**: session/page registries, lifecycle, routing, per-session queues, limits, persistence orchestration, shutdown.
-- **Adapters**: Playwright, MCP, filesystem persistence.
-- **Infrastructure**: centralized configuration, IDs, structured logging.
+Raw Playwright stack traces are not public MCP contracts.
 
-Allowed dependency direction is adapters → runtime/application → domain. The Playwright adapter is the only layer that manipulates `Browser`, `BrowserContext`, and `Page`. MCP handlers call runtime/application services.
+Underlying causes may be retained internally for debugging provided secrets are not logged.
 
-## 7. Browser lifecycle and shutdown
+## 14. Architecture
 
-BrowserMesh lazily starts or explicitly starts one Chromium process. On shutdown it:
+BrowserMesh uses a modular monolith.
 
-1. stops accepting new operations;
-2. drains operations already queued;
-3. closes sessions/contexts;
-4. closes Chromium;
-5. closes the transport/process connection;
-6. reports cleanup failures rather than swallowing them.
+### Domain
 
-Session initialization is queued with lifecycle operations so shutdown cannot leak a context created concurrently.
+Contains stable BrowserMesh concepts such as:
 
-## 8. Error contract
+- session/page public views;
+- locators;
+- operation results;
+- typed errors;
+- engine-independent value types.
 
-Public error categories:
+Domain must not import:
 
-- `SESSION_NOT_FOUND`, `SESSION_NOT_READY`, `SESSION_CLOSED`;
-- `PAGE_NOT_FOUND`;
-- `INVALID_ARGUMENT`, `LIMIT_EXCEEDED`;
-- `OPERATION_TIMEOUT`, `NAVIGATION_FAILED`, `ELEMENT_NOT_FOUND`;
-- `BROWSER_ERROR`, `RUNTIME_SHUTTING_DOWN`, `SAVED_STATE_NOT_FOUND`;
-- `INTERNAL_ERROR`.
+- Playwright;
+- MCP;
+- filesystem adapters;
+- transport implementations.
 
-Raw Playwright stacks are not public MCP contracts. Underlying causes may be retained internally but secrets must not be logged.
+### Application ports
 
-## 9. Security
+Declare contracts for:
 
-- Configuration reads environment variables centrally.
-- Structured logs go to stderr and never include cookies, tokens, storage state, page content, form values, or screenshots.
-- Persistence paths are controlled by the configured data directory; state names cannot traverse directories.
-- `.browsermesh/` is ignored by Git and documented as sensitive.
-- Screenshots are returned as MCP image content, not written to caller-selected paths.
-- Navigation accepts absolute HTTP(S) URLs only.
-- BrowserMesh never exposes a shell tool.
+- browser engine;
+- persistence;
+- event/observability sink;
+- supporting infrastructure where needed.
 
-## 10. MCP tools
+### Runtime/application services
 
-Session/page:
+Own:
 
-- `browser_session_create`, `browser_session_list`, `browser_session_get`, `browser_session_close`;
-- `browser_page_create`, `browser_page_list`, `browser_page_close`.
+- session registry;
+- page registry;
+- lifecycle;
+- explicit routing;
+- session queues;
+- limits;
+- persistence orchestration;
+- operation IDs;
+- shutdown.
 
-Navigation/actions/inspection:
+### Adapters
 
-- `browser_navigate`, `browser_back`, `browser_forward`, `browser_reload`;
-- `browser_get_url`, `browser_get_title`, `browser_snapshot`, `browser_visible_text`;
-- `browser_click`, `browser_fill`, `browser_press`, `browser_select_option`;
-- `browser_screenshot`.
+Implement external/concrete boundaries:
 
-Persistence:
+- Playwright browser engine;
+- MCP;
+- filesystem persistence.
 
-- `browser_state_save`, `browser_state_list`, `browser_state_remove`;
-- `browser_session_create.fromState` restores state.
+### Infrastructure
 
-## 11. Configuration
+Owns:
 
-- headless/headed Chromium;
+- centralized configuration;
+- ID generation;
+- structured logging;
+- clock/helpers where useful.
+
+Allowed conceptual dependency direction:
+
+```text
+adapters
+   ↓
+runtime/application
+   ↓
+domain
+```
+
+Application/runtime code depends on ports rather than concrete Playwright implementations.
+
+## 15. Engine handle boundary
+
+The public/domain model uses BrowserMesh IDs:
+
+- `sessionId`;
+- `pageId`.
+
+Runtime may store engine-independent opaque handle values declared by `BrowserEnginePort`.
+
+Only the Playwright adapter may resolve those opaque handles to actual:
+
+- `BrowserContext`;
+- `Page`;
+- browser objects.
+
+MCP and domain code must never receive those concrete objects.
+
+## 16. Security
+
+BrowserMesh v0.1 security rules:
+
+- environment configuration is read centrally;
+- logs use stderr under MCP stdio;
+- logs do not contain cookies, tokens, storage state, page contents, screenshots, passwords, or form values;
+- persistence uses controlled application paths;
+- caller-controlled arbitrary paths are forbidden;
+- state names cannot traverse directories;
+- `.browsermesh/` is Git-ignored and documented as sensitive;
+- screenshots are returned in memory;
+- arbitrary shell execution is not exposed;
+- arbitrary local filesystem reading is not exposed;
+- navigation is limited to allowed absolute HTTP(S) URLs.
+
+Browser automation is a privileged capability and future remote/multi-tenant modes require separate threat modelling.
+
+## 17. Configuration
+
+v0.1 configuration includes:
+
+- headless/headed mode;
 - default operation timeout;
 - data directory;
 - log level;
@@ -190,46 +662,301 @@ Persistence:
 - maximum pages per session;
 - persistence enabled/disabled.
 
-## 12. Implementation phases
+Configuration is validated centrally.
 
-1. Foundation: strict TypeScript, formatting, lint, test framework, config, logging, docs.
-2. Browser engine: port, Playwright adapter, start/stop, graceful shutdown.
-3. Multi-session core: session registry/lifecycle, BrowserContext-per-session, cleanup.
-4. Pages: explicit IDs and lifecycle.
-5. Browser actions and semantic locators.
-6. Concurrency: per-session queues, cross-session parallelism, operation IDs, timeouts.
-7. MCP: stdio server, schemas, errors, real client integration.
-8. Persistence: safe storage-state save/restore/list/remove.
-9. External-client workflow demo: one MCP client coordinates multiple explicitly labeled sessions without any internal Agent model.
+Scattered direct `process.env` access across the application is forbidden.
 
-## 13. Testing requirements
+## 18. Explicit non-scope
 
-Unit tests cover session registry/lifecycle, queue ordering, limits, error mapping, input validation, and safe persistence naming without real Chromium where unnecessary.
+BrowserMesh v0.1 does not contain:
 
-Real Chromium integration tests cover:
+- internal Agent entities;
+- Agent registry;
+- `browser_agent_*`;
+- internal LLM reasoning;
+- prompt orchestration;
+- session ownership tied to AI Agent concepts;
+- Agent mailboxes;
+- Agent messaging;
+- handoff/request/response protocols;
+- `browser_message_*`;
+- session assign/release tools;
+- Claude/Codex/Qwen process spawning;
+- authentication service;
+- web dashboard;
+- database;
+- Redis;
+- external broker;
+- distributed workers;
+- microservices;
+- Docker as a runtime requirement;
+- Kubernetes;
+- BrowserMesh cloud infrastructure;
+- arbitrary shell execution;
+- arbitrary filesystem reads;
+- downloads;
+- full Playwright API;
+- Firefox/WebKit parity;
+- remote Streamable HTTP;
+- live-session crash recovery.
 
-- separate contexts, cookies, localStorage, pages, and URLs;
-- concurrent operations in different sessions;
-- deterministic serialization within one session;
-- page lifecycle, actions, snapshots, screenshots;
-- storage-state save/close/restore;
-- shutdown and resource cleanup.
+Generic client/workflow leases may be considered later only if a real multi-client access-protection requirement exists.
 
-MCP integration tests cover tool discovery, descriptions, validation, calls, structured errors, stdio process startup, and clean exit.
+Any future lease must remain independent of LLM/Agent concepts.
 
-The external-client e2e scenario uses separate buyer and seller sessions as workflow labels only. BrowserMesh does not represent, reason for, own, or message between those roles.
+## 19. Implementation phases
 
-Stress coverage scales to 50 bounded concurrent sessions and verifies routing and cleanup without turning the test into a local denial of service.
+### Phase 0 — Foundation
 
-## 14. Acceptance criteria
+Implement:
 
-An external MCP client can:
+- project structure;
+- strict TypeScript;
+- lint;
+- formatting;
+- tests;
+- centralized configuration;
+- structured logging;
+- documentation;
+- package scripts.
 
-1. create two independently labeled sessions for different roles/accounts;
-2. obtain explicit page IDs;
-3. navigate and interact with both concurrently;
-4. observe correct independent URLs, cookies, storage, pages, DOM, and screenshots;
-5. persist and restore supported browser state;
-6. close sessions and the server without resource leaks.
+### Phase 1 — Browser engine
 
-No internal Agent/message/ownership API is present. Typecheck, lint, formatting, unit, integration, e2e, stress, build, stdio, and package-install verification must pass.
+Implement:
+
+- engine port;
+- Playwright adapter;
+- Chromium start;
+- Chromium stop;
+- unexpected disconnect handling;
+- graceful engine cleanup.
+
+### Phase 2 — Multi-session core
+
+Implement:
+
+- session model;
+- registry;
+- lifecycle;
+- BrowserContext-per-session;
+- create/list/get/close;
+- initial page;
+- cleanup;
+- limits.
+
+### Phase 3 — Pages
+
+Implement:
+
+- explicit page IDs;
+- page create/list/close;
+- cross-session rejection;
+- page limits.
+
+### Phase 4 — Browser operations
+
+Implement:
+
+- navigation;
+- inspection;
+- interactions;
+- semantic locators;
+- screenshot;
+- typed error mapping.
+
+### Phase 5 — Concurrency
+
+Implement:
+
+- per-session serial queues;
+- cross-session parallelism;
+- operation IDs;
+- bounded timeouts;
+- failed-operation queue recovery;
+- close/operation lifecycle synchronization.
+
+### Phase 6 — MCP
+
+Implement:
+
+- stdio server;
+- validated tool schemas;
+- tool descriptions;
+- result mapping;
+- error mapping;
+- actual stdio client/server verification.
+
+### Phase 7 — Persistence
+
+Implement:
+
+- state save;
+- state list;
+- state remove;
+- optional `stateId` on session creation;
+- safe logical state names;
+- atomic filesystem persistence;
+- secret-safe logging.
+
+### Phase 8 — External-client workflow demo
+
+Implement a deterministic multi-role workflow using one external MCP client model conceptually coordinating multiple isolated sessions.
+
+Buyer and seller/admin are session labels only.
+
+BrowserMesh must not create internal Agent entities.
+
+### Phase 9 — Release readiness
+
+Verify:
+
+- clean build;
+- complete test suite;
+- package contents;
+- `npm pack`;
+- installation from the generated tarball into a clean temporary project;
+- CLI/bin startup;
+- MCP stdio tool discovery from packaged output;
+- README quick-start correctness.
+
+Prepare CI that verifies the repository on push/pull request.
+
+Do not publish an npm package or create an external release without explicit authorization.
+
+## 20. Testing requirements
+
+### Unit tests
+
+Cover:
+
+- session registry/lifecycle;
+- page registry;
+- cross-session page rejection;
+- queue ordering;
+- queue recovery after failure/timeout;
+- limits;
+- error mapping;
+- input validation;
+- safe state naming;
+- configuration validation.
+
+Do not launch Chromium where a deterministic fake port is sufficient.
+
+### Real Chromium integration tests
+
+Cover:
+
+- distinct BrowserContexts;
+- cookie/storage isolation;
+- page isolation;
+- URL isolation;
+- concurrent different-session operations;
+- deterministic same-session serialization;
+- failed-operation queue recovery;
+- page lifecycle;
+- actions;
+- snapshots;
+- screenshots;
+- persistence save/close/restore;
+- close with queued operations;
+- operation after close begins;
+- repeated close;
+- shutdown during session initialization;
+- shutdown with queued operations;
+- unexpected Chromium disconnect where practical;
+- resource cleanup.
+
+### MCP integration tests
+
+Cover:
+
+- process startup;
+- stdio transport;
+- tool discovery;
+- tool descriptions;
+- input validation;
+- successful calls;
+- structured errors;
+- explicit session/page routing;
+- clean exit.
+
+### External-client e2e
+
+Use a deterministic local web application.
+
+Create separate labeled sessions such as:
+
+- buyer;
+- seller;
+- admin.
+
+BrowserMesh only exposes the sessions.
+
+The external MCP client conceptually coordinates the workflow.
+
+No internal Agent model exists.
+
+### Stress
+
+Exercise a bounded concurrency profile scaling toward 50 sessions where the local/CI environment safely permits.
+
+Verify:
+
+- correct routing;
+- isolation;
+- queue independence;
+- cleanup;
+- absence of obvious listener/handle leaks.
+
+Stress testing must remain bounded and must not intentionally become a local denial of service.
+
+### Packaging
+
+Use the generated npm tarball rather than the working source tree to verify:
+
+- package files;
+- executable/bin;
+- build output;
+- runtime imports;
+- MCP startup;
+- tool discovery.
+
+## 21. Acceptance criteria
+
+BrowserMesh v0.1 is complete only when an external MCP client can:
+
+1. create two or more independently labeled sessions;
+2. receive an initial `pageId` directly from session creation;
+3. navigate and interact with sessions independently;
+4. run operations on different sessions concurrently;
+5. observe deterministic ordering inside each individual session;
+6. survive a failed operation without poisoning that session queue;
+7. observe isolated URLs, storage/auth state, pages, DOM and screenshots;
+8. reject cross-session `pageId` misuse;
+9. save supported browser state;
+10. create a new isolated session from a saved `stateId`;
+11. close sessions deterministically;
+12. shut down without known browser-resource leaks;
+13. discover BrowserMesh through MCP stdio;
+14. receive tool descriptions explaining multi-identity session usage;
+15. run successfully from the packaged npm artifact.
+
+The project must pass:
+
+- typecheck;
+- lint;
+- formatting check;
+- unit tests;
+- integration tests;
+- e2e tests;
+- concurrency tests;
+- isolation tests;
+- persistence tests;
+- stress tests;
+- build;
+- MCP stdio verification;
+- package-install verification.
+
+No internal Agent/message/ownership API may be present.
+
+No known blocker, critical, or high-severity defect that is fixable within the defined v0.1 scope may remain at completion.
