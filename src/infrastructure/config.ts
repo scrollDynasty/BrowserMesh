@@ -4,8 +4,7 @@ import { z } from 'zod';
 const booleanString = z.enum(['true', 'false']).transform((value) => value === 'true');
 
 const environmentSchema = z.object({
-  BROWSERMESH_HEADLESS: booleanString.default(true),
-  BROWSERMESH_TIMEOUT_MS: z.coerce.number().int().positive().max(300_000).default(30_000),
+  BROWSERMESH_TIMEOUT_MS: z.coerce.number().int().positive().max(300_000).default(10_000),
   BROWSERMESH_DATA_DIR: z.string().min(1).default('.browsermesh'),
   BROWSERMESH_LOG_LEVEL: z.enum(['debug', 'info', 'warn', 'error', 'silent']).default('info'),
   BROWSERMESH_MAX_SESSIONS: z.coerce.number().int().positive().max(1_000).default(50),
@@ -14,7 +13,6 @@ const environmentSchema = z.object({
 });
 
 export interface BrowserMeshConfig {
-  readonly headless: boolean;
   readonly defaultTimeoutMs: number;
   readonly dataDirectory: string;
   readonly logLevel: 'debug' | 'info' | 'warn' | 'error' | 'silent';
@@ -26,7 +24,6 @@ export interface BrowserMeshConfig {
 export function loadConfig(environment: NodeJS.ProcessEnv = process.env): BrowserMeshConfig {
   const parsed = environmentSchema.parse(environment);
   return {
-    headless: parsed.BROWSERMESH_HEADLESS,
     defaultTimeoutMs: parsed.BROWSERMESH_TIMEOUT_MS,
     dataDirectory: resolve(parsed.BROWSERMESH_DATA_DIR),
     logLevel: parsed.BROWSERMESH_LOG_LEVEL,

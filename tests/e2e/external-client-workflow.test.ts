@@ -103,6 +103,25 @@ describe('external MCP client multi-role workflow', () => {
           }),
         ).value,
       ).toBe('approved');
+      const timedOutLocator = await client.callTool({
+        name: 'browser_press',
+        arguments: {
+          ...buyerTarget,
+          timeoutMs: 100,
+          locator: { strategy: 'css', value: '#missing-select' },
+          key: 'Enter',
+        },
+      });
+      expect(timedOutLocator.isError).toBe(true);
+      expect(JSON.stringify(timedOutLocator.content)).toContain('OPERATION_TIMEOUT');
+      expect(JSON.stringify(timedOutLocator.content)).toContain('css=#missing-select');
+      const sessionsAfterError = await client.callTool({
+        name: 'browser_session_list',
+        arguments: {},
+      });
+      expect(sessionsAfterError.isError).not.toBe(true);
+      expect(JSON.stringify(sessionsAfterError.content)).toContain(buyerTarget.sessionId);
+      expect(JSON.stringify(sessionsAfterError.content)).toContain(sellerTarget.sessionId);
       const crossSession = await client.callTool({
         name: 'browser_get_url',
         arguments: { sessionId: buyerTarget.sessionId, pageId: sellerTarget.pageId },

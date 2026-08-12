@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { PlaywrightBrowserEngine } from '../../src/adapters/playwright/playwright-browser-engine.js';
+import { BrowserMeshError, type BrowserMeshErrorCode } from '../../src/domain/errors.js';
 import type { BrowserMeshRuntime, OperationTarget } from '../../src/runtime/browsermesh-runtime.js';
 import { createRealRuntimeHarness, type RealRuntimeHarness } from '../support/real-runtime.js';
 import { startTestWebServer, type TestWebServer } from '../support/test-web-server.js';
@@ -128,6 +129,68 @@ describe('real Chromium runtime', () => {
     });
   });
 
+  it('returns diagnostic locator errors without losing sessions or queued work', async () => {
+    const first = await createTarget();
+    const second = await createTarget();
+    await Promise.all([
+      runtime.navigate(first, web.baseUrl),
+      runtime.navigate(second, web.baseUrl),
+    ]);
+    const missing = { strategy: 'css', value: '#missing-select' } as const;
+
+    const pressError = await captureBrowserMeshError(
+      runtime.press({ ...first, timeoutMs: 100 }, missing, 'Enter'),
+      'OPERATION_TIMEOUT',
+    );
+    expect(pressError.message).toContain('css=#missing-select');
+    expect(pressError.details).toMatchObject({
+      operation: 'press',
+      locator: missing,
+      timeoutMs: 100,
+    });
+    expect(pressError.details?.cause).toContain('#missing-select');
+
+    const selectError = await captureBrowserMeshError(
+      runtime.selectOption(
+        { ...first, timeoutMs: 100 },
+        { strategy: 'testId', value: 'status' },
+        'two',
+      ),
+      'OPERATION_TIMEOUT',
+    );
+    expect(selectError.message).toContain('testId=status');
+    expect(selectError.details).toMatchObject({ operation: 'select option', timeoutMs: 100 });
+
+    const invalidCssError = await captureBrowserMeshError(
+      runtime.press({ ...first, timeoutMs: 100 }, { strategy: 'css', value: '[invalid' }, 'Enter'),
+      'ELEMENT_NOT_FOUND',
+    );
+    expect(invalidCssError.message).toContain('css=[invalid');
+
+    await expect(runtime.getTitle(first)).resolves.toMatchObject({ value: 'BrowserMesh Test' });
+    await expect(runtime.getTitle(second)).resolves.toMatchObject({ value: 'BrowserMesh Test' });
+    await expect(runtime.listSessions()).resolves.toMatchObject({
+      value: [
+        expect.objectContaining({ status: 'ready' }),
+        expect.objectContaining({ status: 'ready' }),
+      ],
+    });
+  });
+
+  it('includes the underlying Chromium failure in navigation errors', async () => {
+    const target = await createTarget();
+    const url = 'http://127.0.0.1:1/';
+
+    const error = await captureBrowserMeshError(
+      runtime.navigate({ ...target, timeoutMs: 1_000 }, url),
+      'NAVIGATION_FAILED',
+    );
+    expect(error.message).toContain('ERR_');
+    expect(error.details).toMatchObject({ url, timeoutMs: 1_000 });
+    expect(error.details?.cause).toContain('ERR_');
+    await expect(runtime.getTitle(target)).resolves.toMatchObject({ value: '' });
+  });
+
   it('serializes state capture behind previously accepted navigation', async () => {
     const original = await createTarget();
     const navigation = runtime.navigate(original, `${web.baseUrl}/?value=queued-state`);
@@ -196,6 +259,21 @@ function privateMapSize(engine: PlaywrightBrowserEngine, property: string): numb
   const value: unknown = Reflect.get(engine, property);
   if (!(value instanceof Map)) throw new Error(`${property} registry is unavailable`);
   return value.size;
+}
+
+async function captureBrowserMeshError(
+  operation: Promise<unknown>,
+  expectedCode: BrowserMeshErrorCode,
+): Promise<BrowserMeshError> {
+  try {
+    await operation;
+  } catch (error) {
+    expect(error).toBeInstanceOf(BrowserMeshError);
+    if (!(error instanceof BrowserMeshError)) throw error;
+    expect(error.code).toBe(expectedCode);
+    return error;
+  }
+  throw new Error(`Expected ${expectedCode}`);
 }
 
 describe('real Chromium creation/shutdown synchronization', () => {

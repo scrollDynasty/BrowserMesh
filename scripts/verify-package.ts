@@ -119,7 +119,8 @@ async function main(): Promise<void> {
       cwd: consumerDirectory,
       env: {
         ...getDefaultEnvironment(),
-        BROWSERMESH_HEADLESS: 'true',
+        ...(process.env.DISPLAY === undefined ? {} : { DISPLAY: process.env.DISPLAY }),
+        ...(process.env.XAUTHORITY === undefined ? {} : { XAUTHORITY: process.env.XAUTHORITY }),
         BROWSERMESH_LOG_LEVEL: 'silent',
         BROWSERMESH_DATA_DIR: join(consumerDirectory, '.browsermesh'),
       },

@@ -98,10 +98,7 @@ Example:
   "mcpServers": {
     "browsermesh": {
       "command": "npx",
-      "args": ["-y", "multi-agent-browser-mcp"],
-      "env": {
-        "BROWSERMESH_HEADLESS": "true"
-      }
+      "args": ["-y", "multi-agent-browser-mcp"]
     }
   }
 }
@@ -132,10 +129,7 @@ Then configure an MCP client to launch the locally built server:
   "mcpServers": {
     "browsermesh": {
       "command": "node",
-      "args": ["/absolute/path/to/browsermesh/dist/cli.js"],
-      "env": {
-        "BROWSERMESH_HEADLESS": "true"
-      }
+      "args": ["/absolute/path/to/browsermesh/dist/cli.js"]
     }
   }
 }
@@ -412,8 +406,7 @@ BrowserMesh never attempts to serialize a live `BrowserContext`, open pages, pen
 
 | Environment variable       |        Default | Meaning                                       |
 | -------------------------- | -------------: | --------------------------------------------- |
-| `BROWSERMESH_HEADLESS`     |         `true` | Run Chromium headless                         |
-| `BROWSERMESH_TIMEOUT_MS`   |        `30000` | Default bounded operation timeout             |
+| `BROWSERMESH_TIMEOUT_MS`   |        `10000` | Default bounded operation timeout             |
 | `BROWSERMESH_DATA_DIR`     | `.browsermesh` | Private local data directory                  |
 | `BROWSERMESH_LOG_LEVEL`    |         `info` | `debug`, `info`, `warn`, `error`, or `silent` |
 | `BROWSERMESH_MAX_SESSIONS` |           `50` | Active session limit                          |
@@ -421,6 +414,10 @@ BrowserMesh never attempts to serialize a live `BrowserContext`, open pages, pen
 | `BROWSERMESH_PERSISTENCE`  |         `true` | Enable saved browser state                    |
 
 Configuration is read and validated centrally.
+
+The BrowserMesh CLI always launches Chromium in headed mode so the user can observe browser
+automation. Set a larger per-tool `timeoutMs` only for operations that are expected to take longer
+than the safe default.
 
 Direct scattered `process.env` access throughout the codebase is not allowed.
 
