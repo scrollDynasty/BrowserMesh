@@ -52,11 +52,6 @@
     "typescript-eslint": "^8.56.1",
     "vitest": "^4.1.0"
   },
-  "main": "eslint.config.js",
-  "directories": {
-    "doc": "docs",
-    "test": "tests"
-  },
   "repository": {
     "type": "git",
     "url": "git+https://github.com/scrollDynasty/multi-agent-browser-mcp.git"

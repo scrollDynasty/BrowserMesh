@@ -3,7 +3,7 @@ import type {
   BrowserEnginePort,
   BrowserPageHandle,
 } from '../../src/application/ports/browser-engine.js';
-import type { EventSinkPort } from '../../src/application/ports/events.js';
+import type { EventSinkPort, RuntimeEvent } from '../../src/application/ports/events.js';
 import type {
   SavedStateView,
   StateRepositoryPort,
@@ -36,6 +36,10 @@ export class FakeEngine implements BrowserEnginePort {
   navigationGate: Promise<void> | undefined;
   onNavigationStart: (() => void) | undefined;
   private readonly disconnectedListeners = new Set<() => void>();
+
+  get disconnectListenerCount(): number {
+    return this.disconnectedListeners.size;
+  }
 
   onDisconnected(listener: () => void): () => void {
     this.disconnectedListeners.add(listener);
@@ -188,10 +192,12 @@ export function testRuntime(
 ): {
   runtime: BrowserMeshRuntime;
   engine: FakeEngine;
+  events: readonly RuntimeEvent[];
 } {
   let id = 0;
   const ids: IdGenerator = { next: (prefix) => `${prefix}_${++id}` };
-  const events: EventSinkPort = { emit: () => undefined };
+  const emittedEvents: RuntimeEvent[] = [];
+  const events: EventSinkPort = { emit: (event) => emittedEvents.push(event) };
   return {
     runtime: new BrowserMeshRuntime({
       engine,
@@ -206,5 +212,6 @@ export function testRuntime(
       ...overrides,
     }),
     engine,
+    events: emittedEvents,
   };
 }

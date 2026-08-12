@@ -75,7 +75,7 @@ export function createMcpServer(runtime: BrowserMeshRuntime): McpServer {
       inputSchema: {
         name: z.string().min(1).max(128).optional(),
         metadata: z.record(z.string(), z.string()).optional(),
-        stateId: z.string().min(1).optional(),
+        stateId: z.string().min(1).max(128).optional(),
       },
     },
     (input) => result(() => runtime.createSession(input)),
@@ -109,7 +109,11 @@ export function createMcpServer(runtime: BrowserMeshRuntime): McpServer {
 
   server.registerTool(
     'browser_page_create',
-    { description: 'Create a page in a session', inputSchema: sessionSchema },
+    {
+      description:
+        "Create an additional page inside one explicitly addressed session. Use it for another tab that must share that session's cookies and storage; use a separate session instead when identity or authentication must be isolated.",
+      inputSchema: sessionSchema,
+    },
     ({ sessionId }) => result(() => runtime.createPage(sessionId)),
   );
   server.registerTool(
@@ -123,52 +127,82 @@ export function createMcpServer(runtime: BrowserMeshRuntime): McpServer {
   );
   server.registerTool(
     'browser_page_close',
-    { description: 'Close a page', inputSchema: { ...sessionSchema, pageId: z.string().min(1) } },
+    {
+      description:
+        'Close one explicitly addressed page in its owning session. Supply both IDs because BrowserMesh has no global current session or page.',
+      inputSchema: { ...sessionSchema, pageId: z.string().min(1) },
+    },
     ({ sessionId, pageId }) => result(() => runtime.closePage(sessionId, pageId)),
   );
 
   server.registerTool(
     'browser_navigate',
     {
-      description: 'Navigate an explicitly addressed page',
+      description:
+        'Navigate one explicitly addressed page to an absolute HTTP(S) URL. Keep using the sessionId/pageId pair for the intended account or role; navigation never changes a global active page.',
       inputSchema: { ...targetSchema, url: z.url() },
     },
     (input) => result(() => runtime.navigate(target(input), input.url)),
   );
   server.registerTool(
     'browser_back',
-    { description: 'Navigate back', inputSchema: targetSchema },
+    {
+      description:
+        'Navigate backward in the history of one explicitly addressed page without affecting pages or sessions used by other roles.',
+      inputSchema: targetSchema,
+    },
     (input) => result(() => runtime.back(target(input))),
   );
   server.registerTool(
     'browser_forward',
-    { description: 'Navigate forward', inputSchema: targetSchema },
+    {
+      description:
+        'Navigate forward in the history of one explicitly addressed page without affecting other isolated sessions.',
+      inputSchema: targetSchema,
+    },
     (input) => result(() => runtime.forward(target(input))),
   );
   server.registerTool(
     'browser_reload',
-    { description: 'Reload a page', inputSchema: targetSchema },
+    {
+      description:
+        'Reload one explicitly addressed page in its existing isolated session and authentication state.',
+      inputSchema: targetSchema,
+    },
     (input) => result(() => runtime.reload(target(input))),
   );
   server.registerTool(
     'browser_get_url',
-    { description: 'Get the current page URL', inputSchema: targetSchema },
+    {
+      description:
+        'Read the current URL of one explicitly addressed page. Use the IDs returned for the intended session; there is no global current page.',
+      inputSchema: targetSchema,
+    },
     (input) => result(() => runtime.getUrl(target(input))),
   );
   server.registerTool(
     'browser_get_title',
-    { description: 'Get the page title', inputSchema: targetSchema },
+    {
+      description:
+        'Read the title of one explicitly addressed page in its owning isolated session.',
+      inputSchema: targetSchema,
+    },
     (input) => result(() => runtime.getTitle(target(input))),
   );
   server.registerTool(
     'browser_snapshot',
-    { description: 'Get an accessibility-oriented page snapshot', inputSchema: targetSchema },
+    {
+      description:
+        'Inspect an accessibility-oriented snapshot of one explicitly addressed page. Use it to understand page structure before semantic interaction while preserving session isolation.',
+      inputSchema: targetSchema,
+    },
     (input) => result(() => runtime.snapshot(target(input))),
   );
   server.registerTool(
     'browser_visible_text',
     {
-      description: 'Read visible text from a locator',
+      description:
+        'Read visible text from a semantic or CSS locator on one explicitly addressed page. The lookup is confined to that page and session.',
       inputSchema: { ...targetSchema, locator: locatorSchema },
     },
     (input) => result(() => runtime.visibleText(target(input), input.locator as Locator)),
@@ -176,7 +210,8 @@ export function createMcpServer(runtime: BrowserMeshRuntime): McpServer {
   server.registerTool(
     'browser_click',
     {
-      description: 'Click a semantic or CSS locator',
+      description:
+        'Click a semantic or CSS locator on one explicitly addressed page. Prefer semantic locators and keep the IDs associated with the intended user/account session.',
       inputSchema: { ...targetSchema, locator: locatorSchema },
     },
     (input) => result(() => runtime.click(target(input), input.locator as Locator)),
@@ -184,7 +219,8 @@ export function createMcpServer(runtime: BrowserMeshRuntime): McpServer {
   server.registerTool(
     'browser_fill',
     {
-      description: 'Fill a form field',
+      description:
+        'Fill a form field located on one explicitly addressed page. The value is entered only in that session; use separate sessions for different identities.',
       inputSchema: { ...targetSchema, locator: locatorSchema, value: z.string() },
     },
     (input) => result(() => runtime.fill(target(input), input.locator as Locator, input.value)),
@@ -192,7 +228,8 @@ export function createMcpServer(runtime: BrowserMeshRuntime): McpServer {
   server.registerTool(
     'browser_press',
     {
-      description: 'Press a key on a locator',
+      description:
+        'Press a key on a locator within one explicitly addressed page, preserving deterministic ordering with other operations in that session.',
       inputSchema: { ...targetSchema, locator: locatorSchema, key: z.string().min(1).max(64) },
     },
     (input) => result(() => runtime.press(target(input), input.locator as Locator, input.key)),
@@ -200,7 +237,8 @@ export function createMcpServer(runtime: BrowserMeshRuntime): McpServer {
   server.registerTool(
     'browser_select_option',
     {
-      description: 'Select an option',
+      description:
+        'Select an option on one explicitly addressed page using a semantic or CSS locator. The interaction is isolated to the supplied session.',
       inputSchema: { ...targetSchema, locator: locatorSchema, value: z.string() },
     },
     (input) =>
@@ -208,7 +246,11 @@ export function createMcpServer(runtime: BrowserMeshRuntime): McpServer {
   );
   server.registerTool(
     'browser_screenshot',
-    { description: 'Capture a PNG screenshot as MCP image content', inputSchema: targetSchema },
+    {
+      description:
+        'Capture an in-memory PNG screenshot of one explicitly addressed page. BrowserMesh returns image content and does not write to a caller-controlled path or inspect another session.',
+      inputSchema: targetSchema,
+    },
     async (input) => {
       try {
         const capture = await runtime.screenshot(target(input));
@@ -236,18 +278,25 @@ export function createMcpServer(runtime: BrowserMeshRuntime): McpServer {
   server.registerTool(
     'browser_state_save',
     {
-      description: 'Save session authentication/storage state',
+      description:
+        'Save cookies and supported storage from one explicitly addressed session under a safe logical stateId. Use this only when a later new isolated session should restore that authentication state.',
       inputSchema: { ...sessionSchema, stateId: z.string().min(1).max(128) },
     },
     ({ sessionId, stateId }) => result(() => runtime.saveSessionState(sessionId, stateId)),
   );
-  server.registerTool('browser_state_list', { description: 'List saved states' }, () =>
-    result(() => runtime.listSavedStates()),
+  server.registerTool(
+    'browser_state_list',
+    {
+      description:
+        'List logical saved-state IDs available for optional restoration when creating a new isolated session; state contents and secrets are not returned.',
+    },
+    () => result(() => runtime.listSavedStates()),
   );
   server.registerTool(
     'browser_state_remove',
     {
-      description: 'Delete a saved browser state by its logical stateId',
+      description:
+        'Delete persisted browser state by its safe logical stateId when it should no longer be restorable. This does not close or alter currently live sessions.',
       inputSchema: { stateId: z.string().min(1).max(128) },
     },
     ({ stateId }) => result(() => runtime.removeSavedState(stateId)),

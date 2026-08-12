@@ -145,6 +145,7 @@ For development:
 
 ```sh
 npm run verify
+npm run verify:package
 ```
 
 ## Session model
@@ -185,6 +186,8 @@ A newly created session contains one deterministic initial page.
 `browser_session_create` returns the initial `pageId` immediately so an AI client does not need an additional `browser_page_list` call before its first browser action.
 
 The page also appears in `browser_page_list` and is marked `isDefault`.
+
+Session views consistently expose `sessionId`; page views consistently expose `pageId` and their owning `sessionId`.
 
 The `isDefault` marker is informational only. Browser operations still use explicit `pageId` addressing.
 

@@ -2,45 +2,58 @@
 
 Updated: 2026-08-12
 
-## Complete
+The current `docs/SPEC.md` defines implementation phases 0 through 9. Its testing requirements and acceptance criteria are the final completion gate (the previously referenced “Phase 10” work).
 
-- Phase 0 foundation: strict TypeScript, lint, formatting, tests, config, logging, package scripts.
-- Playwright engine port/adapter with isolated Chromium contexts.
-- Session/page registries, explicit IDs, limits, cleanup, and cross-session rejection.
-- Navigation, inspection, semantic interaction, snapshots, and in-memory screenshots.
-- Independent per-session queues and cross-session parallelism.
-- MCP stdio adapter with validated schemas and real stdio-process discovery test.
-- Filesystem storage-state persistence with safe logical names and atomic replacement.
-- External-client multi-role e2e scenario and bounded 50-session fake-engine stress test.
-- Internal Agent/ownership/mailbox/message scope has been removed.
-- Session creation returns the initial `sessionId` and `pageId` directly.
-- Public persistence contracts consistently use logical `stateId` values.
-- Session, page, browser, and persistence operations return correlation `operationId` values.
-- Stable closing, disconnect, and persistence-disabled errors are implemented.
-- Close drains accepted work, queues recover after failures/timeouts, and closed-session tombstones are bounded.
-- Unexpected Chromium disconnect fails existing sessions without silently reconstructing them; new sessions may start a fresh browser.
-- CI verifies supported Node.js majors, Chromium-backed tests, and builds.
-- Packaged-tarball verification covers public import, installed bin, MCP discovery, and a real browser/session smoke flow.
+## Phase evidence
 
-## Partial / required next work
+| Phase                        | Status   | Implementation and verification evidence                                                                                                                                            |
+| ---------------------------- | -------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 0 — Foundation               | Complete | Strict TypeScript, ESLint, Prettier, Vitest, centralized validated config, structured stderr logging, documentation, package scripts, architecture boundary tests.                  |
+| 1 — Browser engine           | Complete | Engine port and Playwright Chromium adapter implement start/stop, typed error normalization, context/page cleanup, and unexpected-disconnect notification.                          |
+| 2 — Multi-session core       | Complete | Explicit session registry/lifecycle, BrowserContext-per-session isolation, deterministic initial page, limits, bounded terminal records, idempotent close, cleanup.                 |
+| 3 — Pages                    | Complete | Explicit `pageId`, create/list/close, default marker, per-session limit, cross-session rejection, real-Chromium lifecycle coverage.                                                 |
+| 4 — Browser operations       | Complete | HTTP(S) navigation/history/reload, URL/title, all specified semantic locator strategies, interactions, snapshot, visible text, in-memory PNG screenshot, typed errors.              |
+| 5 — Concurrency              | Complete | Independent serial queue per session, cross-session parallelism, required page-address result types, operation IDs, bounded timeouts, failure recovery, close/shutdown draining.    |
+| 6 — MCP                      | Complete | Stdio server, schemas, safe success/error mapping, complete discovery descriptions, exact v0.1 tool-set contract test, real subprocess routing/validation/clean-exit test.          |
+| 7 — Persistence              | Complete | Logical `stateId`, safe names, save/list/remove/restore, private application path, atomic replacement, same-state write serialization, failure recovery, no state contents in logs. |
+| 8 — External-client workflow | Complete | A real MCP `Client` coordinates isolated buyer and seller sessions in the deterministic local workflow e2e; BrowserMesh creates no internal agents.                                 |
+| 9 — Release readiness        | Complete | Node 22/24 CI, clean install, full suite/build, npm tarball install, manifest/public import/bin validation, packaged MCP discovery, real packaged Chromium smoke.                   |
 
-No required v0.1 architecture-correction work remains in this slice.
+## Acceptance evidence
 
-## Baseline
+- Real-Chromium integration covers isolated cookies, localStorage, pages, URLs, DOM reads, screenshots, page lifecycle, history navigation, interactions, persistence restoration, same-session ordering, cross-session parallelism, timeout recovery, queued close/shutdown, initialization shutdown, disconnect, and handle cleanup.
+- Unit tests cover lifecycle/limits, terminal-record bounds, operation correlation, queue recovery, navigation policy, persistence naming/atomic concurrency, configuration, structured logging, and architecture dependency rules.
+- MCP tests cover the exact public tool set, descriptions, schema rejection, safe structured errors, successful calls, explicit routing, subprocess stdio negotiation, and exit.
+- The bounded 50-session stress test verifies routing, concurrent independence, and cleanup.
+- `scripts/verify-package.ts` tests the generated npm tarball rather than source-tree execution.
 
-- `npm run typecheck`: passed after the architecture correction.
-- `npm run lint`: passed after the architecture correction.
-- `npm run verify:package`: passed, including real packaged MCP/Chromium smoke verification.
-- `npm ci`: passed with zero reported vulnerabilities.
-- `npm run verify`: passed after the clean install (9 files, 26 tests).
-- `npm run verify:package`: passed again after the clean install.
-- Final adversarial source/diff audit: passed; no internal Agent/message runtime API remains.
+## Responsibility boundary
 
-## Known blockers
+BrowserMesh v0.1 contains no internal AI Agent entities, registries, ownership abstraction, mailboxes, messaging, handoff protocol, or LLM orchestration. Session names and string metadata are neutral workflow labels only.
 
-None.
+The runtime boundary remains:
+
+```text
+User → external AI client → MCP → BrowserMesh → isolated browser sessions
+```
+
+## Verification
+
+- `npm ci`: passed; 220 packages installed, 0 reported vulnerabilities.
+- `npm run verify`: passed after the clean install.
+  - TypeScript typecheck: passed.
+  - ESLint: passed.
+  - Prettier check: passed.
+  - Vitest: 11 test files and 41 tests passed.
+  - Production build: passed.
+- `npm run verify:package`: passed after the clean install, including installed tarball MCP/Chromium smoke.
+- `git diff --check`: passed.
+
+Known blockers: none.
 
 ## Intentional v0.1 non-scope
 
-- Internal AI Agent entities, ownership, registries, mailboxes, messaging, or LLM orchestration.
-- Remote HTTP, cloud infrastructure, distributed workers, database/broker, dashboard, downloads, arbitrary shell/filesystem access, and Firefox/WebKit parity.
+- Remote HTTP and hosted cloud infrastructure.
+- Distributed workers, databases, brokers, Docker/Kubernetes runtime requirements.
+- Dashboard, downloads, arbitrary shell/filesystem access, Firefox/WebKit parity.
+- Live-session crash reconstruction after Chromium disconnect.

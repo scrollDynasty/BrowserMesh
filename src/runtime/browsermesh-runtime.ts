@@ -5,10 +5,11 @@ import type {
 } from '../application/ports/browser-engine.js';
 import type { EventSinkPort } from '../application/ports/events.js';
 import type { SavedStateView, StateRepositoryPort } from '../application/ports/state-repository.js';
-import { BrowserMeshError } from '../domain/errors.js';
+import { asBrowserMeshError, BrowserMeshError } from '../domain/errors.js';
 import type {
   Locator,
   OperationResult,
+  PageAddressedOperationResult,
   PageView,
   SessionStatus,
   SessionView,
@@ -78,42 +79,43 @@ export class BrowserMeshRuntime {
     this.started = true;
   }
 
-  async createSession(
+  createSession(
     input: {
       readonly name?: string | undefined;
       readonly metadata?: Readonly<Record<string, string>> | undefined;
       readonly stateId?: string | undefined;
     } = {},
-  ): Promise<OperationResult<SessionView>> {
-    this.ensureAccepting();
-    if (this.activeSessionCount() >= this.options.maxSessions) {
-      throw new BrowserMeshError(
-        'LIMIT_EXCEEDED',
-        `Maximum of ${String(this.options.maxSessions)} active sessions reached`,
-      );
-    }
-    const id = this.options.ids.next('session');
-    const timestamp = this.timestamp();
-    const entry: SessionEntry = {
-      id,
-      ...(input.name === undefined ? {} : { name: input.name }),
-      status: 'creating',
-      createdAt: timestamp,
-      lastActivityAt: timestamp,
-      metadata: { ...(input.metadata ?? {}) },
-      restoredFromStateId: input.stateId,
-      context: undefined,
-      pages: new Map(),
-      defaultPageId: undefined,
-      queue: new SerialQueue(),
-      accepting: true,
-      disconnected: false,
-    };
-    this.sessions.set(id, entry);
+  ): Promise<PageAddressedOperationResult<SessionView>> {
+    let createdPageId: string | undefined;
     return this.runOperation(
-      { sessionId: id },
-      () =>
-        entry.queue.run(async () => {
+      {},
+      () => {
+        this.ensureAccepting();
+        if (this.activeSessionCount() >= this.options.maxSessions) {
+          throw new BrowserMeshError(
+            'LIMIT_EXCEEDED',
+            `Maximum of ${String(this.options.maxSessions)} active sessions reached`,
+          );
+        }
+        const id = this.options.ids.next('session');
+        const timestamp = this.timestamp();
+        const entry: SessionEntry = {
+          id,
+          ...(input.name === undefined ? {} : { name: input.name }),
+          status: 'creating',
+          createdAt: timestamp,
+          lastActivityAt: timestamp,
+          metadata: { ...(input.metadata ?? {}) },
+          restoredFromStateId: input.stateId,
+          context: undefined,
+          pages: new Map(),
+          defaultPageId: undefined,
+          queue: new SerialQueue(),
+          accepting: true,
+          disconnected: false,
+        };
+        this.sessions.set(id, entry);
+        return entry.queue.run(async () => {
           try {
             const storageState =
               input.stateId === undefined ? undefined : await this.loadState(input.stateId);
@@ -121,31 +123,47 @@ export class BrowserMeshRuntime {
               timeoutMs: this.options.defaultTimeoutMs,
               ...(storageState === undefined ? {} : { storageState }),
             });
+            if (entry.disconnected) {
+              throw new BrowserMeshError(
+                'BROWSER_DISCONNECTED',
+                `Session '${id}' failed because Chromium disconnected during creation`,
+              );
+            }
             const initialPage = await this.options.engine.createPage(entry.context);
             const page = this.addPage(entry, initialPage);
             entry.defaultPageId = page.id;
+            createdPageId = page.id;
             entry.status = 'ready';
             this.emit('session.created', { sessionId: id, pageId: page.id });
             return this.sessionView(entry);
           } catch (error) {
             entry.status = 'failed';
             entry.accepting = false;
+            let failure = error;
             if (entry.context !== undefined) {
               try {
                 await this.options.engine.closeContext(entry.context);
               } catch (cleanupError) {
-                throw new BrowserMeshError(
+                failure = new BrowserMeshError(
                   'BROWSER_ERROR',
                   'Session creation and context cleanup both failed',
                   { cause: new AggregateError([error, cleanupError]) },
                 );
               }
             }
-            throw error;
+            entry.pages.clear();
+            entry.defaultPageId = undefined;
+            entry.context = undefined;
+            this.rememberTerminalSession(entry);
+            throw failure;
           }
-        }),
-      () => (entry.defaultPageId === undefined ? {} : { pageId: entry.defaultPageId }),
-    );
+        });
+      },
+      (session) => ({
+        sessionId: session.sessionId,
+        ...(createdPageId === undefined ? {} : { pageId: createdPageId }),
+      }),
+    ).then((result) => this.requirePageAddress(result));
   }
 
   listSessions(): Promise<OperationResult<readonly SessionView[]>> {
@@ -171,7 +189,7 @@ export class BrowserMeshRuntime {
     });
   }
 
-  createPage(sessionId: string): Promise<OperationResult<PageView>> {
+  createPage(sessionId: string): Promise<PageAddressedOperationResult<PageView>> {
     return this.runOperation(
       { sessionId },
       () =>
@@ -187,8 +205,8 @@ export class BrowserMeshRuntime {
           this.emit('page.created', { sessionId, pageId: page.id });
           return this.pageView(entry, page);
         }),
-      (page) => ({ pageId: page.id }),
-    );
+      (page) => ({ pageId: page.pageId }),
+    ).then((result) => this.requirePageAddress(result));
   }
 
   listPages(sessionId: string): Promise<OperationResult<readonly PageView[]>> {
@@ -212,80 +230,94 @@ export class BrowserMeshRuntime {
     );
   }
 
-  async navigate(target: OperationTarget, url: string): Promise<OperationResult<string>> {
-    let parsed: URL;
-    try {
-      parsed = new URL(url);
-    } catch (error) {
-      throw new BrowserMeshError('INVALID_ARGUMENT', 'URL must be absolute', { cause: error });
-    }
-    if (!['http:', 'https:'].includes(parsed.protocol)) {
-      throw new BrowserMeshError('INVALID_ARGUMENT', 'Only http and https URLs are allowed');
-    }
+  async navigate(
+    target: OperationTarget,
+    url: string,
+  ): Promise<PageAddressedOperationResult<string>> {
     return this.pageOperation(target, async (page, timeoutMs) => {
+      let parsed: URL;
+      try {
+        parsed = new URL(url);
+      } catch (error) {
+        throw new BrowserMeshError('INVALID_ARGUMENT', 'URL must be absolute', { cause: error });
+      }
+      if (!['http:', 'https:'].includes(parsed.protocol)) {
+        throw new BrowserMeshError('INVALID_ARGUMENT', 'Only http and https URLs are allowed');
+      }
       await this.options.engine.navigate(page, parsed.href, timeoutMs);
       return this.options.engine.url(page);
     });
   }
 
-  back(target: OperationTarget): Promise<OperationResult<string>> {
+  back(target: OperationTarget): Promise<PageAddressedOperationResult<string>> {
     return this.pageOperation(target, async (page, timeoutMs) => {
       await this.options.engine.back(page, timeoutMs);
       return this.options.engine.url(page);
     });
   }
 
-  forward(target: OperationTarget): Promise<OperationResult<string>> {
+  forward(target: OperationTarget): Promise<PageAddressedOperationResult<string>> {
     return this.pageOperation(target, async (page, timeoutMs) => {
       await this.options.engine.forward(page, timeoutMs);
       return this.options.engine.url(page);
     });
   }
 
-  reload(target: OperationTarget): Promise<OperationResult<string>> {
+  reload(target: OperationTarget): Promise<PageAddressedOperationResult<string>> {
     return this.pageOperation(target, async (page, timeoutMs) => {
       await this.options.engine.reload(page, timeoutMs);
       return this.options.engine.url(page);
     });
   }
 
-  getUrl(target: OperationTarget): Promise<OperationResult<string>> {
+  getUrl(target: OperationTarget): Promise<PageAddressedOperationResult<string>> {
     return this.pageOperation(target, (page) => Promise.resolve(this.options.engine.url(page)));
   }
 
-  getTitle(target: OperationTarget): Promise<OperationResult<string>> {
+  getTitle(target: OperationTarget): Promise<PageAddressedOperationResult<string>> {
     return this.pageOperation(target, (page, timeoutMs) =>
       this.options.engine.title(page, timeoutMs),
     );
   }
 
-  snapshot(target: OperationTarget): Promise<OperationResult<string>> {
+  snapshot(target: OperationTarget): Promise<PageAddressedOperationResult<string>> {
     return this.pageOperation(target, (page, timeoutMs) =>
       this.options.engine.snapshot(page, timeoutMs),
     );
   }
 
-  visibleText(target: OperationTarget, locator: Locator): Promise<OperationResult<string>> {
+  visibleText(
+    target: OperationTarget,
+    locator: Locator,
+  ): Promise<PageAddressedOperationResult<string>> {
     return this.pageOperation(target, (page, timeoutMs) =>
       this.options.engine.visibleText(page, locator, timeoutMs),
     );
   }
 
-  click(target: OperationTarget, locator: Locator): Promise<OperationResult<null>> {
+  click(target: OperationTarget, locator: Locator): Promise<PageAddressedOperationResult<null>> {
     return this.pageOperation(target, async (page, timeoutMs) => {
       await this.options.engine.click(page, locator, timeoutMs);
       return null;
     });
   }
 
-  fill(target: OperationTarget, locator: Locator, value: string): Promise<OperationResult<null>> {
+  fill(
+    target: OperationTarget,
+    locator: Locator,
+    value: string,
+  ): Promise<PageAddressedOperationResult<null>> {
     return this.pageOperation(target, async (page, timeoutMs) => {
       await this.options.engine.fill(page, locator, value, timeoutMs);
       return null;
     });
   }
 
-  press(target: OperationTarget, locator: Locator, key: string): Promise<OperationResult<null>> {
+  press(
+    target: OperationTarget,
+    locator: Locator,
+    key: string,
+  ): Promise<PageAddressedOperationResult<null>> {
     return this.pageOperation(target, async (page, timeoutMs) => {
       await this.options.engine.press(page, locator, key, timeoutMs);
       return null;
@@ -296,14 +328,14 @@ export class BrowserMeshRuntime {
     target: OperationTarget,
     locator: Locator,
     value: string,
-  ): Promise<OperationResult<null>> {
+  ): Promise<PageAddressedOperationResult<null>> {
     return this.pageOperation(target, async (page, timeoutMs) => {
       await this.options.engine.selectOption(page, locator, value, timeoutMs);
       return null;
     });
   }
 
-  screenshot(target: OperationTarget): Promise<OperationResult<string>> {
+  screenshot(target: OperationTarget): Promise<PageAddressedOperationResult<string>> {
     return this.pageOperation(target, async (page, timeoutMs) =>
       Buffer.from(await this.options.engine.screenshot(page, timeoutMs)).toString('base64'),
     );
@@ -383,13 +415,7 @@ export class BrowserMeshRuntime {
       pending = Promise.resolve(action());
     } catch (error) {
       this.emit('operation.failed', { operationId, ...identifiers });
-      return Promise.reject(
-        error instanceof Error
-          ? error
-          : new BrowserMeshError('INTERNAL_ERROR', 'Operation failed with a non-error value', {
-              cause: error,
-            }),
-      );
+      return Promise.reject(asBrowserMeshError(error));
     }
     return pending.then(
       (value) => {
@@ -399,7 +425,7 @@ export class BrowserMeshRuntime {
       },
       (error: unknown) => {
         this.emit('operation.failed', { operationId, ...identifiers });
-        throw error;
+        throw asBrowserMeshError(error);
       },
     );
   }
@@ -407,21 +433,21 @@ export class BrowserMeshRuntime {
   private async pageOperation<T>(
     target: OperationTarget,
     action: (page: BrowserPageHandle, timeoutMs: number) => Promise<T>,
-  ): Promise<OperationResult<T>> {
+  ): Promise<PageAddressedOperationResult<T>> {
     const operationId = this.options.ids.next('operation');
     const timeoutMs = target.timeoutMs ?? this.options.defaultTimeoutMs;
-    if (!Number.isInteger(timeoutMs) || timeoutMs <= 0 || timeoutMs > 300_000) {
-      throw new BrowserMeshError(
-        'INVALID_ARGUMENT',
-        'timeoutMs must be an integer between 1 and 300000',
-      );
-    }
     this.emit('operation.started', {
       operationId,
       sessionId: target.sessionId,
       pageId: target.pageId,
     });
     try {
+      if (!Number.isInteger(timeoutMs) || timeoutMs <= 0 || timeoutMs > 300_000) {
+        throw new BrowserMeshError(
+          'INVALID_ARGUMENT',
+          'timeoutMs must be an integer between 1 and 300000',
+        );
+      }
       const value = await this.withSession(target.sessionId, async (entry) => {
         const page = this.getPageEntry(entry, target.pageId);
         return action(page.handle, timeoutMs);
@@ -438,8 +464,15 @@ export class BrowserMeshRuntime {
         sessionId: target.sessionId,
         pageId: target.pageId,
       });
-      throw error;
+      throw asBrowserMeshError(error);
     }
+  }
+
+  private requirePageAddress<T>(result: OperationResult<T>): PageAddressedOperationResult<T> {
+    if (result.sessionId === undefined || result.pageId === undefined) {
+      throw new BrowserMeshError('INTERNAL_ERROR', 'Operation result is missing its page address');
+    }
+    return { ...result, sessionId: result.sessionId, pageId: result.pageId };
   }
 
   private async withSession<T>(
@@ -509,7 +542,7 @@ export class BrowserMeshRuntime {
 
   private sessionView(entry: SessionEntry): SessionView {
     return {
-      id: entry.id,
+      sessionId: entry.id,
       ...(entry.name === undefined ? {} : { name: entry.name }),
       status: entry.status,
       createdAt: entry.createdAt,
@@ -523,7 +556,7 @@ export class BrowserMeshRuntime {
 
   private pageView(entry: SessionEntry, page: PageEntry): PageView {
     return {
-      id: page.id,
+      pageId: page.id,
       sessionId: entry.id,
       createdAt: page.createdAt,
       url: this.options.engine.url(page.handle),
@@ -568,7 +601,7 @@ export class BrowserMeshRuntime {
     entry.accepting = false;
     entry.pages.clear();
     entry.context = undefined;
-    this.rememberClosedSession(entry);
+    this.rememberTerminalSession(entry);
     return this.sessionView(entry);
   }
 
@@ -586,19 +619,23 @@ export class BrowserMeshRuntime {
       entry.status = 'closed';
       entry.lastActivityAt = this.timestamp();
       this.emit('session.closed', { sessionId: entry.id });
-      this.rememberClosedSession(entry);
+      this.rememberTerminalSession(entry);
       return this.sessionView(entry);
     });
   }
 
-  private rememberClosedSession(entry: SessionEntry): void {
+  private rememberTerminalSession(entry: SessionEntry): void {
     this.sessions.delete(entry.id);
     this.sessions.set(entry.id, entry);
+    this.pruneTerminalSessions();
+  }
+
+  private pruneTerminalSessions(): void {
     const retentionLimit = Math.max(1, this.options.maxSessions);
-    const closedIds = Array.from(this.sessions.values())
-      .filter((candidate) => candidate.status === 'closed')
+    const terminalIds = Array.from(this.sessions.values())
+      .filter((candidate) => candidate.status === 'closed' || candidate.status === 'failed')
       .map((candidate) => candidate.id);
-    for (const expiredId of closedIds.slice(0, -retentionLimit)) {
+    for (const expiredId of terminalIds.slice(0, -retentionLimit)) {
       this.sessions.delete(expiredId);
     }
   }
@@ -617,6 +654,7 @@ export class BrowserMeshRuntime {
         this.emit('session.failed', { sessionId: entry.id });
       }
     }
+    this.pruneTerminalSessions();
     this.emit('browser.disconnected', {});
   }
 

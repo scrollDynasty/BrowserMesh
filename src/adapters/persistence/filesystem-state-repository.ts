@@ -1,4 +1,5 @@
 import { mkdir, readFile, readdir, rename, rm, stat, writeFile } from 'node:fs/promises';
+import { randomUUID } from 'node:crypto';
 import { join } from 'node:path';
 import type {
   SavedStateView,
@@ -33,6 +34,7 @@ const safeName = /^[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}$/;
 
 export class FileSystemStateRepository implements StateRepositoryPort {
   private readonly statesDirectory: string;
+  private readonly stateWriteTails = new Map<string, Promise<void>>();
 
   constructor(dataDirectory: string) {
     this.statesDirectory = join(dataDirectory, 'states');
@@ -40,12 +42,18 @@ export class FileSystemStateRepository implements StateRepositoryPort {
 
   async save(stateId: string, state: BrowserStorageState): Promise<SavedStateView> {
     this.validateStateId(stateId);
-    await mkdir(this.statesDirectory, { recursive: true, mode: 0o700 });
-    const target = this.pathFor(stateId);
-    const temporary = `${target}.${String(process.pid)}.tmp`;
-    await writeFile(temporary, JSON.stringify(state), { encoding: 'utf8', mode: 0o600 });
-    await rename(temporary, target);
-    return { stateId, createdAt: (await stat(target)).mtime.toISOString() };
+    return this.enqueueStateWrite(stateId, async () => {
+      await mkdir(this.statesDirectory, { recursive: true, mode: 0o700 });
+      const target = this.pathFor(stateId);
+      const temporary = `${target}.${String(process.pid)}.${randomUUID()}.tmp`;
+      try {
+        await writeFile(temporary, JSON.stringify(state), { encoding: 'utf8', mode: 0o600 });
+        await rename(temporary, target);
+      } finally {
+        await rm(temporary, { force: true });
+      }
+      return { stateId, createdAt: (await stat(target)).mtime.toISOString() };
+    });
   }
 
   async load(stateId: string): Promise<BrowserStorageState> {
@@ -72,7 +80,10 @@ export class FileSystemStateRepository implements StateRepositoryPort {
       const entries = await readdir(this.statesDirectory, { withFileTypes: true });
       const states = await Promise.all(
         entries
-          .filter((entry) => entry.isFile() && entry.name.endsWith('.json'))
+          .filter((entry) => {
+            if (!entry.isFile() || !entry.name.endsWith('.json')) return false;
+            return safeName.test(entry.name.slice(0, -5));
+          })
           .map(async (entry) => ({
             stateId: entry.name.slice(0, -5),
             createdAt: (await stat(join(this.statesDirectory, entry.name))).mtime.toISOString(),
@@ -87,16 +98,18 @@ export class FileSystemStateRepository implements StateRepositoryPort {
 
   async remove(stateId: string): Promise<void> {
     this.validateStateId(stateId);
-    try {
-      await rm(this.pathFor(stateId));
-    } catch (error) {
-      if (this.isNotFound(error))
-        throw new BrowserMeshError(
-          'SAVED_STATE_NOT_FOUND',
-          `Saved state '${stateId}' was not found`,
-        );
-      throw error;
-    }
+    await this.enqueueStateWrite(stateId, async () => {
+      try {
+        await rm(this.pathFor(stateId));
+      } catch (error) {
+        if (this.isNotFound(error))
+          throw new BrowserMeshError(
+            'SAVED_STATE_NOT_FOUND',
+            `Saved state '${stateId}' was not found`,
+          );
+        throw error;
+      }
+    });
   }
 
   private pathFor(stateId: string): string {
@@ -113,5 +126,18 @@ export class FileSystemStateRepository implements StateRepositoryPort {
 
   private isNotFound(error: unknown): boolean {
     return error instanceof Error && 'code' in error && error.code === 'ENOENT';
+  }
+
+  private enqueueStateWrite<T>(stateId: string, action: () => Promise<T>): Promise<T> {
+    const previous = this.stateWriteTails.get(stateId) ?? Promise.resolve();
+    const result = previous.then(action, action);
+    const tail = result.then(
+      () => undefined,
+      () => undefined,
+    );
+    this.stateWriteTails.set(stateId, tail);
+    return result.finally(() => {
+      if (this.stateWriteTails.get(stateId) === tail) this.stateWriteTails.delete(stateId);
+    });
   }
 }

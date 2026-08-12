@@ -6,16 +6,13 @@ describe('BrowserMeshRuntime', () => {
     const { runtime, engine } = testRuntime();
     const createdA = await runtime.createSession({ name: 'a' });
     const createdB = await runtime.createSession({ name: 'b' });
-    if (createdA.sessionId === undefined || createdA.pageId === undefined)
-      throw new Error('missing A IDs');
-    if (createdB.sessionId === undefined) throw new Error('missing B session ID');
     expect(createdA.sessionId).not.toBe(createdB.sessionId);
     expect(createdA.pageId).toMatch(/^page_/);
     expect(createdA.operationId).toMatch(/^operation_/);
     expect(engine.contexts.size).toBe(2);
     const pages = await runtime.listPages(createdA.sessionId);
     expect(pages.value).toHaveLength(1);
-    expect(pages.value[0]?.id).toBe(createdA.pageId);
+    expect(pages.value[0]?.pageId).toBe(createdA.pageId);
     expect(pages.operationId).not.toBe(createdA.operationId);
     expect((await runtime.closeSession(createdA.sessionId)).value.status).toBe('closed');
     expect((await runtime.closeSession(createdA.sessionId)).value.status).toBe('closed');
@@ -29,8 +26,6 @@ describe('BrowserMeshRuntime', () => {
     engine.delayMs = 20;
     const a = await runtime.createSession();
     const b = await runtime.createSession();
-    if (a.sessionId === undefined || a.pageId === undefined) throw new Error('missing A IDs');
-    if (b.sessionId === undefined || b.pageId === undefined) throw new Error('missing B IDs');
     await Promise.all([
       runtime.navigate({ sessionId: a.sessionId, pageId: a.pageId }, 'https://a.example/1'),
       runtime.navigate({ sessionId: a.sessionId, pageId: a.pageId }, 'https://a.example/2'),
@@ -48,8 +43,6 @@ describe('BrowserMeshRuntime', () => {
     const { runtime } = testRuntime();
     const a = await runtime.createSession();
     const b = await runtime.createSession();
-    if (a.sessionId === undefined || a.pageId === undefined) throw new Error('missing A IDs');
-    if (b.pageId === undefined) throw new Error('missing B page ID');
     await expect(
       runtime.getUrl({ sessionId: a.sessionId, pageId: b.pageId }),
     ).rejects.toMatchObject({ code: 'PAGE_NOT_FOUND' });
@@ -60,10 +53,26 @@ describe('BrowserMeshRuntime', () => {
     await runtime.shutdown();
   });
 
+  it('creates, lists, and closes pages in the addressed session registry', async () => {
+    const { runtime, engine } = testRuntime();
+    const session = await runtime.createSession();
+    const created = await runtime.createPage(session.sessionId);
+    expect(created.sessionId).toBe(session.sessionId);
+    expect((await runtime.listPages(session.sessionId)).value.map(({ pageId }) => pageId)).toEqual([
+      session.pageId,
+      created.pageId,
+    ]);
+    await runtime.closePage(session.sessionId, created.pageId);
+    expect((await runtime.listPages(session.sessionId)).value.map(({ pageId }) => pageId)).toEqual([
+      session.pageId,
+    ]);
+    expect(engine.pages.size).toBe(1);
+    await runtime.shutdown();
+  });
+
   it('recovers its session queue after a browser operation fails', async () => {
     const { runtime, engine } = testRuntime();
     const created = await runtime.createSession();
-    if (created.sessionId === undefined || created.pageId === undefined) throw new Error('IDs');
     const target = { sessionId: created.sessionId, pageId: created.pageId };
     engine.failNextNavigation = true;
     await expect(runtime.navigate(target, 'https://failure.example')).rejects.toMatchObject({
@@ -75,10 +84,26 @@ describe('BrowserMeshRuntime', () => {
     await runtime.shutdown();
   });
 
+  it('correlates rejected operations and enforces the HTTP(S) navigation policy', async () => {
+    const { runtime, events } = testRuntime();
+    const created = await runtime.createSession();
+    const target = { sessionId: created.sessionId, pageId: created.pageId };
+    await expect(runtime.navigate(target, 'file:///private.txt')).rejects.toMatchObject({
+      code: 'INVALID_ARGUMENT',
+    });
+    const rejectedEvents = events.slice(-2);
+    expect(rejectedEvents.map(({ type }) => type)).toEqual([
+      'operation.started',
+      'operation.failed',
+    ]);
+    expect(rejectedEvents[0]?.operationId).toBe(rejectedEvents[1]?.operationId);
+    await expect(runtime.getTitle(target)).resolves.toMatchObject({ value: 'Fake' });
+    await runtime.shutdown();
+  });
+
   it('drains accepted work and rejects operations arriving after close begins', async () => {
     const { runtime, engine } = testRuntime();
     const created = await runtime.createSession();
-    if (created.sessionId === undefined || created.pageId === undefined) throw new Error('IDs');
     const target = { sessionId: created.sessionId, pageId: created.pageId };
     let releaseNavigation: (() => void) | undefined;
     engine.navigationGate = new Promise<void>((resolve) => {
@@ -103,7 +128,6 @@ describe('BrowserMeshRuntime', () => {
   it('marks live sessions failed on browser disconnect and permits fresh sessions', async () => {
     const { runtime, engine } = testRuntime();
     const original = await runtime.createSession();
-    if (original.sessionId === undefined || original.pageId === undefined) throw new Error('IDs');
     engine.disconnect();
     expect((await runtime.getSession(original.sessionId)).value.status).toBe('failed');
     await expect(
@@ -112,6 +136,45 @@ describe('BrowserMeshRuntime', () => {
     const fresh = await runtime.createSession({ name: 'after-crash' });
     expect(fresh.value.status).toBe('ready');
     expect(fresh.sessionId).not.toBe(original.sessionId);
+    await runtime.shutdown();
+  });
+
+  it('cleans a context created after a disconnect raced with session initialization', async () => {
+    let releaseCreation: (() => void) | undefined;
+    const gate = new Promise<void>((resolve) => {
+      releaseCreation = resolve;
+    });
+    class GatedEngine extends FakeEngine {
+      override async createContext() {
+        await gate;
+        return super.createContext();
+      }
+    }
+    const { runtime, engine } = testRuntime(new GatedEngine());
+    const creation = runtime.createSession();
+    await Promise.resolve();
+    engine.disconnect();
+    releaseCreation?.();
+    await expect(creation).rejects.toMatchObject({ code: 'BROWSER_DISCONNECTED' });
+    expect(engine.contexts.size).toBe(0);
+    expect((await runtime.listSessions()).value).toMatchObject([{ status: 'failed' }]);
+    await runtime.shutdown();
+  });
+
+  it('bounds failed session-creation records', async () => {
+    class FailingEngine extends FakeEngine {
+      override async createContext(): Promise<never> {
+        throw new Error('simulated context creation failure');
+      }
+    }
+    const { runtime } = testRuntime(new FailingEngine(), { maxSessions: 2 });
+    for (let index = 0; index < 6; index += 1) {
+      await expect(runtime.createSession()).rejects.toMatchObject({ code: 'INTERNAL_ERROR' });
+    }
+    expect((await runtime.listSessions()).value).toHaveLength(2);
+    expect((await runtime.listSessions()).value.every(({ status }) => status === 'failed')).toBe(
+      true,
+    );
     await runtime.shutdown();
   });
 
@@ -144,7 +207,6 @@ describe('BrowserMeshRuntime', () => {
       persistenceEnabled: false,
     });
     const created = await limited.runtime.createSession();
-    if (created.sessionId === undefined) throw new Error('missing session ID');
     await expect(limited.runtime.createSession()).rejects.toMatchObject({ code: 'LIMIT_EXCEEDED' });
     await expect(limited.runtime.createPage(created.sessionId)).rejects.toMatchObject({
       code: 'LIMIT_EXCEEDED',
@@ -155,10 +217,19 @@ describe('BrowserMeshRuntime', () => {
     await limited.runtime.shutdown();
   });
 
+  it('saves, lists, and removes logical persistence states through runtime operations', async () => {
+    const { runtime } = testRuntime();
+    const created = await runtime.createSession();
+    await runtime.saveSessionState(created.sessionId, 'buyer-auth');
+    expect((await runtime.listSavedStates()).value).toMatchObject([{ stateId: 'buyer-auth' }]);
+    await runtime.removeSavedState('buyer-auth');
+    expect((await runtime.listSavedStates()).value).toEqual([]);
+    await runtime.shutdown();
+  });
+
   it('drains a queued operation during shutdown and rejects new external work', async () => {
     const { runtime, engine } = testRuntime();
     const created = await runtime.createSession();
-    if (created.sessionId === undefined || created.pageId === undefined) throw new Error('IDs');
     let releaseNavigation: (() => void) | undefined;
     engine.navigationGate = new Promise<void>((resolve) => {
       releaseNavigation = resolve;
@@ -188,7 +259,6 @@ describe('BrowserMeshRuntime', () => {
     const closedIds: string[] = [];
     for (let index = 0; index < 8; index += 1) {
       const created = await runtime.createSession({ name: `cycle-${index}` });
-      if (created.sessionId === undefined) throw new Error('missing session ID');
       closedIds.push(created.sessionId);
       await runtime.closeSession(created.sessionId);
     }

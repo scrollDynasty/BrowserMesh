@@ -12,7 +12,8 @@ describe('MCP adapter', () => {
     const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
     await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
     const tools = await client.listTools();
-    expect(tools.tools.map(({ name }) => name)).toContain('browser_session_create');
+    expect(tools.tools.map(({ name }) => name).sort()).toEqual(expectedToolNames);
+    expect(tools.tools.every(({ description }) => (description?.length ?? 0) > 40)).toBe(true);
     expect(
       tools.tools.some(
         ({ name }) =>
@@ -50,3 +51,29 @@ describe('MCP adapter', () => {
     await runtime.shutdown();
   });
 });
+
+const expectedToolNames = [
+  'browser_back',
+  'browser_click',
+  'browser_fill',
+  'browser_forward',
+  'browser_get_title',
+  'browser_get_url',
+  'browser_navigate',
+  'browser_page_close',
+  'browser_page_create',
+  'browser_page_list',
+  'browser_press',
+  'browser_reload',
+  'browser_screenshot',
+  'browser_select_option',
+  'browser_session_close',
+  'browser_session_create',
+  'browser_session_get',
+  'browser_session_list',
+  'browser_snapshot',
+  'browser_state_list',
+  'browser_state_remove',
+  'browser_state_save',
+  'browser_visible_text',
+].sort();

@@ -1,7 +1,7 @@
 export type SessionStatus = 'creating' | 'ready' | 'closing' | 'closed' | 'failed';
 
 export interface SessionView {
-  readonly id: string;
+  readonly sessionId: string;
   readonly name?: string;
   readonly status: SessionStatus;
   readonly createdAt: string;
@@ -11,7 +11,7 @@ export interface SessionView {
 }
 
 export interface PageView {
-  readonly id: string;
+  readonly pageId: string;
   readonly sessionId: string;
   readonly createdAt: string;
   readonly url: string;
@@ -44,6 +44,11 @@ export interface OperationResult<T> {
   readonly sessionId?: string;
   readonly pageId?: string;
   readonly value: T;
+}
+
+export interface PageAddressedOperationResult<T> extends OperationResult<T> {
+  readonly sessionId: string;
+  readonly pageId: string;
 }
 
 export interface BrowserStorageState {

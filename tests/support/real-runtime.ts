@@ -12,9 +12,10 @@ export interface RealRuntimeHarness {
   cleanup(): Promise<void>;
 }
 
-export async function createRealRuntimeHarness(): Promise<RealRuntimeHarness> {
+export async function createRealRuntimeHarness(
+  engine = new PlaywrightBrowserEngine(true),
+): Promise<RealRuntimeHarness> {
   const dataDirectory = await mkdtemp(join(tmpdir(), 'browsermesh-integration-'));
-  const engine = new PlaywrightBrowserEngine(true);
   const runtime = new BrowserMeshRuntime({
     engine,
     stateRepository: new FileSystemStateRepository(dataDirectory),

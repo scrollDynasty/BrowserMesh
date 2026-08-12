@@ -10,8 +10,6 @@ describe('runtime stress', () => {
     );
     await Promise.all(
       sessions.map(async (session, index) => {
-        if (session.sessionId === undefined || session.pageId === undefined)
-          throw new Error('missing explicit IDs');
         await runtime.navigate(
           { sessionId: session.sessionId, pageId: session.pageId },
           `https://example.test/${index}`,
@@ -25,5 +23,6 @@ describe('runtime stress', () => {
     await runtime.shutdown();
     expect(engine.contexts.size).toBe(0);
     expect(engine.pages.size).toBe(0);
+    expect(engine.disconnectListenerCount).toBe(0);
   });
 });

@@ -22,6 +22,18 @@ export async function startTestWebServer(): Promise<TestWebServer> {
       if (barrierCount >= 2) for (const release of barrierResponses.splice(0)) release();
       return;
     }
+    if (url.pathname === '/delay') {
+      const delayMs = Number(url.searchParams.get('ms') ?? '0');
+      const value = url.searchParams.get('value') ?? '';
+      setTimeout(
+        () =>
+          response.end(
+            page(`Delay ${value}`, `<div data-testid="delay">${escapeHtml(value)}</div>`),
+          ),
+        delayMs,
+      );
+      return;
+    }
     if (url.pathname === '/buyer') {
       response.end(
         page(
@@ -72,7 +84,7 @@ export async function startTestWebServer(): Promise<TestWebServer> {
     response.end(
       page(
         'BrowserMesh Test',
-        `${script}<div data-testid="state"></div><label>Name <input aria-label="Name" /></label><button onclick="document.querySelector('[data-testid=status]').textContent='clicked'">Submit</button><div data-testid="status"></div><select aria-label="Choice"><option value="one">One</option><option value="two">Two</option></select><script>document.querySelector('[data-testid=state]').textContent=(localStorage.getItem('identity')||'')+'|'+document.cookie</script>`,
+        `${script}<div data-testid="state"></div><label>Name <input aria-label="Name" placeholder="Your name" /></label><button onclick="document.querySelector('[data-testid=status]').textContent='clicked'">Submit</button><div data-testid="status"></div><select aria-label="Choice"><option value="one">One</option><option value="two">Two</option></select><script>document.querySelector('[data-testid=state]').textContent=(localStorage.getItem('identity')||'')+'|'+document.cookie</script>`,
       ),
     );
   });

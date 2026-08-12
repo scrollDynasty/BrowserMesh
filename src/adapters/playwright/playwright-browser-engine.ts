@@ -62,7 +62,9 @@ export class PlaywrightBrowserEngine implements BrowserEnginePort {
     this.pages.clear();
     this.contexts.clear();
     try {
-      if (browser !== undefined) await browser.close();
+      if (browser !== undefined) {
+        await this.wrapBrowserAction(() => browser.close(), 'Failed to stop Chromium');
+      }
     } finally {
       this.stopping = false;
     }
@@ -96,13 +98,16 @@ export class PlaywrightBrowserEngine implements BrowserEnginePort {
   async closeContext(handle: BrowserContextHandle): Promise<void> {
     const context = this.contexts.get(handle.id);
     if (context === undefined) return;
-    await context.close();
+    await this.wrapBrowserAction(() => context.close(), 'Failed to close browser context');
     this.dropContext(handle.id);
   }
 
   async createPage(handle: BrowserContextHandle): Promise<BrowserPageHandle> {
     const context = this.getContext(handle);
-    const page = await context.newPage();
+    const page = await this.wrapBrowserAction(
+      () => context.newPage(),
+      'Failed to create browser page',
+    );
     const pageHandle: PageHandle = { id: Symbol('page'), kind: 'page' };
     this.pages.set(pageHandle.id, page);
     page.once('close', () => this.pages.delete(pageHandle.id));
@@ -121,7 +126,7 @@ export class PlaywrightBrowserEngine implements BrowserEnginePort {
   async closePage(handle: BrowserPageHandle): Promise<void> {
     const page = this.pages.get(handle.id);
     if (page === undefined) return;
-    await page.close();
+    await this.wrapBrowserAction(() => page.close(), 'Failed to close browser page');
     this.pages.delete(handle.id);
   }
 
@@ -233,9 +238,15 @@ export class PlaywrightBrowserEngine implements BrowserEnginePort {
   }
 
   async snapshot(handle: BrowserPageHandle, timeoutMs: number): Promise<string> {
-    return this.locate(this.getPage(handle), { strategy: 'css', value: 'body' }).ariaSnapshot({
-      timeout: timeoutMs,
-    });
+    return this.wrapAction(
+      () =>
+        this.locate(this.getPage(handle), { strategy: 'css', value: 'body' }).ariaSnapshot({
+          timeout: timeoutMs,
+        }),
+      'BROWSER_ERROR',
+      'Failed to capture page snapshot',
+      timeoutMs,
+    );
   }
 
   async visibleText(
@@ -243,15 +254,26 @@ export class PlaywrightBrowserEngine implements BrowserEnginePort {
     locator: Locator,
     timeoutMs: number,
   ): Promise<string> {
-    return this.locate(this.getPage(handle), locator).innerText({ timeout: timeoutMs });
+    return this.wrapElement(
+      () => this.locate(this.getPage(handle), locator).innerText({ timeout: timeoutMs }),
+      timeoutMs,
+    );
   }
 
   async screenshot(handle: BrowserPageHandle, timeoutMs: number): Promise<Uint8Array> {
-    return this.getPage(handle).screenshot({ timeout: timeoutMs, type: 'png' });
+    return this.wrapAction(
+      () => this.getPage(handle).screenshot({ timeout: timeoutMs, type: 'png' }),
+      'BROWSER_ERROR',
+      'Failed to capture page screenshot',
+      timeoutMs,
+    );
   }
 
   async storageState(handle: BrowserContextHandle): Promise<BrowserStorageState> {
-    return this.getContext(handle).storageState();
+    return this.wrapBrowserAction(
+      () => this.getContext(handle).storageState(),
+      'Failed to capture browser storage state',
+    );
   }
 
   private getContext(handle: BrowserContextHandle): BrowserContext {
@@ -324,9 +346,9 @@ export class PlaywrightBrowserEngine implements BrowserEnginePort {
     }
   }
 
-  private async wrapElement(action: () => Promise<void>, timeoutMs: number): Promise<void> {
+  private async wrapElement<T>(action: () => Promise<T>, timeoutMs: number): Promise<T> {
     try {
-      await action();
+      return await action();
     } catch (error) {
       if (error instanceof BrowserMeshError) throw error;
       const timedOut = error instanceof Error && error.name === 'TimeoutError';
@@ -335,6 +357,15 @@ export class PlaywrightBrowserEngine implements BrowserEnginePort {
         timedOut ? `Element operation exceeded ${String(timeoutMs)}ms` : 'Element operation failed',
         { cause: error },
       );
+    }
+  }
+
+  private async wrapBrowserAction<T>(action: () => Promise<T>, message: string): Promise<T> {
+    try {
+      return await action();
+    } catch (error) {
+      if (error instanceof BrowserMeshError) throw error;
+      throw new BrowserMeshError('BROWSER_ERROR', message, { cause: error });
     }
   }
 }

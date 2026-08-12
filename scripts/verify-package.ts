@@ -4,7 +4,8 @@ import {
   StdioClientTransport,
 } from '@modelcontextprotocol/sdk/client/stdio.js';
 import { execFile } from 'node:child_process';
-import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { constants } from 'node:fs';
+import { access, mkdir, mkdtemp, readFile, realpath, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { promisify } from 'node:util';
@@ -30,6 +31,15 @@ const mcpEnvelopeSchema = z.object({
     operationId: z.string().min(1),
     sessionId: z.string().min(1),
     pageId: z.string().min(1),
+  }),
+});
+const installedManifestSchema = z.object({
+  name: z.literal(packageName),
+  type: z.literal('module'),
+  main: z.never().optional(),
+  bin: z.object({ browsermesh: z.literal('dist/cli.js') }),
+  exports: z.object({
+    '.': z.object({ import: z.literal('./dist/index.js'), types: z.literal('./dist/index.d.ts') }),
   }),
 });
 
@@ -78,6 +88,9 @@ async function main(): Promise<void> {
     );
 
     const installedRoot = join(consumerDirectory, 'node_modules', packageName);
+    installedManifestSchema.parse(
+      JSON.parse(await readFile(join(installedRoot, 'package.json'), 'utf8')),
+    );
     const binPath = join(
       consumerDirectory,
       'node_modules',
@@ -139,9 +152,17 @@ async function assertInstalledBin(binPath: string, installedCliPath: string): Pr
     throw new Error('Packaged CLI is missing its Node.js executable shebang');
   }
 
-  const launcher = await readFile(binPath, 'utf8');
-  if (!launcher.includes('dist') || !launcher.includes('cli.js')) {
-    throw new Error('Installed browsermesh bin does not target the packaged CLI');
+  if (process.platform === 'win32') {
+    const launcher = await readFile(binPath, 'utf8');
+    if (!launcher.includes('dist') || !launcher.includes('cli.js')) {
+      throw new Error('Installed browsermesh bin does not target the packaged CLI');
+    }
+    return;
+  }
+
+  await access(binPath, constants.X_OK);
+  if ((await realpath(binPath)) !== (await realpath(installedCliPath))) {
+    throw new Error('Installed browsermesh bin does not resolve to the packaged CLI');
   }
 }
 
