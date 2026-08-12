@@ -108,7 +108,9 @@ Enable Dependabot alerts/security updates and private vulnerability reporting. `
 2. Confirm its CI is green.
 3. Merge the Release PR.
 4. Observe the `release-please` workflow create a GitHub Release/tag.
-5. Observe `publish` rerun `npm run verify` and `npm run verify:package` before npm publication.
+5. Observe `publish` run `npm run verify` and `npm run verify:package` under Xvfb before npm
+   publication. Xvfb supplies a visible virtual display for BrowserMesh's always-headed Chromium on
+   Linux CI; it does not switch the product back to headless mode.
 6. Verify registry state:
 
 ```sh
