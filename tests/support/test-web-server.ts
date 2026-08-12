@@ -1,5 +1,8 @@
 import { createServer, type Server } from 'node:http';
 import { once } from 'node:events';
+import escapeHtml from 'escape-html';
+
+const MAX_DELAY_MS = 1_000;
 
 export interface TestWebServer {
   readonly baseUrl: string;
@@ -24,6 +27,11 @@ export async function startTestWebServer(): Promise<TestWebServer> {
     }
     if (url.pathname === '/delay') {
       const delayMs = Number(url.searchParams.get('ms') ?? '0');
+      if (!Number.isInteger(delayMs) || delayMs < 0 || delayMs > MAX_DELAY_MS) {
+        response.statusCode = 400;
+        response.end(page('Bad request', '<div data-testid="error">Invalid delay</div>'));
+        return;
+      }
       const value = url.searchParams.get('value') ?? '';
       setTimeout(
         () =>
@@ -77,14 +85,15 @@ export async function startTestWebServer(): Promise<TestWebServer> {
         'set-cookie',
         `identity=${encodeURIComponent(value)}; Path=/; SameSite=Lax`,
       );
-    const script =
+    const identityAttribute = value === null ? '' : ` data-identity="${escapeHtml(value)}"`;
+    const initializeIdentity =
       value === null
         ? ''
-        : `<script>localStorage.setItem('identity', ${JSON.stringify(value)})</script>`;
+        : "<script>localStorage.setItem('identity', document.querySelector('[data-testid=state]').dataset.identity ?? '')</script>";
     response.end(
       page(
         'BrowserMesh Test',
-        `${script}<div data-testid="state"></div><label>Name <input aria-label="Name" placeholder="Your name" /></label><button onclick="document.querySelector('[data-testid=status]').textContent='clicked'">Submit</button><div data-testid="status"></div><select aria-label="Choice"><option value="one">One</option><option value="two">Two</option></select><script>document.querySelector('[data-testid=state]').textContent=(localStorage.getItem('identity')||'')+'|'+document.cookie</script>`,
+        `<div data-testid="state"${identityAttribute}></div>${initializeIdentity}<label>Name <input aria-label="Name" placeholder="Your name" /></label><button onclick="document.querySelector('[data-testid=status]').textContent='clicked'">Submit</button><div data-testid="status"></div><select aria-label="Choice"><option value="one">One</option><option value="two">Two</option></select><script>document.querySelector('[data-testid=state]').textContent=(localStorage.getItem('identity')||'')+'|'+document.cookie</script>`,
       ),
     );
   });
@@ -104,12 +113,4 @@ export async function startTestWebServer(): Promise<TestWebServer> {
 
 function page(title: string, body: string): string {
   return `<!doctype html><html><head><title>${escapeHtml(title)}</title></head><body>${body}</body></html>`;
-}
-
-function escapeHtml(value: string): string {
-  return value
-    .replaceAll('&', '&amp;')
-    .replaceAll('<', '&lt;')
-    .replaceAll('>', '&gt;')
-    .replaceAll('"', '&quot;');
 }
