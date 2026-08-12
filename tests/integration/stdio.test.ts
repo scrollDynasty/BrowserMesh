@@ -57,6 +57,42 @@ describe('stdio executable', () => {
       await rm(dataDirectory, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 });
     }
   });
+
+  it('keeps MCP available and reports actionable setup when Chromium is missing', async () => {
+    const temporaryRoot = await mkdtemp(join(tmpdir(), 'browsermesh-no-browser-'));
+    const transport = new StdioClientTransport({
+      command: process.execPath,
+      args: ['--import', 'tsx', 'src/cli.ts'],
+      cwd: process.cwd(),
+      env: {
+        BROWSERMESH_LOG_LEVEL: 'silent',
+        BROWSERMESH_PERSISTENCE: 'false',
+        BROWSERMESH_DATA_DIR: join(temporaryRoot, 'data'),
+        PLAYWRIGHT_BROWSERS_PATH: join(temporaryRoot, 'browsers'),
+      },
+      stderr: 'pipe',
+    });
+    const client = new Client({ name: 'stdio-missing-browser-test', version: '1.0.0' });
+    try {
+      await client.connect(transport);
+      const tools = await client.listTools();
+      expect(tools.tools.some(({ name }) => name === 'browser_session_create')).toBe(true);
+
+      const creation = await client.callTool({
+        name: 'browser_session_create',
+        arguments: { name: 'missing-browser' },
+      });
+      expect(creation.isError).toBe(true);
+      expect(JSON.stringify(creation.content)).toContain('BROWSER_ERROR');
+      expect(JSON.stringify(creation.content)).toContain(
+        'npx -y multi-agent-browser-mcp --install-browser',
+      );
+    } finally {
+      await client.close();
+      await transport.close();
+      await rm(temporaryRoot, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 });
+    }
+  });
 });
 
 const createdSchema = z.object({

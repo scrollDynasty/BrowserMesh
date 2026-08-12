@@ -91,6 +91,18 @@ For tasks involving multiple users, accounts, roles, or authentication states, t
 
 Once the npm package is published, the expected MCP configuration will use the package executable directly.
 
+Install the Playwright-managed Chromium build once before starting BrowserMesh. This command uses
+the exact Playwright version bundled with the selected BrowserMesh package:
+
+```sh
+npx -y multi-agent-browser-mcp --install-browser
+```
+
+Playwright browser binaries are versioned separately from the npm package and may need to be
+installed again after a BrowserMesh/Playwright update. If Chromium is missing, BrowserMesh keeps
+MCP discovery available and `browser_session_create` returns an actionable `BROWSER_ERROR` instead
+of terminating the stdio connection.
+
 Example:
 
 ```json
@@ -376,6 +388,13 @@ Supported v0.1 strategies include:
 
 Common interactive role values are supported by the v0.1 public contract.
 
+Role names use exact accessible-name matching by default. Set `exact: false` only when partial
+matching is intentional. If a locator resolves to multiple elements, BrowserMesh returns
+`LOCATOR_AMBIGUOUS` and keeps the session usable.
+
+Accessibility snapshots redact non-empty values from `input[type="password"]` elements before any
+snapshot content crosses the MCP boundary.
+
 BrowserMesh does not expose Playwright `Locator` objects through its public API.
 
 ## Persistence and sensitive state
@@ -415,9 +434,10 @@ BrowserMesh never attempts to serialize a live `BrowserContext`, open pages, pen
 
 Configuration is read and validated centrally.
 
-The BrowserMesh CLI always launches Chromium in headed mode so the user can observe browser
-automation. Set a larger per-tool `timeoutMs` only for operations that are expected to take longer
-than the safe default.
+The BrowserMesh CLI always launches Chromium in headed mode when the first browser session is
+created so the user can observe browser automation. Browser startup is lazy so MCP discovery and
+actionable setup errors remain available when Chromium has not been installed yet. Set a larger
+per-tool `timeoutMs` only for operations that are expected to take longer than the safe default.
 
 Direct scattered `process.env` access throughout the codebase is not allowed.
 

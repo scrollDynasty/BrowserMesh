@@ -27,6 +27,12 @@ describe('MCP adapter', () => {
     const createTool = tools.tools.find(({ name }) => name === 'browser_session_create');
     expect(createTool?.description).toContain('different user, account, role');
     expect(createTool?.description).toContain('independent parallel workflow');
+    const clickTool = tools.tools.find(({ name }) => name === 'browser_click');
+    expect(clickTool?.description).toContain('exactly by default');
+    expect(clickTool?.description).toContain('LOCATOR_AMBIGUOUS');
+    expect(clickTool?.inputSchema).toHaveProperty('properties.locator');
+    const snapshotTool = tools.tools.find(({ name }) => name === 'browser_snapshot');
+    expect(snapshotTool?.description).toContain('password-input values are redacted');
     const created = await client.callTool({
       name: 'browser_session_create',
       arguments: { name: 'mcp' },
@@ -71,7 +77,7 @@ describe('MCP adapter', () => {
     });
     await expectToolSuccess(client, 'browser_click', {
       ...target,
-      locator: { strategy: 'role', value: 'button', name: 'Submit' },
+      locator: { strategy: 'role', value: 'button', name: 'Submit', exact: true },
     });
     await expectToolSuccess(client, 'browser_fill', {
       ...target,

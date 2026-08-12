@@ -6,18 +6,18 @@ The current `docs/SPEC.md` defines implementation phases 0 through 9. Its testin
 
 ## Phase evidence
 
-| Phase                        | Status   | Implementation and verification evidence                                                                                                                                            |
-| ---------------------------- | -------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 0 — Foundation               | Complete | Strict TypeScript, ESLint, Prettier, Vitest, centralized validated config, structured stderr logging, documentation, package scripts, architecture boundary tests.                  |
-| 1 — Browser engine           | Complete | Engine port and Playwright Chromium adapter implement start/stop, typed error normalization, context/page cleanup, and unexpected-disconnect notification.                          |
-| 2 — Multi-session core       | Complete | Explicit session registry/lifecycle, BrowserContext-per-session isolation, deterministic initial page, limits, bounded terminal records, idempotent close, cleanup.                 |
-| 3 — Pages                    | Complete | Explicit `pageId`, create/list/close, default marker, per-session limit, cross-session rejection, real-Chromium lifecycle coverage.                                                 |
-| 4 — Browser operations       | Complete | HTTP(S) navigation/history/reload, URL/title, all specified semantic locator strategies, interactions, snapshot, visible text, in-memory PNG screenshot, typed errors.              |
-| 5 — Concurrency              | Complete | Independent serial queue per session, cross-session parallelism, required page-address result types, operation IDs, bounded timeouts, failure recovery, close/shutdown draining.    |
-| 6 — MCP                      | Complete | Stdio server, schemas, safe success/error mapping, complete discovery descriptions, exact v0.1 tool-set contract test, real subprocess routing/validation/clean-exit test.          |
-| 7 — Persistence              | Complete | Logical `stateId`, safe names, save/list/remove/restore, private application path, atomic replacement, same-state write serialization, failure recovery, no state contents in logs. |
-| 8 — External-client workflow | Complete | A real MCP `Client` coordinates isolated buyer and seller sessions in the deterministic local workflow e2e; BrowserMesh creates no internal agents.                                 |
-| 9 — Release readiness        | Complete | Node 22/24 real-browser CI, Windows package smoke, coverage gates, npm tarball install, manifest/public import/bin validation, and packaged MCP browser workflow.                   |
+| Phase                        | Status   | Implementation and verification evidence                                                                                                                                                  |
+| ---------------------------- | -------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 0 — Foundation               | Complete | Strict TypeScript, ESLint, Prettier, Vitest, centralized validated config, structured stderr logging, documentation, package scripts, architecture boundary tests.                        |
+| 1 — Browser engine           | Complete | Engine port and Playwright Chromium adapter implement lazy start/stop, actionable missing-browser errors, password snapshot redaction, context/page cleanup, and disconnect notification. |
+| 2 — Multi-session core       | Complete | Explicit session registry/lifecycle, BrowserContext-per-session isolation, deterministic initial page, limits, bounded terminal records, idempotent close, cleanup.                       |
+| 3 — Pages                    | Complete | Explicit `pageId`, create/list/close, default marker, per-session limit, cross-session rejection, real-Chromium lifecycle coverage.                                                       |
+| 4 — Browser operations       | Complete | HTTP(S) navigation/history/reload, URL/title, deterministic exact role locators, ambiguity errors, redacted snapshots, visible text, interactions, and in-memory PNG screenshots.         |
+| 5 — Concurrency              | Complete | Independent serial queue per session, cross-session parallelism, required page-address result types, operation IDs, bounded timeouts, failure recovery, close/shutdown draining.          |
+| 6 — MCP                      | Complete | Stdio server, schemas, safe success/error mapping, complete discovery descriptions, exact v0.1 tool-set contract test, real subprocess routing/validation/clean-exit test.                |
+| 7 — Persistence              | Complete | Logical `stateId`, safe names, save/list/remove/restore, private application path, atomic replacement, same-state write serialization, failure recovery, no state contents in logs.       |
+| 8 — External-client workflow | Complete | A real MCP `Client` coordinates isolated buyer and seller sessions in the deterministic local workflow e2e; BrowserMesh creates no internal agents.                                       |
+| 9 — Release readiness        | Complete | Node 22/24 real-browser CI, Windows package smoke, coverage gates, npm tarball install, manifest/public import/bin validation, and packaged MCP browser workflow.                         |
 
 ## Contribution and release automation
 
@@ -32,7 +32,7 @@ The current `docs/SPEC.md` defines implementation phases 0 through 9. Its testin
 
 ## Acceptance evidence
 
-- Real-Chromium integration covers isolated cookies, localStorage, pages, URLs, DOM reads, screenshots, page lifecycle, history navigation, interactions, persistence restoration, same-session ordering, cross-session parallelism, timeout recovery, queued close/shutdown, initialization shutdown, disconnect, and handle cleanup.
+- Real-Chromium integration covers isolated cookies, localStorage, pages, URLs, password redaction, exact/ambiguous role locators, DOM reads, screenshots, page lifecycle, history, interactions, persistence, ordering, parallelism, timeout recovery, shutdown, disconnect, and cleanup.
 - Unit tests cover lifecycle/limits, terminal-record bounds, operation correlation, queue recovery, navigation policy, persistence naming/atomic concurrency, configuration, structured logging, and architecture dependency rules.
 - MCP tests cover the exact public tool set, descriptions, schema rejection, safe structured errors, successful calls, explicit routing, subprocess stdio negotiation, and exit.
 - The deterministic 50-session stress test verifies runtime routing and cleanup, while a separate

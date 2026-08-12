@@ -109,6 +109,44 @@ describe('real Chromium runtime', () => {
     expect((await runtime.screenshot(target)).value.startsWith('iVBOR')).toBe(true);
   });
 
+  it('redacts password input values from accessibility snapshots', async () => {
+    const target = await createTarget();
+    const secretPrefix = 'BrowserMesh-"quoted"-\\secret';
+    const secret = `${secretPrefix}-Do-Not-Echo`;
+    await runtime.navigate(target, `${web.baseUrl}/password`);
+    await runtime.fill(target, { strategy: 'label', value: 'Password' }, secretPrefix);
+    await runtime.fill(target, { strategy: 'label', value: 'Confirm password' }, secret);
+
+    const captured = (await runtime.snapshot(target)).value;
+
+    expect(captured).not.toContain(secretPrefix);
+    expect(captured).not.toContain(secret);
+    expect(captured).toContain('[REDACTED]');
+  });
+
+  it('matches role names exactly by default and classifies deliberate ambiguity', async () => {
+    const target = await createTarget();
+    await runtime.navigate(target, `${web.baseUrl}/ambiguous`);
+
+    await runtime.click(target, { strategy: 'role', value: 'link', name: 'Employees' });
+    expect((await runtime.getUrl(target)).value).toContain('/exact');
+
+    await runtime.back(target);
+    const ambiguous = await captureBrowserMeshError(
+      runtime.click(target, {
+        strategy: 'role',
+        value: 'link',
+        name: 'Employees',
+        exact: false,
+      }),
+      'LOCATOR_AMBIGUOUS',
+    );
+    expect(ambiguous.message).toContain('exact=false');
+    expect(ambiguous.details).toMatchObject({
+      locator: { strategy: 'role', value: 'link', name: 'Employees', exact: false },
+    });
+  });
+
   it('supports back, forward, and reload on an explicitly addressed page', async () => {
     const target = await createTarget();
     await runtime.navigate(target, `${web.baseUrl}/?value=one`);

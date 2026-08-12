@@ -69,6 +69,7 @@ async function main(): Promise<void> {
     const paths = new Set(artifact.files.map(({ path }) => path));
     for (const required of [
       'dist/cli.js',
+      'dist/install-browser.js',
       'dist/index.js',
       'dist/index.d.ts',
       'README.md',
@@ -117,6 +118,10 @@ async function main(): Promise<void> {
     );
     const installedCliPath = join(installedRoot, 'dist', 'cli.js');
     await assertInstalledBin(binPath, installedCliPath);
+    await execFileAsync(process.execPath, [installedCliPath, '--install-browser'], {
+      cwd: consumerDirectory,
+      maxBuffer: 10 * 1024 * 1024,
+    });
     transport = new StdioClientTransport({
       command: process.platform === 'win32' ? process.execPath : binPath,
       ...(process.platform === 'win32' ? { args: [installedCliPath] } : {}),

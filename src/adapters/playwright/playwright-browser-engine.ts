@@ -45,9 +45,13 @@ export class PlaywrightBrowserEngine implements BrowserEnginePort {
         browser.once('disconnected', () => this.handleDisconnected(browser));
         this.browser = browser;
       } catch (error) {
-        throw new BrowserMeshError('BROWSER_ERROR', 'Failed to launch Chromium', {
-          cause: error,
-        });
+        const cause = errorMessage(error);
+        const remediation = 'Run: npx -y multi-agent-browser-mcp --install-browser';
+        throw new BrowserMeshError(
+          'BROWSER_ERROR',
+          `Failed to launch Chromium: ${cause}. ${remediation}`,
+          { cause: error, details: { cause, remediation } },
+        );
       } finally {
         this.startPromise = undefined;
       }
@@ -248,10 +252,18 @@ export class PlaywrightBrowserEngine implements BrowserEnginePort {
 
   async snapshot(handle: BrowserPageHandle, timeoutMs: number): Promise<string> {
     return this.wrapAction(
-      () =>
-        this.locate(this.getPage(handle), { strategy: 'css', value: 'body' }).ariaSnapshot({
+      async () => {
+        const page = this.getPage(handle);
+        const passwordValuesBefore = await readPasswordValues(page);
+        const snapshot = await this.locate(page, {
+          strategy: 'css',
+          value: 'body',
+        }).ariaSnapshot({
           timeout: timeoutMs,
-        }),
+        });
+        const passwordValuesAfter = await readPasswordValues(page);
+        return redactSecretValues(snapshot, [...passwordValuesBefore, ...passwordValuesAfter]);
+      },
       'BROWSER_ERROR',
       'Failed to capture page snapshot',
       timeoutMs,
@@ -306,7 +318,7 @@ export class PlaywrightBrowserEngine implements BrowserEnginePort {
       case 'role':
         return page.getByRole(
           locator.value,
-          locator.name === undefined ? {} : { name: locator.name },
+          locator.name === undefined ? {} : { name: locator.name, exact: locator.exact ?? true },
         );
       case 'text':
         return page.getByText(locator.value, { exact: true });
@@ -370,11 +382,12 @@ export class PlaywrightBrowserEngine implements BrowserEnginePort {
     } catch (error) {
       if (error instanceof BrowserMeshError) throw error;
       const timedOut = error instanceof Error && error.name === 'TimeoutError';
+      const ambiguous = isStrictModeViolation(error);
       const cause = errorMessage(error);
       const locatorDescription = describeLocator(locator);
       throw new BrowserMeshError(
-        timedOut ? 'OPERATION_TIMEOUT' : 'ELEMENT_NOT_FOUND',
-        `${timedOut ? `Element operation exceeded ${String(timeoutMs)}ms` : `Unable to ${operation}`} for ${locatorDescription}: ${cause}`,
+        timedOut ? 'OPERATION_TIMEOUT' : ambiguous ? 'LOCATOR_AMBIGUOUS' : 'ELEMENT_NOT_FOUND',
+        `${timedOut ? `Element operation exceeded ${String(timeoutMs)}ms` : ambiguous ? 'Locator matched multiple elements' : `Unable to ${operation}`} for ${locatorDescription}: ${cause}`,
         {
           cause: error,
           details: { operation, locator, timeoutMs, cause },
@@ -396,7 +409,26 @@ export class PlaywrightBrowserEngine implements BrowserEnginePort {
 function describeLocator(locator: Locator): string {
   const name =
     locator.strategy === 'role' && locator.name !== undefined ? `, name=${locator.name}` : '';
-  return `${locator.strategy}=${locator.value}${name}`;
+  const exact =
+    locator.strategy === 'role' && locator.name !== undefined
+      ? `, exact=${String(locator.exact ?? true)}`
+      : '';
+  return `${locator.strategy}=${locator.value}${name}${exact}`;
+}
+
+function redactSecretValues(snapshot: string, secrets: readonly string[]): string {
+  return [...new Set(secrets.filter((secret) => secret.length > 0))]
+    .sort((left, right) => right.length - left.length)
+    .reduce((redacted, secret) => redacted.replaceAll(secret, '[REDACTED]'), snapshot);
+}
+
+async function readPasswordValues(page: Page): Promise<readonly string[]> {
+  const passwordInputs = await page.locator('input[type="password"]').all();
+  return Promise.all(passwordInputs.map((passwordInput) => passwordInput.inputValue()));
+}
+
+function isStrictModeViolation(error: unknown): boolean {
+  return errorMessage(error).toLowerCase().includes('strict mode violation');
 }
 
 function errorMessage(error: unknown): string {
