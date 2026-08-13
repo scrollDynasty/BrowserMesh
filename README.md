@@ -544,6 +544,13 @@ Role names use exact accessible-name matching by default. Set `exact: false` onl
 matching is intentional. If a locator resolves to multiple elements, BrowserMesh returns
 `LOCATOR_AMBIGUOUS` and keeps the session usable.
 
+Any locator may optionally set `frame` to `{ "kind": "main" }` or to a bounded
+`{ "kind": "iframe", "chain": [...] }` of one through five outer-to-inner semantic/CSS iframe
+element selectors. Each chain step must resolve exactly; numeric indexes and persistent frame
+handles are not exposed. The same scope works for actions, locator waits, visible text, snapshot
+scope/ref capture, element screenshots, and drag/drop endpoints. Cross-origin iframe content is
+returned only when the caller explicitly requests that scoped evidence.
+
 Accessibility snapshots redact non-empty values from `input[type="password"]` elements before any
 snapshot content crosses the MCP boundary.
 
