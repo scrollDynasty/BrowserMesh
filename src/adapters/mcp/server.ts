@@ -75,11 +75,17 @@ const waitConditionSchema = z.discriminatedUnion('kind', [
     state: z.enum(['present', 'absent']),
   }),
 ]);
-const browserActionSchema = z.discriminatedUnion('kind', [
+const browserActionSchema = z.union([
   z.object({ kind: z.literal('click'), target: elementTargetSchema }),
+  z.object({ kind: z.literal('click'), locator: locatorSchema }),
   z.object({
     kind: z.literal('press'),
     target: elementTargetSchema,
+    key: z.string().min(1).max(64),
+  }),
+  z.object({
+    kind: z.literal('press'),
+    locator: locatorSchema,
     key: z.string().min(1).max(64),
   }),
 ]);
@@ -97,6 +103,13 @@ const actionWaitSchema = z.discriminatedUnion('kind', [
       .regex(/^[A-Z]{1,16}$/u)
       .optional(),
     status: z.number().int().min(100).max(599).optional(),
+  }),
+  z.object({ kind: z.literal('popup') }),
+  z.object({
+    kind: z.literal('dialog'),
+    dialogType: z.enum(['alert', 'beforeunload', 'confirm', 'prompt']),
+    action: z.enum(['accept', 'dismiss']),
+    promptText: z.string().max(2_000).optional(),
   }),
 ]);
 
@@ -732,7 +745,7 @@ export function createMcpServer(runtime: BrowserMeshRuntime): McpServer {
     {
       ...contractFor('browser_action_and_wait'),
       description:
-        'Atomically register a navigation or response waiter first, then click or press on the explicitly addressed page under one shared deadline. Use this instead of parallel same-session calls when an action triggers the event; BrowserMesh preserves queue serialization and returns bounded event metadata.',
+        'Atomically register a navigation, response, popup, or dialog waiter first, then click or press on the explicitly addressed page under one shared deadline. Popup pages receive a new BrowserMesh pageId in the same session with isDefault=false and are closed if the page limit is exceeded. Dialogs must be handled atomically because they cannot be inspected later; specify the expected type and accept/dismiss action. Returned dialog text is bounded. Use this instead of parallel same-session calls when an action triggers the event.',
       inputSchema: { ...targetSchema, action: browserActionSchema, wait: actionWaitSchema },
     },
     (input, extra) =>

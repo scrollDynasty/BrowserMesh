@@ -2,6 +2,57 @@ import { describe, expect, it } from 'vitest';
 import { FakeEngine, testRuntime } from '../support/fakes.js';
 
 describe('BrowserMeshRuntime', () => {
+  it('registers popup handles as non-default managed pages and closes overflow popups', async () => {
+    const { runtime, engine } = testRuntime(undefined, { maxPagesPerSession: 2 });
+    const created = await runtime.createSession();
+    const opened = await runtime.actionAndWait(
+      created,
+      { kind: 'click', locator: { strategy: 'testId', value: 'popup' } },
+      { kind: 'popup' },
+    );
+    expect(opened.value.event).toMatchObject({
+      kind: 'popup',
+      page: { sessionId: created.sessionId, isDefault: false },
+    });
+    expect((await runtime.listPages(created.sessionId)).value).toHaveLength(2);
+    const enginePagesBefore = engine.pages.size;
+    await expect(
+      runtime.actionAndWait(
+        created,
+        { kind: 'click', locator: { strategy: 'testId', value: 'popup' } },
+        { kind: 'popup' },
+      ),
+    ).rejects.toMatchObject({ code: 'LIMIT_EXCEEDED' });
+    expect(engine.pages.size).toBe(enginePagesBefore);
+    expect((await runtime.listPages(created.sessionId)).value).toHaveLength(2);
+    await runtime.shutdown();
+  });
+
+  it('returns bounded typed dialog metadata and validates prompt handling', async () => {
+    const { runtime } = testRuntime();
+    const created = await runtime.createSession();
+    const handled = await runtime.actionAndWait(
+      created,
+      { kind: 'press', locator: { strategy: 'testId', value: 'prompt' }, key: 'Enter' },
+      { kind: 'dialog', dialogType: 'prompt', action: 'accept', promptText: 'answer' },
+    );
+    expect(handled.value.event).toEqual({
+      kind: 'dialog',
+      dialogType: 'prompt',
+      action: 'accept',
+      message: 'Fake dialog',
+      defaultValue: 'default',
+    });
+    await expect(
+      runtime.actionAndWait(
+        created,
+        { kind: 'click', locator: { strategy: 'testId', value: 'confirm' } },
+        { kind: 'dialog', dialogType: 'confirm', action: 'dismiss', promptText: 'invalid' },
+      ),
+    ).rejects.toMatchObject({ code: 'INVALID_ARGUMENT' });
+    await runtime.shutdown();
+  });
+
   it('normalizes, exposes, and isolates immutable context settings', async () => {
     const { runtime, engine } = testRuntime();
     const supplied = {

@@ -34,6 +34,10 @@ export interface BrowserEngineDiagnostics {
   readonly browserVersion: string | null;
 }
 
+export type BrowserEngineActionWaitEvent =
+  | Extract<ActionAndWaitResult['event'], { kind: 'navigation' | 'response' | 'dialog' }>
+  | { readonly kind: 'popup'; readonly page: BrowserPageHandle };
+
 export type { BrowserObservation } from '../../domain/observability.js';
 
 export interface BrowserEnginePort {
@@ -51,6 +55,7 @@ export interface BrowserEnginePort {
   createPage(context: BrowserContextHandle): Promise<BrowserPageHandle>;
   listPages(context: BrowserContextHandle): readonly BrowserPageHandle[];
   closePage(page: BrowserPageHandle): Promise<void>;
+  onPageClosed(page: BrowserPageHandle, listener: () => void): () => void;
   observePage(
     page: BrowserPageHandle,
     options: { readonly maxInFlightRequests: number; readonly maxStringLength: number },
@@ -131,6 +136,6 @@ export interface BrowserEnginePort {
     action: BrowserAction,
     wait: ActionWaitCondition,
     control: OperationControl,
-  ): Promise<ActionAndWaitResult['event']>;
+  ): Promise<BrowserEngineActionWaitEvent>;
   storageState(context: BrowserContextHandle): Promise<BrowserStorageState>;
 }

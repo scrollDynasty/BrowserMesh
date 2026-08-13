@@ -148,6 +148,14 @@ export type ActionWaitCondition =
       readonly matcher: UrlMatcher;
       readonly method?: string;
       readonly status?: number;
+    }
+  | { readonly kind: 'popup' }
+  | {
+      readonly kind: 'dialog';
+      readonly dialogType: 'alert' | 'beforeunload' | 'confirm' | 'prompt';
+      readonly action: 'accept' | 'dismiss';
+      /** Text supplied only when accepting a prompt dialog. */
+      readonly promptText?: string;
     };
 
 export interface WaitResult {
@@ -157,12 +165,22 @@ export interface WaitResult {
 export interface ActionAndWaitResult {
   readonly action: BrowserAction;
   readonly wait: ActionWaitCondition;
-  readonly event: {
-    readonly kind: 'navigation' | 'response';
-    readonly url: string;
-    readonly method?: string;
-    readonly status?: number;
-  };
+  readonly event:
+    | {
+        readonly kind: 'navigation' | 'response';
+        readonly url: string;
+        readonly method?: string;
+        readonly status?: number;
+      }
+    | { readonly kind: 'popup'; readonly page: PageView; readonly url?: undefined }
+    | {
+        readonly kind: 'dialog';
+        readonly dialogType: 'alert' | 'beforeunload' | 'confirm' | 'prompt';
+        readonly action: 'accept' | 'dismiss';
+        readonly message: string;
+        readonly defaultValue: string;
+        readonly url?: undefined;
+      };
 }
 
 export interface OperationResult<T> {

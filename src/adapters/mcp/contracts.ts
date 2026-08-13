@@ -116,6 +116,13 @@ const actionWaitSchema = z.discriminatedUnion('kind', [
     method: z.string().optional(),
     status: z.number().int().optional(),
   }),
+  z.object({ kind: z.literal('popup') }),
+  z.object({
+    kind: z.literal('dialog'),
+    dialogType: z.enum(['alert', 'beforeunload', 'confirm', 'prompt']),
+    action: z.enum(['accept', 'dismiss']),
+    promptText: z.string().optional(),
+  }),
 ]);
 const waitedEventSchema = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('navigation'), url: z.string() }),
@@ -124,6 +131,14 @@ const waitedEventSchema = z.discriminatedUnion('kind', [
     url: z.string(),
     method: z.string().optional(),
     status: z.number().int().optional(),
+  }),
+  z.object({ kind: z.literal('popup'), page: pageViewSchema }),
+  z.object({
+    kind: z.literal('dialog'),
+    dialogType: z.enum(['alert', 'beforeunload', 'confirm', 'prompt']),
+    action: z.enum(['accept', 'dismiss']),
+    message: z.string(),
+    defaultValue: z.string(),
   }),
 ]);
 

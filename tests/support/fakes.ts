@@ -1,6 +1,7 @@
 import type {
   BrowserContextHandle,
   BrowserEnginePort,
+  BrowserEngineActionWaitEvent,
   BrowserPageHandle,
   BrowserObservation,
 } from '../../src/application/ports/browser-engine.js';
@@ -12,12 +13,7 @@ import type {
 import { BrowserMeshError } from '../../src/domain/errors.js';
 import type { BrowserContextSettings } from '../../src/domain/context-settings.js';
 import type { BrowserStorageState, Locator, SnapshotOptions } from '../../src/domain/models.js';
-import type {
-  ActionAndWaitResult,
-  ActionWaitCondition,
-  BrowserAction,
-  WaitCondition,
-} from '../../src/domain/models.js';
+import type { ActionWaitCondition, BrowserAction, WaitCondition } from '../../src/domain/models.js';
 import type { IdGenerator } from '../../src/infrastructure/id.js';
 import { BrowserMeshRuntime, type RuntimeOptions } from '../../src/runtime/browsermesh-runtime.js';
 
@@ -63,6 +59,7 @@ export class FakeEngine implements BrowserEnginePort {
   failNextInteraction = false;
   private readonly disconnectedListeners = new Set<() => void>();
   private readonly observers = new Map<symbol, Set<(event: BrowserObservation) => void>>();
+  private readonly pageClosedListeners = new Map<symbol, Set<() => void>>();
 
   get observerCount(): number {
     return Array.from(this.observers.values()).reduce(
@@ -152,6 +149,17 @@ export class FakeEngine implements BrowserEnginePort {
     page.closed = true;
     this.pages.delete(handle.id);
     this.contexts.get(page.contextId)?.pages.delete(page.id);
+    for (const listener of this.pageClosedListeners.get(page.id) ?? []) listener();
+    this.pageClosedListeners.delete(page.id);
+  }
+  onPageClosed(handle: BrowserPageHandle, listener: () => void): () => void {
+    const listeners = this.pageClosedListeners.get(handle.id) ?? new Set();
+    listeners.add(listener);
+    this.pageClosedListeners.set(handle.id, listeners);
+    return () => {
+      listeners.delete(listener);
+      if (listeners.size === 0) this.pageClosedListeners.delete(handle.id);
+    };
   }
   observePage(
     handle: BrowserPageHandle,
@@ -255,7 +263,7 @@ export class FakeEngine implements BrowserEnginePort {
     handle: BrowserPageHandle,
     action: BrowserAction,
     wait: ActionWaitCondition,
-  ): Promise<ActionAndWaitResult['event']> {
+  ): Promise<BrowserEngineActionWaitEvent> {
     const page = this.page(handle);
     this.compositeOrder.push('waiter');
     this.onCompositeStart?.();
@@ -269,6 +277,19 @@ export class FakeEngine implements BrowserEnginePort {
       const url = wait.matcher?.value ?? page.currentUrl;
       page.currentUrl = url;
       return { kind: 'navigation', url };
+    }
+    if (wait.kind === 'popup') {
+      const popup = await this.createPage({ id: page.contextId });
+      return { kind: 'popup', page: popup };
+    }
+    if (wait.kind === 'dialog') {
+      return {
+        kind: 'dialog',
+        dialogType: wait.dialogType,
+        action: wait.action,
+        message: 'Fake dialog',
+        defaultValue: wait.dialogType === 'prompt' ? 'default' : '',
+      };
     }
     return {
       kind: 'response',

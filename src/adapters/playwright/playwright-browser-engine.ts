@@ -2,6 +2,7 @@ import {
   chromium,
   type Browser,
   type BrowserContext,
+  type Dialog,
   type Frame,
   type ElementHandle,
   type Locator as PwLocator,
@@ -16,6 +17,7 @@ import type {
   BrowserContextHandle,
   BrowserEngineLaunchOptions,
   BrowserEngineDiagnostics,
+  BrowserEngineActionWaitEvent,
   BrowserEnginePort,
   BrowserPageHandle,
   BrowserObservation,
@@ -27,7 +29,6 @@ import {
 } from '../../application/operation-control.js';
 import { BrowserMeshError } from '../../domain/errors.js';
 import type {
-  ActionAndWaitResult,
   ActionWaitCondition,
   BrowserAction,
   BrowserStorageState,
@@ -191,16 +192,7 @@ export class PlaywrightBrowserEngine implements BrowserEnginePort {
       () => context.newPage(),
       'Failed to create browser page',
     );
-    const pageHandle: PageHandle = { id: Symbol('page'), kind: 'page' };
-    this.pages.set(pageHandle.id, page);
-    page.on('framenavigated', (frame) => {
-      if (frame === page.mainFrame()) this.elementRefs.delete(pageHandle.id);
-    });
-    page.once('close', () => {
-      this.elementRefs.delete(pageHandle.id);
-      this.pages.delete(pageHandle.id);
-    });
-    return pageHandle;
+    return this.registerPage(page);
   }
 
   listPages(handle: BrowserContextHandle): readonly BrowserPageHandle[] {
@@ -218,6 +210,12 @@ export class PlaywrightBrowserEngine implements BrowserEnginePort {
     await this.wrapBrowserAction(() => page.close(), 'Failed to close browser page');
     this.elementRefs.delete(handle.id);
     this.pages.delete(handle.id);
+  }
+
+  onPageClosed(handle: BrowserPageHandle, listener: () => void): () => void {
+    const page = this.getPage(handle);
+    page.on('close', listener);
+    return () => page.off('close', listener);
   }
 
   observePage(
@@ -728,10 +726,10 @@ export class PlaywrightBrowserEngine implements BrowserEnginePort {
     action: BrowserAction,
     wait: ActionWaitCondition,
     control: OperationControl,
-  ): Promise<ActionAndWaitResult['event']> {
+  ): Promise<BrowserEngineActionWaitEvent> {
     throwIfCancelled(control.signal);
     const page = this.getPage(handle);
-    const waiter = createEventWaiter(page, wait, control);
+    const waiter = createEventWaiter(page, wait, control, (popup) => this.registerPage(popup));
     const actionPromise = this.performCompositeAction(
       handle,
       action,
@@ -744,7 +742,11 @@ export class PlaywrightBrowserEngine implements BrowserEnginePort {
     waiter.dispose();
     const actionResult = settled[0];
     const waitResult = settled[1];
-    if (actionResult.status === 'rejected') throw actionResult.reason;
+    if (actionResult.status === 'rejected') {
+      if (waitResult.status === 'fulfilled' && waitResult.value.kind === 'popup')
+        await this.closePage(waitResult.value.page);
+      throw actionResult.reason;
+    }
     if (waitResult.status === 'rejected') throw waitResult.reason;
     return waitResult.value;
   }
@@ -782,6 +784,21 @@ export class PlaywrightBrowserEngine implements BrowserEnginePort {
           timeoutMs,
         );
     }
+  }
+
+  private registerPage(page: Page): BrowserPageHandle {
+    const existing = Array.from(this.pages).find(([, candidate]) => candidate === page)?.[0];
+    if (existing !== undefined) return { id: existing };
+    const pageHandle: PageHandle = { id: Symbol('page'), kind: 'page' };
+    this.pages.set(pageHandle.id, page);
+    page.on('framenavigated', (frame) => {
+      if (frame === page.mainFrame()) this.elementRefs.delete(pageHandle.id);
+    });
+    page.once('close', () => {
+      this.elementRefs.delete(pageHandle.id);
+      this.pages.delete(pageHandle.id);
+    });
+    return pageHandle;
   }
 
   private getContext(handle: BrowserContextHandle): BrowserContext {
@@ -1049,7 +1066,7 @@ function ambiguousLocator(locator: Locator): BrowserMeshError {
 }
 
 interface EventWaiter {
-  readonly promise: Promise<ActionAndWaitResult['event']>;
+  readonly promise: Promise<BrowserEngineActionWaitEvent>;
   cancel(error: unknown): void;
   dispose(): void;
 }
@@ -1058,15 +1075,16 @@ function createEventWaiter(
   page: Page,
   wait: ActionWaitCondition,
   control: OperationControl,
+  registerPopup: (popup: Page) => BrowserPageHandle,
 ): EventWaiter {
   let settled = false;
-  let resolvePromise!: (value: ActionAndWaitResult['event']) => void;
+  let resolvePromise!: (value: BrowserEngineActionWaitEvent) => void;
   let rejectPromise!: (reason: unknown) => void;
-  const promise = new Promise<ActionAndWaitResult['event']>((resolve, reject) => {
+  const promise = new Promise<BrowserEngineActionWaitEvent>((resolve, reject) => {
     resolvePromise = resolve;
     rejectPromise = reject;
   });
-  const finish = (event: ActionAndWaitResult['event']): void => {
+  const finish = (event: BrowserEngineActionWaitEvent): void => {
     if (settled) return;
     settled = true;
     resolvePromise(event);
@@ -1103,8 +1121,58 @@ function createEventWaiter(
       status: response.status(),
     });
   };
+  const onPopup = (popup: Page): void => {
+    if (wait.kind !== 'popup') return;
+    finish({ kind: 'popup', page: registerPopup(popup) });
+  };
+  const onDialog = (dialog: Dialog): void => {
+    if (wait.kind !== 'dialog') return;
+    void (async () => {
+      if (dialog.type() !== wait.dialogType) {
+        await dialog.dismiss();
+        fail(
+          new BrowserMeshError(
+            'BROWSER_ERROR',
+            `Expected ${wait.dialogType} dialog but received ${dialog.type()}`,
+            { details: { expectedDialogType: wait.dialogType, actualDialogType: dialog.type() } },
+          ),
+        );
+        return;
+      }
+      const event: BrowserEngineActionWaitEvent = {
+        kind: 'dialog',
+        dialogType: wait.dialogType,
+        action: wait.action,
+        message: boundString(dialog.message(), 2_000),
+        defaultValue: boundString(dialog.defaultValue(), 2_000),
+      };
+      if (wait.action === 'accept') await dialog.accept(wait.promptText);
+      else await dialog.dismiss();
+      finish(event);
+    })().catch(async (error: unknown) => {
+      try {
+        await dialog.dismiss();
+      } catch (cleanupError) {
+        fail(
+          new BrowserMeshError('BROWSER_ERROR', 'Dialog handling and cleanup both failed', {
+            cause: new AggregateError([error, cleanupError]),
+          }),
+        );
+        return;
+      }
+      fail(
+        error instanceof BrowserMeshError
+          ? error
+          : new BrowserMeshError('BROWSER_ERROR', 'Failed to handle browser dialog', {
+              cause: error,
+            }),
+      );
+    });
+  };
   page.on('framenavigated', onNavigation);
   page.on('response', onResponse);
+  page.on('popup', onPopup);
+  page.on('dialog', onDialog);
   const onAbort = (): void => {
     try {
       throwIfCancelled(control.signal);
@@ -1120,6 +1188,8 @@ function createEventWaiter(
     control.signal?.removeEventListener('abort', onAbort);
     page.off('framenavigated', onNavigation);
     page.off('response', onResponse);
+    page.off('popup', onPopup);
+    page.off('dialog', onDialog);
   };
   if (control.signal?.aborted === true) onAbort();
   void promise.finally(dispose).catch(() => undefined);
