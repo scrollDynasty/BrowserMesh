@@ -281,6 +281,22 @@ describe('real Chromium runtime', () => {
     await expect(runtime.getTitle(target)).resolves.toMatchObject({ value: 'Wait conditions' });
   });
 
+  it('cancels an active passive wait promptly and leaves its session queue usable', async () => {
+    const target = await createTarget();
+    await runtime.navigate(target, `${web.baseUrl}/waits`);
+    const controller = new AbortController();
+    const waiting = runtime.wait(
+      { ...target, timeoutMs: 5_000, signal: controller.signal },
+      { kind: 'text', text: 'will-never-appear', state: 'present' },
+    );
+    await new Promise<void>((resolve) => setTimeout(resolve, 50));
+    const startedAt = Date.now();
+    controller.abort(new DOMException('cancelled by test', 'AbortError'));
+    await expect(waiting).rejects.toMatchObject({ name: 'AbortError' });
+    expect(Date.now() - startedAt).toBeLessThan(1_000);
+    await expect(runtime.getUrl(target)).resolves.toMatchObject({ value: `${web.baseUrl}/waits` });
+  });
+
   it('registers composite navigation and response waiters before click actions', async () => {
     const target = await createTarget();
     await runtime.navigate(target, `${web.baseUrl}/action-waits`);

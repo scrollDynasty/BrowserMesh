@@ -1,3 +1,5 @@
+import { throwIfCancelled } from '../application/operation-control.js';
+
 export class SerialQueue {
   private tail: Promise<void> = Promise.resolve();
   private pendingCount = 0;
@@ -6,9 +8,17 @@ export class SerialQueue {
     return this.pendingCount;
   }
 
-  run<T>(task: () => Promise<T>): Promise<T> {
+  run<T>(task: () => Promise<T>, signal?: AbortSignal): Promise<T> {
     this.pendingCount += 1;
-    const result = this.tail.then(task, task);
+    const start = async (): Promise<T> => {
+      // A request cancelled while waiting must never touch browser state.
+      throwIfCancelled(signal);
+      const value = await task();
+      // Do not release the queue early for an in-flight action that cannot be aborted.
+      throwIfCancelled(signal);
+      return value;
+    };
+    const result = this.tail.then(start, start);
     this.tail = result.then(
       () => undefined,
       () => undefined,
