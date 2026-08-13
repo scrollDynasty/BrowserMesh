@@ -8,6 +8,7 @@ import type {
 } from '../../domain/models.js';
 import type { BrowserObservation } from '../../domain/observability.js';
 import type { OperationControl } from '../operation-control.js';
+import type { BrowserContextSettings } from '../../domain/context-settings.js';
 
 export interface BrowserPageHandle {
   readonly id: symbol;
@@ -40,6 +41,7 @@ export interface BrowserEnginePort {
   createContext(options: {
     readonly control: OperationControl;
     readonly storageState?: BrowserStorageState;
+    readonly settings: BrowserContextSettings;
   }): Promise<BrowserContextHandle>;
   closeContext(context: BrowserContextHandle): Promise<void>;
   createPage(context: BrowserContextHandle): Promise<BrowserPageHandle>;

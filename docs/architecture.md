@@ -558,6 +558,13 @@ separate correlated request pairs. Only page-owned HTTP(S) metadata enters the p
 EventSource but excluding service-worker traffic, WebSockets, `data:` and `blob:` URLs.
 
 Snapshot bounds, context settings, and new actions are engine-independent value contracts.
+Session context settings are normalized and validated by the runtime before the Playwright adapter
+is invoked. Each session entry retains an immutable effective value and passes it through the
+`BrowserEnginePort` context-creation boundary; session views return defensive copies. The MCP
+schema duplicates basic bounds for early feedback, while runtime validation remains authoritative
+for direct API callers. Saved storage state and context settings are orthogonal: restoring storage
+does not persist or override the newly requested context profile.
+
 Typed hover, focus, check, uncheck, double-click, and scroll-into-view follow that boundary: MCP
 validates a semantic locator, runtime routes through the addressed session queue, and only the
 Playwright adapter resolves and acts on the concrete locator. Queued cancellation never reaches the

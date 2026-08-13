@@ -2,6 +2,54 @@ import { describe, expect, it } from 'vitest';
 import { FakeEngine, testRuntime } from '../support/fakes.js';
 
 describe('BrowserMeshRuntime', () => {
+  it('normalizes, exposes, and isolates immutable context settings', async () => {
+    const { runtime, engine } = testRuntime();
+    const supplied = {
+      viewport: { width: 800, height: 600 },
+      deviceScaleFactor: 2,
+      locale: 'EN-us',
+      timezoneId: 'Etc/UTC',
+      colorScheme: 'dark',
+      reducedMotion: 'reduce',
+      userAgent: 'BrowserMesh test agent',
+    } as const;
+    const first = await runtime.createSession({ contextSettings: supplied });
+    const second = await runtime.createSession({ contextSettings: { locale: 'fr-FR' } });
+    expect(first.value.contextSettings).toEqual({
+      ...supplied,
+      locale: 'en-US',
+      timezoneId: 'UTC',
+    });
+    expect(second.value.contextSettings).toEqual({ locale: 'fr-FR' });
+    expect(Array.from(engine.contexts.values(), ({ settings }) => settings)).toEqual([
+      first.value.contextSettings,
+      second.value.contextSettings,
+    ]);
+    (first.value.contextSettings.viewport as { width: number }).width = 1;
+    expect((await runtime.getSession(first.sessionId)).value.contextSettings.viewport?.width).toBe(
+      800,
+    );
+    await runtime.shutdown();
+  });
+
+  it('rejects unsafe context settings before creating browser resources', async () => {
+    const { runtime, engine } = testRuntime();
+    for (const contextSettings of [
+      { viewport: { width: 0, height: 600 } },
+      { deviceScaleFactor: Number.POSITIVE_INFINITY },
+      { locale: 'not_a_locale' },
+      { timezoneId: 'Mars/Olympus' },
+      { userAgent: 'unsafe\nheader' },
+    ]) {
+      await expect(runtime.createSession({ contextSettings })).rejects.toMatchObject({
+        code: 'INVALID_ARGUMENT',
+      });
+    }
+    expect(engine.contexts.size).toBe(0);
+    expect((await runtime.listSessions()).value).toEqual([]);
+    await runtime.shutdown();
+  });
+
   it('returns the initial page, correlates operations, and closes idempotently', async () => {
     const { runtime, engine } = testRuntime();
     const createdA = await runtime.createSession({ name: 'a' });
