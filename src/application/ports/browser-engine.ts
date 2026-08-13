@@ -4,6 +4,7 @@ import type {
   BrowserAction,
   BrowserStorageState,
   Locator,
+  SnapshotOptions,
   WaitCondition,
 } from '../../domain/models.js';
 import type { BrowserObservation } from '../../domain/observability.js';
@@ -87,7 +88,11 @@ export interface BrowserEnginePort {
     value: string,
     control: OperationControl,
   ): Promise<void>;
-  snapshot(page: BrowserPageHandle, control: OperationControl): Promise<string>;
+  snapshot(
+    page: BrowserPageHandle,
+    options: Pick<SnapshotOptions, 'scope' | 'maxDepth' | 'includeBoundingBoxes'>,
+    control: OperationControl,
+  ): Promise<string>;
   visibleText(
     page: BrowserPageHandle,
     locator: Locator,

@@ -44,6 +44,42 @@ export type Locator =
       readonly value: string;
     };
 
+export interface SnapshotOptions {
+  /** Restrict the snapshot to one explicitly resolved page locator. */
+  readonly scope?: Locator;
+  /** Maximum ARIA tree depth, passed to the browser engine's supported snapshot API. */
+  readonly maxDepth?: number;
+  /** Include viewport-relative CSS-pixel boxes in the ARIA snapshot. */
+  readonly includeBoundingBoxes?: boolean;
+  /** Maximum Unicode code points returned in snapshot content. */
+  readonly maxChars?: number;
+  /** Maximum UTF-8 bytes returned in snapshot content. */
+  readonly maxBytes?: number;
+}
+
+export interface SnapshotResult {
+  readonly snapshot: string;
+  /** A partial result is an ARIA YAML fragment and must not be parsed as a complete snapshot. */
+  readonly contentFormat: 'aria-yaml' | 'aria-yaml-fragment';
+  readonly partial: boolean;
+  readonly appliedBounds: {
+    readonly scope: Locator | null;
+    readonly maxDepth: number | null;
+    readonly includeBoundingBoxes: boolean;
+    readonly maxChars: number;
+    readonly maxBytes: number;
+  };
+  readonly truncation: {
+    readonly truncated: boolean;
+    readonly byMaxChars: boolean;
+    readonly byMaxBytes: boolean;
+    readonly originalChars: number;
+    readonly originalBytes: number;
+    readonly returnedChars: number;
+    readonly returnedBytes: number;
+  };
+}
+
 export type UrlMatcher =
   | { readonly kind: 'exact'; readonly value: string }
   | { readonly kind: 'glob'; readonly value: string };

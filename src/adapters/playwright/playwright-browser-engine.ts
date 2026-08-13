@@ -30,6 +30,7 @@ import type {
   BrowserAction,
   BrowserStorageState,
   Locator,
+  SnapshotOptions,
   UrlMatcher,
   WaitCondition,
 } from '../../domain/models.js';
@@ -503,25 +504,36 @@ export class PlaywrightBrowserEngine implements BrowserEnginePort {
     );
   }
 
-  async snapshot(handle: BrowserPageHandle, control: OperationControl): Promise<string> {
+  async snapshot(
+    handle: BrowserPageHandle,
+    options: Pick<SnapshotOptions, 'scope' | 'maxDepth' | 'includeBoundingBoxes'>,
+    control: OperationControl,
+  ): Promise<string> {
     throwIfCancelled(control.signal);
-    return this.wrapAction(
-      async () => {
-        const page = this.getPage(handle);
-        const passwordValuesBefore = await readPasswordValues(page);
-        const snapshot = await this.locate(page, {
-          strategy: 'css',
-          value: 'body',
-        }).ariaSnapshot({
-          timeout: control.timeoutMs,
-        });
-        const passwordValuesAfter = await readPasswordValues(page);
-        return redactSecretValues(snapshot, [...passwordValuesBefore, ...passwordValuesAfter]);
-      },
-      'BROWSER_ERROR',
-      'Failed to capture page snapshot',
-      control.timeoutMs,
-    );
+    const page = this.getPage(handle);
+    const scope = options.scope ?? { strategy: 'css', value: 'body' as const };
+    const capture = async (): Promise<string> => {
+      const passwordValuesBefore = await readPasswordValues(page);
+      throwIfCancelled(control.signal);
+      const snapshot = await this.locate(page, scope).ariaSnapshot({
+        timeout: control.timeoutMs,
+        ...(control.signal === undefined ? {} : { signal: control.signal }),
+        ...(options.maxDepth === undefined ? {} : { depth: options.maxDepth }),
+        boxes: options.includeBoundingBoxes ?? false,
+      });
+      throwIfCancelled(control.signal);
+      const passwordValuesAfter = await readPasswordValues(page);
+      throwIfCancelled(control.signal);
+      return redactSecretValues(snapshot, [...passwordValuesBefore, ...passwordValuesAfter]);
+    };
+    return options.scope === undefined
+      ? this.wrapAction(
+          capture,
+          'BROWSER_ERROR',
+          'Failed to capture page snapshot',
+          control.timeoutMs,
+        )
+      : this.wrapElement(capture, 'capture snapshot', options.scope, control.timeoutMs);
   }
 
   async visibleText(
@@ -750,6 +762,7 @@ export class PlaywrightBrowserEngine implements BrowserEnginePort {
       return await action();
     } catch (error) {
       if (error instanceof BrowserMeshError) throw error;
+      if (isCancellation(error)) throw error;
       const timedOut = error instanceof Error && error.name === 'TimeoutError';
       const ambiguous = isStrictModeViolation(error);
       const cause = errorMessage(error);

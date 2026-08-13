@@ -1,6 +1,6 @@
 # BrowserMesh Professional MCP Improvement Plan
 
-Status: accepted post-v0.1 improvement roadmap; implementation pending
+Status: accepted post-v0.1 improvement roadmap; implementation in progress
 
 Prepared: 2026-08-13
 
@@ -346,6 +346,11 @@ Requirements for refs:
 - stale refs return a dedicated, recoverable error such as `STALE_ELEMENT_REFERENCE`.
 
 Do not expose raw Playwright `Locator` or `ElementHandle` objects.
+
+Implementation checkpoint: the first bounded-snapshot slice implements semantic scope,
+`maxDepth`, optional bounding boxes, and explicit snapshot-content `maxChars`/`maxBytes` partial metadata using the
+documented Playwright 1.62 API. `interactiveOnly`, `maxChildren`, pagination, and references remain
+deferred until their engine-neutral transform or lifecycle contract is complete.
 
 ## 9. P1: browser-context and interaction coverage
 

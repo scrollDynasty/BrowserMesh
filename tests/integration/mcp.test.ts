@@ -156,6 +156,15 @@ describe('MCP adapter', () => {
       expect(readText(invalid)).toContain('Input validation error');
       expect(readText(invalid)).not.toContain('SESSION_NOT_FOUND');
 
+      const invalidSnapshotBound = requireCallResult(
+        await client.callTool({
+          name: 'browser_snapshot',
+          arguments: { sessionId: 'session', pageId: 'page', maxChars: 0 },
+        }),
+      );
+      expect(invalidSnapshotBound.isError).toBe(true);
+      expect(readText(invalidSnapshotBound)).toContain('Input validation error');
+
       const additionalPage = await callSuccess(client, 'browser_page_create', {
         sessionId: target.sessionId,
       });
@@ -174,7 +183,32 @@ describe('MCP adapter', () => {
       await callSuccess(client, 'browser_reload', target);
       await callSuccess(client, 'browser_get_url', target);
       await callSuccess(client, 'browser_get_title', target);
-      await callSuccess(client, 'browser_snapshot', target);
+      const boundedSnapshot = await callSuccess(client, 'browser_snapshot', {
+        ...target,
+        scope: { strategy: 'role', value: 'button', name: 'Submit' },
+        maxDepth: 1,
+        includeBoundingBoxes: true,
+        maxChars: 4,
+        maxBytes: 4,
+      });
+      expect(boundedSnapshot.structuredContent).toMatchObject({
+        snapshot: '- do',
+        contentFormat: 'aria-yaml-fragment',
+        partial: true,
+        appliedBounds: {
+          scope: { strategy: 'role', value: 'button', name: 'Submit', exact: true },
+          maxDepth: 1,
+          includeBoundingBoxes: true,
+          maxChars: 4,
+          maxBytes: 4,
+        },
+        truncation: { truncated: true, byMaxChars: true, byMaxBytes: true },
+      });
+      expect(engine.lastSnapshotOptions).toEqual({
+        scope: { strategy: 'role', value: 'button', name: 'Submit', exact: true },
+        maxDepth: 1,
+        includeBoundingBoxes: true,
+      });
       await callSuccess(client, 'browser_visible_text', {
         ...target,
         locator: { strategy: 'testId', value: 'status' },
