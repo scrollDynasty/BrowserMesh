@@ -13,6 +13,7 @@ import type {
 } from '../../domain/models.js';
 import { SNAPSHOT_LIMITS } from '../../domain/snapshots.js';
 import { BrowserMeshError } from '../../domain/errors.js';
+import { DEFAULT_RESOURCE_LIMITS } from '../../domain/resource-limits.js';
 import { BROWSERMESH_VERSION } from '../../infrastructure/generated/version.js';
 import type { BrowserMeshRuntime, OperationTarget } from '../../runtime/browsermesh-runtime.js';
 import { contextSettingsSchema, contractFor } from './contracts.js';
@@ -30,6 +31,51 @@ const role = z.enum([
   'option',
   'tab',
 ]);
+const safeLabel = (maximum: number) =>
+  z
+    .string()
+    .min(1)
+    .max(maximum)
+    .refine(
+      (value) =>
+        Array.from(value, (character) => character.codePointAt(0) ?? 0).every(
+          (codePoint) => codePoint > 31 && (codePoint < 127 || codePoint > 159),
+        ),
+      'Control characters are not allowed',
+    );
+const safeMetadataValue = z
+  .string()
+  .max(DEFAULT_RESOURCE_LIMITS.session.maxMetadataValueChars)
+  .refine(
+    (value) =>
+      Array.from(value, (character) => character.codePointAt(0) ?? 0).every(
+        (codePoint) => codePoint > 31 && (codePoint < 127 || codePoint > 159),
+      ),
+    'Control characters are not allowed',
+  );
+const sessionMetadataSchema = z
+  .record(safeLabel(DEFAULT_RESOURCE_LIMITS.session.maxMetadataKeyChars), safeMetadataValue)
+  .refine(
+    (metadata) =>
+      Object.keys(metadata).length <= DEFAULT_RESOURCE_LIMITS.session.maxMetadataEntries,
+    'Too many metadata entries',
+  )
+  .refine(
+    (metadata) =>
+      Object.keys(metadata).every(
+        (key) => !['__proto__', 'constructor', 'prototype'].includes(key),
+      ),
+    'Dangerous metadata keys are not allowed',
+  )
+  .refine(
+    (metadata) =>
+      Object.entries(metadata).reduce(
+        (bytes, [key, value]) =>
+          bytes + Buffer.byteLength(key, 'utf8') + Buffer.byteLength(value, 'utf8'),
+        0,
+      ) <= DEFAULT_RESOURCE_LIMITS.session.maxMetadataBytes,
+    'Metadata aggregate byte limit exceeded',
+  );
 const locatorSelectorSchema = z.discriminatedUnion('strategy', [
   z.object({
     strategy: z.literal('role'),
@@ -255,8 +301,8 @@ export function createMcpServer(runtime: BrowserMeshRuntime): McpServer {
       description:
         'Create a new isolated browser session with its own cookies, storage, pages, and optional validated contextSettings (viewport, scale, locale, timezone, color scheme, reduced motion, user agent, geolocation, and explicit origin-scoped geolocation grants). Only the geolocation permission is supported; each grant must name one absolute HTTP(S) origin, never a wildcard. Create a separate session whenever a task involves a different user, account, role, authentication state, device profile, accessibility preference, permission profile, or independent parallel workflow; never reuse one session for identities or context settings that must remain isolated. The response directly returns both sessionId and the deterministic initial pageId plus normalized effective settings. Pass stateId only to restore previously saved browser state.',
       inputSchema: {
-        name: z.string().min(1).max(128).optional(),
-        metadata: z.record(z.string(), z.string()).optional(),
+        name: safeLabel(DEFAULT_RESOURCE_LIMITS.session.maxNameChars).optional(),
+        metadata: sessionMetadataSchema.optional(),
         stateId: z.string().min(1).max(128).optional(),
         contextSettings: contextSettingsSchema.optional(),
       },
@@ -463,7 +509,19 @@ export function createMcpServer(runtime: BrowserMeshRuntime): McpServer {
       inputSchema: { ...targetSchema, locator: locatorSchema },
     },
     (input, extra) =>
-      pageValue(runtime.visibleText(target(input, extra.signal), input.locator as Locator), 'text'),
+      structuredResult(async () => {
+        const completed = await runtime.visibleText(
+          target(input, extra.signal),
+          input.locator as Locator,
+        );
+        return {
+          operationId: completed.operationId,
+          sessionId: completed.sessionId,
+          pageId: completed.pageId,
+          text: completed.value,
+          truncation: completed.truncation,
+        };
+      }),
   );
   server.registerTool(
     'browser_console_list',
@@ -755,6 +813,9 @@ export function createMcpServer(runtime: BrowserMeshRuntime): McpServer {
           sessionId: capture.sessionId,
           pageId: capture.pageId,
           mimeType: 'image/png' as const,
+          width: capture.width,
+          height: capture.height,
+          bytes: capture.bytes,
         };
         return {
           structuredContent,

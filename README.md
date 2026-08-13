@@ -404,7 +404,10 @@ metadata are bounded.
 
 Screenshots are returned as MCP image content instead of being written to a caller-controlled
 filesystem path. The optional `capture` mode selects the viewport, the full scrollable page, or one
-strictly resolved semantic/CSS element; the default remains the viewport.
+strictly resolved semantic/CSS element; the default remains the viewport. Structured output reports
+actual PNG width, height, and encoded bytes. BrowserMesh measures CSS-pixel dimensions before capture
+and validates actual PNG dimensions and bytes afterward; configured overflow returns
+`LIMIT_EXCEEDED` and does not poison the session queue.
 
 ### Persistence
 
@@ -417,6 +420,10 @@ strictly resolved semantic/CSS element; the default remains the viewport.
 Without `stateId`, it creates a fresh isolated context.
 
 With `stateId`, it initializes the new context using a previously saved BrowserMesh state.
+
+Saved-state count, individual bytes, and aggregate bytes are centrally bounded. Quota checks and
+atomic replacement are serialized across all state IDs; a rejected replacement preserves the old
+state. Existing files are size-checked and read with a hard bound before JSON parsing.
 
 `browser_session_create` also accepts an optional `contextSettings` object for an isolated viewport,
 device scale factor, locale, timezone, color scheme, reduced-motion preference, and user agent. The
@@ -600,6 +607,14 @@ BrowserMesh never attempts to serialize a live `BrowserContext`, open pages, pen
 | `BROWSERMESH_OBSERVABILITY_STRING_CHARS`   |         `2048` | Maximum exposed event string length            |
 | `BROWSERMESH_OBSERVABILITY_PAGE_SIZE`      |          `100` | Maximum events returned by one read            |
 | `BROWSERMESH_OBSERVABILITY_RESPONSE_BYTES` |        `65536` | Maximum serialized observability response size |
+| `BROWSERMESH_SCREENSHOT_MAX_DIMENSION`     |        `10000` | Maximum PNG width or height in CSS pixels      |
+| `BROWSERMESH_SCREENSHOT_MAX_PIXELS`        |     `40000000` | Maximum total PNG pixels                       |
+| `BROWSERMESH_SCREENSHOT_MAX_BYTES`         |     `16777216` | Maximum encoded PNG bytes                      |
+| `BROWSERMESH_VISIBLE_TEXT_MAX_CHARS`       |        `20000` | Maximum returned Unicode code points           |
+| `BROWSERMESH_VISIBLE_TEXT_MAX_BYTES`       |        `65536` | Maximum returned visible-text UTF-8 bytes      |
+| `BROWSERMESH_MAX_SAVED_STATES`             |          `100` | Maximum persisted logical states               |
+| `BROWSERMESH_MAX_STATE_BYTES`              |      `1048576` | Maximum bytes in one persisted state           |
+| `BROWSERMESH_MAX_STATE_TOTAL_BYTES`        |     `16777216` | Maximum aggregate persisted-state bytes        |
 
 Configuration is read and validated centrally.
 
@@ -610,6 +625,12 @@ silently ignored. Browser startup remains lazy in either mode, so MCP discovery 
 setup errors stay available when Chromium has not been installed yet. The configured
 `BROWSERMESH_TIMEOUT_MS` also bounds browser launch. Set a larger per-tool `timeoutMs` only for
 operations that are expected to take longer than the safe default.
+
+Session labels are bounded even for direct runtime callers: names allow at most 128 Unicode code
+points, metadata at most 32 entries, and keys/values have character, UTF-8 byte, and aggregate byte
+limits. Control characters and dangerous object keys are rejected before BrowserMesh allocates a
+session ID, context, or page. `browser_visible_text` retains its `text` field and adds explicit
+truncation metadata so a client can distinguish complete evidence from a bounded prefix.
 
 Direct scattered `process.env` access throughout the codebase is not allowed.
 

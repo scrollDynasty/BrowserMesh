@@ -1,5 +1,6 @@
 import { resolve } from 'node:path';
 import { z } from 'zod';
+import { DEFAULT_RESOURCE_LIMITS, type ResourceLimits } from '../domain/resource-limits.js';
 
 const booleanString = z.enum(['true', 'false']).transform((value) => value === 'true');
 
@@ -25,6 +26,54 @@ const environmentSchema = z.object({
     .min(1_024)
     .max(262_144)
     .default(65_536),
+  BROWSERMESH_SCREENSHOT_MAX_DIMENSION: z.coerce
+    .number()
+    .int()
+    .min(256)
+    .max(32_768)
+    .default(DEFAULT_RESOURCE_LIMITS.screenshot.maxDimensionPixels),
+  BROWSERMESH_SCREENSHOT_MAX_PIXELS: z.coerce
+    .number()
+    .int()
+    .min(65_536)
+    .max(268_435_456)
+    .default(DEFAULT_RESOURCE_LIMITS.screenshot.maxPixels),
+  BROWSERMESH_SCREENSHOT_MAX_BYTES: z.coerce
+    .number()
+    .int()
+    .min(1_024)
+    .max(67_108_864)
+    .default(DEFAULT_RESOURCE_LIMITS.screenshot.maxBytes),
+  BROWSERMESH_VISIBLE_TEXT_MAX_CHARS: z.coerce
+    .number()
+    .int()
+    .min(128)
+    .max(1_000_000)
+    .default(DEFAULT_RESOURCE_LIMITS.visibleText.maxChars),
+  BROWSERMESH_VISIBLE_TEXT_MAX_BYTES: z.coerce
+    .number()
+    .int()
+    .min(512)
+    .max(4_194_304)
+    .default(DEFAULT_RESOURCE_LIMITS.visibleText.maxBytes),
+  BROWSERMESH_MAX_SAVED_STATES: z.coerce
+    .number()
+    .int()
+    .positive()
+    .max(10_000)
+    .default(DEFAULT_RESOURCE_LIMITS.persistence.maxStates),
+  BROWSERMESH_MAX_STATE_BYTES: z.coerce
+    .number()
+    .int()
+    .min(1_024)
+    .max(67_108_864)
+    .default(DEFAULT_RESOURCE_LIMITS.persistence.maxStateBytes),
+  BROWSERMESH_MAX_STATE_TOTAL_BYTES: z.coerce
+    .number()
+    .int()
+    .min(1_024)
+    .max(1_073_741_824)
+    .default(DEFAULT_RESOURCE_LIMITS.persistence.maxTotalBytes),
 });
 
 export interface BrowserMeshConfig {
@@ -41,6 +90,7 @@ export interface BrowserMeshConfig {
     readonly maxPageSize: number;
     readonly maxResponseBytes: number;
   };
+  readonly resources: ResourceLimits;
 }
 
 export function loadConfig(environment: NodeJS.ProcessEnv = process.env): BrowserMeshConfig {
@@ -58,6 +108,23 @@ export function loadConfig(environment: NodeJS.ProcessEnv = process.env): Browse
       maxStringLength: parsed.BROWSERMESH_OBSERVABILITY_STRING_CHARS,
       maxPageSize: parsed.BROWSERMESH_OBSERVABILITY_PAGE_SIZE,
       maxResponseBytes: parsed.BROWSERMESH_OBSERVABILITY_RESPONSE_BYTES,
+    },
+    resources: {
+      session: DEFAULT_RESOURCE_LIMITS.session,
+      screenshot: {
+        maxDimensionPixels: parsed.BROWSERMESH_SCREENSHOT_MAX_DIMENSION,
+        maxPixels: parsed.BROWSERMESH_SCREENSHOT_MAX_PIXELS,
+        maxBytes: parsed.BROWSERMESH_SCREENSHOT_MAX_BYTES,
+      },
+      visibleText: {
+        maxChars: parsed.BROWSERMESH_VISIBLE_TEXT_MAX_CHARS,
+        maxBytes: parsed.BROWSERMESH_VISIBLE_TEXT_MAX_BYTES,
+      },
+      persistence: {
+        maxStates: parsed.BROWSERMESH_MAX_SAVED_STATES,
+        maxStateBytes: parsed.BROWSERMESH_MAX_STATE_BYTES,
+        maxTotalBytes: parsed.BROWSERMESH_MAX_STATE_TOTAL_BYTES,
+      },
     },
   };
 }

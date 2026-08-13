@@ -106,6 +106,13 @@ Last completed v0.1 release verification:
 - Release configuration JSON and all repository YAML files parsed successfully.
 - Official `mcp-publisher` v1.8.1 validation of `server.json`: passed.
 - `git diff --check`: passed.
+- ADR 0017 resource-hardening slice: runtime-authoritative bounded session labels, Unicode/UTF-8-safe
+  visible-text results, preflight plus post-capture PNG quotas, and atomic saved-state count/per-state/
+  aggregate quotas are implemented. MCP schemas mirror stable label limits and structured reads report
+  explicit truncation/image metadata; effective budgets are available through `browser_runtime_info`.
+- Regression coverage includes pre-resource rejection, dangerous/control metadata, multibyte text,
+  screenshot dimension/byte failures with queue recovery, concurrent persistence quota races,
+  replacement preservation, and bounded corrupted/oversized file reads.
 - `browser_runtime_info` reports exact generated BrowserMesh/resolved Playwright versions, Node
   version, nullable live Chromium version, launch state, effective safe configuration, and bounded
   session counts without launching Chromium. Its result follows ADR 0008 with direct structured

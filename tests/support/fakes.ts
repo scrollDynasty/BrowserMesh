@@ -240,8 +240,13 @@ export class FakeEngine implements BrowserEnginePort {
   async visibleText(_page: BrowserPageHandle, locator: Locator): Promise<string> {
     return locator.value;
   }
+  async screenshotDimensions(): Promise<{ readonly width: number; readonly height: number }> {
+    return { width: 1, height: 1 };
+  }
   async screenshot(): Promise<Uint8Array> {
-    return new Uint8Array([137, 80, 78, 71]);
+    return new Uint8Array([
+      137, 80, 78, 71, 13, 10, 26, 10, 0, 0, 0, 13, 73, 72, 68, 82, 0, 0, 0, 1, 0, 0, 0, 1,
+    ]);
   }
   async wait(handle: BrowserPageHandle, condition: WaitCondition): Promise<void> {
     const page = this.page(handle);
@@ -370,6 +375,7 @@ export function testRuntime(
       | 'maxPagesPerSession'
       | 'persistenceEnabled'
       | 'observability'
+      | 'resources'
       | 'now'
     >
   > = {},
