@@ -19,6 +19,7 @@ describe('stdio executable', () => {
         ...(process.env.XAUTHORITY === undefined ? {} : { XAUTHORITY: process.env.XAUTHORITY }),
         BROWSERMESH_LOG_LEVEL: 'silent',
         BROWSERMESH_PERSISTENCE: 'false',
+        BROWSERMESH_HEADLESS: 'true',
         BROWSERMESH_DATA_DIR: dataDirectory,
       },
       stderr: 'pipe',
@@ -72,6 +73,7 @@ describe('stdio executable', () => {
       env: {
         BROWSERMESH_LOG_LEVEL: 'silent',
         BROWSERMESH_PERSISTENCE: 'false',
+        BROWSERMESH_HEADLESS: 'true',
         BROWSERMESH_DATA_DIR: join(temporaryRoot, 'data'),
         PLAYWRIGHT_BROWSERS_PATH: join(temporaryRoot, 'browsers'),
       },

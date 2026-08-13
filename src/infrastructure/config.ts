@@ -10,6 +10,7 @@ const environmentSchema = z.object({
   BROWSERMESH_MAX_SESSIONS: z.coerce.number().int().positive().max(1_000).default(50),
   BROWSERMESH_MAX_PAGES: z.coerce.number().int().positive().max(100).default(20),
   BROWSERMESH_PERSISTENCE: booleanString.default(true),
+  BROWSERMESH_HEADLESS: booleanString.default(false),
 });
 
 export interface BrowserMeshConfig {
@@ -19,6 +20,7 @@ export interface BrowserMeshConfig {
   readonly maxSessions: number;
   readonly maxPagesPerSession: number;
   readonly persistenceEnabled: boolean;
+  readonly headless: boolean;
 }
 
 export function loadConfig(environment: NodeJS.ProcessEnv = process.env): BrowserMeshConfig {
@@ -30,5 +32,6 @@ export function loadConfig(environment: NodeJS.ProcessEnv = process.env): Browse
     maxSessions: parsed.BROWSERMESH_MAX_SESSIONS,
     maxPagesPerSession: parsed.BROWSERMESH_MAX_PAGES,
     persistenceEnabled: parsed.BROWSERMESH_PERSISTENCE,
+    headless: parsed.BROWSERMESH_HEADLESS,
   };
 }

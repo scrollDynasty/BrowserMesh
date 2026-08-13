@@ -138,6 +138,7 @@ async function main(): Promise<void> {
         ...(process.env.XAUTHORITY === undefined ? {} : { XAUTHORITY: process.env.XAUTHORITY }),
         BROWSERMESH_LOG_LEVEL: 'silent',
         BROWSERMESH_DATA_DIR: join(consumerDirectory, '.browsermesh'),
+        BROWSERMESH_HEADLESS: process.env.BROWSERMESH_HEADLESS ?? 'true',
       },
       stderr: 'pipe',
     });

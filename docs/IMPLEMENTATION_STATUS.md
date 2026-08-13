@@ -36,14 +36,14 @@ pending and does not retroactively make the baseline incomplete.
 
 ## Professional MCP improvement program
 
-| Milestone                                              | Status                                                                                                   | Contract |
-| ------------------------------------------------------ | -------------------------------------------------------------------------------------------------------- | -------- |
-| Version chain, headless config, runtime info, doctor   | Partial: immutable generated version chain complete; remaining configuration/runtime info/doctor pending | ADR 0007 |
-| Structured MCP output, annotations, cancellation       | Accepted; pending implementation                                                                         | ADR 0008 |
-| Passive waits and atomic action/wait                   | Accepted; pending implementation                                                                         | ADR 0009 |
-| Bounded redacted browser observability                 | Accepted; pending implementation                                                                         | ADR 0010 |
-| Bounded snapshots, context options, typed interactions | Accepted; pending implementation                                                                         | ADR 0011 |
-| Filesystem-backed artifacts                            | Design gate accepted; capability ADR and implementation deferred                                         | ADR 0012 |
+| Milestone                                              | Status                                                                                         | Contract |
+| ------------------------------------------------------ | ---------------------------------------------------------------------------------------------- | -------- |
+| Version chain, headless config, runtime info, doctor   | Partial: immutable version chain and headless config complete; runtime info and doctor pending | ADR 0007 |
+| Structured MCP output, annotations, cancellation       | Accepted; pending implementation                                                               | ADR 0008 |
+| Passive waits and atomic action/wait                   | Accepted; pending implementation                                                               | ADR 0009 |
+| Bounded redacted browser observability                 | Accepted; pending implementation                                                               | ADR 0010 |
+| Bounded snapshots, context options, typed interactions | Accepted; pending implementation                                                               | ADR 0011 |
+| Filesystem-backed artifacts                            | Design gate accepted; capability ADR and implementation deferred                               | ADR 0012 |
 
 Remote HTTP/multi-client security and internal agent orchestration are not part of the accepted
 implementation program. The latter remains a separate external layer.
@@ -103,6 +103,17 @@ Last completed v0.1 release verification:
 - `git diff --check`: passed.
 
 Known blockers: none.
+
+Latest post-v0.1 slice verification:
+
+- `BROWSERMESH_HEADLESS` is centrally validated as exact `true|false`, defaults to the compatible
+  headed mode, and reaches Playwright through an engine-independent launch-options seam.
+- Chromium launch uses the configured bounded default timeout; lazy startup is unchanged.
+- Unit propagation/invalid-value tests and real headless stdio integration evidence are present;
+  CI and package verification select headed-under-Xvfb or headless mode explicitly.
+- `npm run verify`: passed (17 files, 63 tests, coverage thresholds, build).
+- `BROWSERMESH_HEADLESS=true npm run verify:package`: passed, including installed-tarball MCP and
+  Chromium smoke.
 
 ## Intentional v0.1 non-scope
 

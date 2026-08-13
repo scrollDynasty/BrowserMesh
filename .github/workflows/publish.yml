@@ -35,8 +35,12 @@ jobs:
         run: npx playwright install --with-deps chromium
       - name: Run full verification
         run: xvfb-run --auto-servernum npm run verify
+        env:
+          BROWSERMESH_HEADLESS: 'false'
       - name: Verify installed npm tarball
         run: xvfb-run --auto-servernum npm run verify:package
+        env:
+          BROWSERMESH_HEADLESS: 'false'
       - name: Verify version matches tag and select npm dist-tag
         id: version
         run: |

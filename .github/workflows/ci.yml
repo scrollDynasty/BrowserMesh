@@ -94,8 +94,12 @@ jobs:
         run: npx playwright install --with-deps chromium
       - name: Run Chromium and MCP integration tests
         run: xvfb-run --auto-servernum npm run test:integration
+        env:
+          BROWSERMESH_HEADLESS: 'false'
       - name: Run external-client e2e tests
         run: xvfb-run --auto-servernum npm run test:e2e
+        env:
+          BROWSERMESH_HEADLESS: 'false'
 
   stress:
     name: stress
@@ -112,6 +116,8 @@ jobs:
         run: npx playwright install --with-deps chromium
       - name: Run bounded concurrency stress tests
         run: xvfb-run --auto-servernum npm run test:stress
+        env:
+          BROWSERMESH_HEADLESS: 'false'
 
   coverage:
     name: coverage
@@ -128,6 +134,8 @@ jobs:
         run: npx playwright install --with-deps chromium
       - name: Enforce coverage thresholds
         run: xvfb-run --auto-servernum npm run test:coverage
+        env:
+          BROWSERMESH_HEADLESS: 'false'
 
   package-smoke:
     name: package-smoke
@@ -159,9 +167,13 @@ jobs:
       - name: Verify installed npm tarball on Linux
         if: runner.os == 'Linux'
         run: xvfb-run --auto-servernum npm run verify:package
+        env:
+          BROWSERMESH_HEADLESS: 'false'
       - name: Verify installed npm tarball on Windows
         if: runner.os == 'Windows'
         run: npm run verify:package
+        env:
+          BROWSERMESH_HEADLESS: 'true'
 
   all-checks-passed:
     name: all-checks-passed
