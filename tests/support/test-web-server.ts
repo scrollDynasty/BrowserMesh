@@ -82,9 +82,11 @@ export async function startTestWebServer(): Promise<TestWebServer> {
         page(
           'Popup and dialog actions',
           `<button data-testid="popup" onclick="window.open('/popup-destination', '_blank')">Popup</button>
+          <button data-testid="unexpected-popup" onclick="window.open('/popup-destination', '_blank'); fetch('/api/delayed-result')">Unexpected popup</button>
           <button data-testid="prompt" onclick="document.querySelector('[data-testid=status]').textContent=prompt('Prompt message', 'seed') ?? 'dismissed'">Prompt</button>
           <button data-testid="confirm" onclick="document.querySelector('[data-testid=status]').textContent=confirm('Confirm message') ? 'accepted' : 'dismissed'">Confirm</button>
           <button data-testid="alert" onclick="alert('Alert message'); document.querySelector('[data-testid=status]').textContent='handled'">Alert</button>
+          <button data-testid="unexpected-dialog" onclick="alert('Unexpected alert'); fetch('/api/result')">Unexpected dialog</button>
           <div data-testid="status">ready</div>`,
         ),
       );
@@ -106,6 +108,11 @@ export async function startTestWebServer(): Promise<TestWebServer> {
     if (url.pathname === '/api/result') {
       response.setHeader('content-type', 'application/json');
       response.end(JSON.stringify({ ok: true }));
+      return;
+    }
+    if (url.pathname === '/api/delayed-result') {
+      response.setHeader('content-type', 'application/json');
+      setTimeout(() => response.end(JSON.stringify({ ok: true })), 100);
       return;
     }
     if (url.pathname === '/buyer') {
@@ -302,6 +309,7 @@ export async function startTestWebServer(): Promise<TestWebServer> {
               fetch('/api/server-error?%74oken=encoded-secret&safe=visible#private-fragment'),
               fetch('/api/duplicate?client_secret=first-secret'),
               fetch('/api/duplicate?client_secret=second-secret'),
+              fetch('/api/headers-then-fail?token=stream-secret').then(response => response.text()),
               fetch('http://127.0.0.1:1/unreachable?password=transport-secret')
             ]).then(() => document.querySelector('[data-testid=network-ready]').textContent = 'ready');
           </script>`,
@@ -318,6 +326,15 @@ export async function startTestWebServer(): Promise<TestWebServer> {
     if (url.pathname === '/api/duplicate') {
       response.setHeader('content-type', 'application/json');
       response.end(JSON.stringify({ secret: 'duplicate-body-must-not-be-captured' }));
+      return;
+    }
+    if (url.pathname === '/api/headers-then-fail') {
+      response.writeHead(200, {
+        'content-type': 'text/plain',
+        'content-length': '1000',
+      });
+      response.write('partial');
+      setTimeout(() => response.socket?.destroy(), 10);
       return;
     }
     if (url.pathname === '/exact') {
