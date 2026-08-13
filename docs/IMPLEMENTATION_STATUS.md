@@ -109,8 +109,8 @@ deferred scope. They are not missing parts of the accepted program.
 
 ## Verification checkpoint
 
-- Final error-contract hardening `npm run verify`: passed with 24 test files and 147 tests, coverage
-  thresholds, strict typecheck, lint, formatting, and production build.
+- Combined final error-contract/resource-budget hardening `npm run verify`: passed with 26 test files
+  and 156 tests, coverage thresholds, strict typecheck, lint, formatting, and production build.
 - `BROWSERMESH_HEADLESS=true npm run verify:package`: passed with build/tarball inspection, clean
   temporary installation, public import/bin, MCP version/discovery, real Chromium navigation,
   interaction, and cleanup smoke.
