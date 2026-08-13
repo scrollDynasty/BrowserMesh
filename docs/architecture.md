@@ -402,6 +402,8 @@ Important lifecycle/concurrency errors include:
 - `PAGE_NOT_FOUND`;
 - `OPERATION_TIMEOUT`;
 - `LOCATOR_AMBIGUOUS`;
+- `STALE_ELEMENT_REFERENCE`;
+- `STALE_SNAPSHOT_CURSOR`;
 - `BROWSER_ERROR`;
 - `BROWSER_DISCONNECTED`;
 - `RUNTIME_SHUTTING_DOWN`.
@@ -568,6 +570,11 @@ Snapshot bounds, context settings, and new actions are engine-independent value 
 runtime owns snapshot-content character/UTF-8 limits and explicit partial metadata; the adapter
 uses only documented engine controls for semantic scope, depth, bounding boxes, timeout, and
 cancellation. Truncated ARIA YAML is identified as a fragment rather than a complete document.
+The runtime parses documented ARIA YAML with a conforming parser before applying engine-neutral
+interactive filtering and per-node child limits. Cursor pages are served from a bounded immutable
+per-page serialization (four entries, 30-second TTL, 1,000,000-code-point source cap), so ordinary
+DOM mutations cannot reorder later pages. Navigation and all page/session teardown paths clear the
+store; opaque cursor ownership is checked only within the addressed page.
 Session context settings are normalized and validated by the runtime before the Playwright adapter
 is invoked. Each session entry retains an immutable effective value and passes it through the
 `BrowserEnginePort` context-creation boundary; session views return defensive copies. The MCP

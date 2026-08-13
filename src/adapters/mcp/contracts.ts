@@ -263,6 +263,19 @@ export const outputSchemas = {
       maxBytes: z.number().int().positive(),
       includeRefs: z.boolean(),
       maxRefs: z.number().int().positive(),
+      interactiveOnly: z.boolean(),
+      maxChildren: z.number().int().positive().nullable(),
+    }),
+    omissions: z.object({
+      nonInteractiveNodes: z.number().int().nonnegative(),
+      maxChildrenNodes: z.number().int().nonnegative(),
+      sourceLimitReached: z.boolean(),
+    }),
+    pagination: z.object({
+      snapshotId: z.string().nullable(),
+      nextCursor: z.string().nullable(),
+      offsetChars: z.number().int().nonnegative(),
+      expiresAt: z.iso.datetime().nullable(),
     }),
     truncation: z.object({
       truncated: z.boolean(),

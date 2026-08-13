@@ -272,6 +272,8 @@ describe('real Chromium runtime', () => {
       maxBytes: 100,
       includeRefs: false,
       maxRefs: 50,
+      interactiveOnly: false,
+      maxChildren: null,
     });
     expect(captured.snapshot).toContain('[box=');
     expect(captured.snapshot).not.toContain('Choice');

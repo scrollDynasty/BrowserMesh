@@ -319,15 +319,18 @@ A completely unknown session ID still returns `SESSION_NOT_FOUND`.
 - `browser_visible_text`
 
 `browser_snapshot` is bounded by default and may be restricted with a semantic/CSS `scope`,
-`maxDepth`, `includeBoundingBoxes`, `maxChars`, and `maxBytes`. Its structured result reports every
-applied bound plus character/UTF-8 byte counts. When either response cap is reached,
+`interactiveOnly`, per-node `maxChildren`, `maxDepth`, `includeBoundingBoxes`, `maxChars`, and
+`maxBytes`. Its structured result reports every applied bound, intentional tree omission, and
+character/UTF-8 byte count. When either response cap is reached,
 `partial=true`, `truncation.truncated=true`, and `contentFormat=aria-yaml-fragment`; do not parse
 that fragment as a complete ARIA YAML document. Password values remain redacted. Set
 `includeRefs=true` to receive at most `maxRefs` (default 50, maximum 100) opaque interactive-element
 refs for immediate follow-up actions. Refs expire after 30 seconds, are scoped to the exact
 session/page, and become stale after navigation, DOM replacement, page close, expiry, or a newer
-ref snapshot. Snapshot cursors/pagination, `interactiveOnly`, and `maxChildren` are not yet public
-capabilities.
+ref snapshot. A non-null `nextCursor` continues the same immutable captured serialization without
+rereading a changed DOM. Cursors are scoped to the exact session/page, expire after 30 seconds, and
+become stale after navigation, page close, quota eviction, or shutdown. At most four paginated
+snapshots and 1,000,000 Unicode code points per captured snapshot are retained per page.
 
 ### Observability
 
