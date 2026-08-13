@@ -3,11 +3,13 @@ import {
   type Browser,
   type BrowserContext,
   type Frame,
+  type ElementHandle,
   type Locator as PwLocator,
   type Page,
   type Request,
   type Response,
 } from 'playwright';
+import { randomUUID } from 'node:crypto';
 import { constants } from 'node:fs';
 import { access } from 'node:fs/promises';
 import type {
@@ -29,6 +31,8 @@ import type {
   ActionWaitCondition,
   BrowserAction,
   BrowserStorageState,
+  ElementReferenceView,
+  ElementTarget,
   Locator,
   SnapshotOptions,
   UrlMatcher,
@@ -48,6 +52,17 @@ interface PageHandle extends BrowserPageHandle {
   readonly kind: 'page';
 }
 
+interface ElementReferenceEntry {
+  readonly handle: ElementHandle<HTMLElement | SVGElement>;
+  readonly expiresAt: number;
+}
+
+type ActionableElement = PwLocator | ElementHandle<HTMLElement | SVGElement>;
+
+const ELEMENT_REF_TTL_MS = 30_000;
+const INTERACTIVE_SELECTOR =
+  'a[href],button,input:not([type="hidden"]),select,textarea,[role],[tabindex]:not([tabindex="-1"])';
+
 export class PlaywrightBrowserEngine implements BrowserEnginePort {
   private browser: Browser | undefined;
   private startPromise: Promise<void> | undefined;
@@ -56,12 +71,14 @@ export class PlaywrightBrowserEngine implements BrowserEnginePort {
   private readonly disconnectedListeners = new Set<() => void>();
   private readonly contexts = new Map<symbol, BrowserContext>();
   private readonly pages = new Map<symbol, Page>();
+  private readonly elementRefs = new Map<symbol, Map<string, ElementReferenceEntry>>();
 
   constructor(
     private readonly launchOptions: BrowserEngineLaunchOptions = {
       headless: false,
       timeoutMs: 10_000,
     },
+    private readonly now: () => number = Date.now,
   ) {}
 
   diagnostics(): BrowserEngineDiagnostics {
@@ -120,6 +137,7 @@ export class PlaywrightBrowserEngine implements BrowserEnginePort {
     const browser = this.browser;
     this.browser = undefined;
     this.pages.clear();
+    this.elementRefs.clear();
     this.contexts.clear();
     try {
       if (browser !== undefined) {
@@ -174,7 +192,13 @@ export class PlaywrightBrowserEngine implements BrowserEnginePort {
     );
     const pageHandle: PageHandle = { id: Symbol('page'), kind: 'page' };
     this.pages.set(pageHandle.id, page);
-    page.once('close', () => this.pages.delete(pageHandle.id));
+    page.on('framenavigated', (frame) => {
+      if (frame === page.mainFrame()) this.elementRefs.delete(pageHandle.id);
+    });
+    page.once('close', () => {
+      this.elementRefs.delete(pageHandle.id);
+      this.pages.delete(pageHandle.id);
+    });
     return pageHandle;
   }
 
@@ -191,6 +215,7 @@ export class PlaywrightBrowserEngine implements BrowserEnginePort {
     const page = this.pages.get(handle.id);
     if (page === undefined) return;
     await this.wrapBrowserAction(() => page.close(), 'Failed to close browser page');
+    this.elementRefs.delete(handle.id);
     this.pages.delete(handle.id);
   }
 
@@ -305,7 +330,7 @@ export class PlaywrightBrowserEngine implements BrowserEnginePort {
   async navigate(handle: BrowserPageHandle, url: string, control: OperationControl): Promise<void> {
     throwIfCancelled(control.signal);
     await this.wrapAction(
-      () =>
+      async () =>
         this.getPage(handle)
           .goto(url, { timeout: control.timeoutMs })
           .then(() => undefined),
@@ -319,7 +344,7 @@ export class PlaywrightBrowserEngine implements BrowserEnginePort {
   async back(handle: BrowserPageHandle, control: OperationControl): Promise<void> {
     throwIfCancelled(control.signal);
     await this.wrapAction(
-      () =>
+      async () =>
         this.getPage(handle)
           .goBack({ timeout: control.timeoutMs })
           .then(() => undefined),
@@ -332,7 +357,7 @@ export class PlaywrightBrowserEngine implements BrowserEnginePort {
   async forward(handle: BrowserPageHandle, control: OperationControl): Promise<void> {
     throwIfCancelled(control.signal);
     await this.wrapAction(
-      () =>
+      async () =>
         this.getPage(handle)
           .goForward({ timeout: control.timeoutMs })
           .then(() => undefined),
@@ -345,7 +370,7 @@ export class PlaywrightBrowserEngine implements BrowserEnginePort {
   async reload(handle: BrowserPageHandle, control: OperationControl): Promise<void> {
     throwIfCancelled(control.signal);
     await this.wrapAction(
-      () =>
+      async () =>
         this.getPage(handle)
           .reload({ timeout: control.timeoutMs })
           .then(() => undefined),
@@ -357,12 +382,12 @@ export class PlaywrightBrowserEngine implements BrowserEnginePort {
 
   async click(
     handle: BrowserPageHandle,
-    locator: Locator,
+    locator: ElementTarget,
     control: OperationControl,
   ): Promise<void> {
     throwIfCancelled(control.signal);
     await this.wrapElement(
-      () => this.locate(this.getPage(handle), locator).click({ timeout: control.timeoutMs }),
+      async () => (await this.actionable(handle, locator)).click({ timeout: control.timeoutMs }),
       'click',
       locator,
       control.timeoutMs,
@@ -371,12 +396,12 @@ export class PlaywrightBrowserEngine implements BrowserEnginePort {
 
   async doubleClick(
     handle: BrowserPageHandle,
-    locator: Locator,
+    locator: ElementTarget,
     control: OperationControl,
   ): Promise<void> {
     throwIfCancelled(control.signal);
     await this.wrapElement(
-      () => this.locate(this.getPage(handle), locator).dblclick({ timeout: control.timeoutMs }),
+      async () => (await this.actionable(handle, locator)).dblclick({ timeout: control.timeoutMs }),
       'double-click',
       locator,
       control.timeoutMs,
@@ -385,12 +410,12 @@ export class PlaywrightBrowserEngine implements BrowserEnginePort {
 
   async hover(
     handle: BrowserPageHandle,
-    locator: Locator,
+    locator: ElementTarget,
     control: OperationControl,
   ): Promise<void> {
     throwIfCancelled(control.signal);
     await this.wrapElement(
-      () => this.locate(this.getPage(handle), locator).hover({ timeout: control.timeoutMs }),
+      async () => (await this.actionable(handle, locator)).hover({ timeout: control.timeoutMs }),
       'hover over',
       locator,
       control.timeoutMs,
@@ -399,12 +424,12 @@ export class PlaywrightBrowserEngine implements BrowserEnginePort {
 
   async focus(
     handle: BrowserPageHandle,
-    locator: Locator,
+    locator: ElementTarget,
     control: OperationControl,
   ): Promise<void> {
     throwIfCancelled(control.signal);
     await this.wrapElement(
-      () => this.locate(this.getPage(handle), locator).focus({ timeout: control.timeoutMs }),
+      async () => (await this.actionable(handle, locator)).focus(),
       'focus',
       locator,
       control.timeoutMs,
@@ -413,12 +438,12 @@ export class PlaywrightBrowserEngine implements BrowserEnginePort {
 
   async check(
     handle: BrowserPageHandle,
-    locator: Locator,
+    locator: ElementTarget,
     control: OperationControl,
   ): Promise<void> {
     throwIfCancelled(control.signal);
     await this.wrapElement(
-      () => this.locate(this.getPage(handle), locator).check({ timeout: control.timeoutMs }),
+      async () => (await this.actionable(handle, locator)).check({ timeout: control.timeoutMs }),
       'check',
       locator,
       control.timeoutMs,
@@ -427,12 +452,12 @@ export class PlaywrightBrowserEngine implements BrowserEnginePort {
 
   async uncheck(
     handle: BrowserPageHandle,
-    locator: Locator,
+    locator: ElementTarget,
     control: OperationControl,
   ): Promise<void> {
     throwIfCancelled(control.signal);
     await this.wrapElement(
-      () => this.locate(this.getPage(handle), locator).uncheck({ timeout: control.timeoutMs }),
+      async () => (await this.actionable(handle, locator)).uncheck({ timeout: control.timeoutMs }),
       'uncheck',
       locator,
       control.timeoutMs,
@@ -441,13 +466,13 @@ export class PlaywrightBrowserEngine implements BrowserEnginePort {
 
   async scrollIntoView(
     handle: BrowserPageHandle,
-    locator: Locator,
+    locator: ElementTarget,
     control: OperationControl,
   ): Promise<void> {
     throwIfCancelled(control.signal);
     await this.wrapElement(
-      () =>
-        this.locate(this.getPage(handle), locator).scrollIntoViewIfNeeded({
+      async () =>
+        (await this.actionable(handle, locator)).scrollIntoViewIfNeeded({
           timeout: control.timeoutMs,
         }),
       'scroll into view',
@@ -458,13 +483,14 @@ export class PlaywrightBrowserEngine implements BrowserEnginePort {
 
   async fill(
     handle: BrowserPageHandle,
-    locator: Locator,
+    locator: ElementTarget,
     value: string,
     control: OperationControl,
   ): Promise<void> {
     throwIfCancelled(control.signal);
     await this.wrapElement(
-      () => this.locate(this.getPage(handle), locator).fill(value, { timeout: control.timeoutMs }),
+      async () =>
+        (await this.actionable(handle, locator)).fill(value, { timeout: control.timeoutMs }),
       'fill',
       locator,
       control.timeoutMs,
@@ -473,13 +499,14 @@ export class PlaywrightBrowserEngine implements BrowserEnginePort {
 
   async press(
     handle: BrowserPageHandle,
-    locator: Locator,
+    locator: ElementTarget,
     key: string,
     control: OperationControl,
   ): Promise<void> {
     throwIfCancelled(control.signal);
     await this.wrapElement(
-      () => this.locate(this.getPage(handle), locator).press(key, { timeout: control.timeoutMs }),
+      async () =>
+        (await this.actionable(handle, locator)).press(key, { timeout: control.timeoutMs }),
       'press',
       locator,
       control.timeoutMs,
@@ -488,14 +515,14 @@ export class PlaywrightBrowserEngine implements BrowserEnginePort {
 
   async selectOption(
     handle: BrowserPageHandle,
-    locator: Locator,
+    locator: ElementTarget,
     value: string,
     control: OperationControl,
   ): Promise<void> {
     throwIfCancelled(control.signal);
     await this.wrapElement(
-      () =>
-        this.locate(this.getPage(handle), locator)
+      async () =>
+        (await this.actionable(handle, locator))
           .selectOption(value, { timeout: control.timeoutMs })
           .then(() => undefined),
       'select option',
@@ -506,13 +533,19 @@ export class PlaywrightBrowserEngine implements BrowserEnginePort {
 
   async snapshot(
     handle: BrowserPageHandle,
-    options: Pick<SnapshotOptions, 'scope' | 'maxDepth' | 'includeBoundingBoxes'>,
+    options: Pick<
+      SnapshotOptions,
+      'scope' | 'maxDepth' | 'includeBoundingBoxes' | 'includeRefs' | 'maxRefs'
+    >,
     control: OperationControl,
-  ): Promise<string> {
+  ): Promise<{ readonly snapshot: string; readonly refs: readonly ElementReferenceView[] }> {
     throwIfCancelled(control.signal);
     const page = this.getPage(handle);
     const scope = options.scope ?? { strategy: 'css', value: 'body' as const };
-    const capture = async (): Promise<string> => {
+    const capture = async (): Promise<{
+      readonly snapshot: string;
+      readonly refs: readonly ElementReferenceView[];
+    }> => {
       const passwordValuesBefore = await readPasswordValues(page);
       throwIfCancelled(control.signal);
       const snapshot = await this.locate(page, scope).ariaSnapshot({
@@ -524,7 +557,15 @@ export class PlaywrightBrowserEngine implements BrowserEnginePort {
       throwIfCancelled(control.signal);
       const passwordValuesAfter = await readPasswordValues(page);
       throwIfCancelled(control.signal);
-      return redactSecretValues(snapshot, [...passwordValuesBefore, ...passwordValuesAfter]);
+      const redacted = redactSecretValues(snapshot, [
+        ...passwordValuesBefore,
+        ...passwordValuesAfter,
+      ]);
+      const refs =
+        options.includeRefs === true
+          ? await this.captureElementRefs(handle, page, scope, options.maxRefs ?? 50, control)
+          : [];
+      return { snapshot: redacted, refs };
     };
     return options.scope === undefined
       ? this.wrapAction(
@@ -631,7 +672,7 @@ export class PlaywrightBrowserEngine implements BrowserEnginePort {
     const page = this.getPage(handle);
     const waiter = createEventWaiter(page, wait, control);
     const actionPromise = this.performCompositeAction(
-      page,
+      handle,
       action,
       remainingMs(control.deadlineAt),
     ).catch((error: unknown) => {
@@ -655,24 +696,28 @@ export class PlaywrightBrowserEngine implements BrowserEnginePort {
   }
 
   private async performCompositeAction(
-    page: Page,
+    handle: BrowserPageHandle,
     action: BrowserAction,
     timeoutMs: number,
   ): Promise<void> {
+    const target = action.target ?? action.locator;
     switch (action.kind) {
       case 'click':
         await this.wrapElement(
-          () => this.locate(page, action.locator).click({ timeout: timeoutMs }),
+          async () => (await this.actionable(handle, target)).click({ timeout: timeoutMs }),
           'click',
-          action.locator,
+          target,
           timeoutMs,
         );
         return;
       case 'press':
         await this.wrapElement(
-          () => this.locate(page, action.locator).press(action.key, { timeout: timeoutMs }),
+          async () =>
+            (await this.actionable(handle, target)).press(action.key, {
+              timeout: timeoutMs,
+            }),
           'press',
-          action.locator,
+          target,
           timeoutMs,
         );
     }
@@ -712,10 +757,95 @@ export class PlaywrightBrowserEngine implements BrowserEnginePort {
     }
   }
 
+  private async actionable(
+    pageHandle: BrowserPageHandle,
+    target: ElementTarget,
+  ): Promise<ActionableElement> {
+    const page = this.getPage(pageHandle);
+    if (!('ref' in target)) return this.locate(page, target);
+    const registry = this.elementRefs.get(pageHandle.id);
+    const entry = registry?.get(target.ref);
+    if (entry === undefined || entry.expiresAt <= this.now()) {
+      if (entry !== undefined) {
+        registry?.delete(target.ref);
+        await entry.handle.dispose().catch(() => undefined);
+      }
+      throw staleElementReference(target.ref);
+    }
+    let connected: boolean;
+    try {
+      connected = await entry.handle.evaluate((element) => element.isConnected);
+    } catch {
+      connected = false;
+    }
+    if (!connected) {
+      registry?.delete(target.ref);
+      await entry.handle.dispose().catch(() => undefined);
+      throw staleElementReference(target.ref);
+    }
+    return entry.handle;
+  }
+
+  private async captureElementRefs(
+    pageHandle: BrowserPageHandle,
+    page: Page,
+    scope: Locator,
+    maxRefs: number,
+    control: OperationControl,
+  ): Promise<readonly ElementReferenceView[]> {
+    const candidate = this.locate(page, scope).locator(INTERACTIVE_SELECTOR);
+    const handles: ElementReferenceEntry[] = [];
+    const views: ElementReferenceView[] = [];
+    try {
+      const count = Math.min(await candidate.count(), maxRefs);
+      for (let index = 0; index < count; index += 1) {
+        throwIfCancelled(control.signal);
+        const handle = await candidate.nth(index).elementHandle();
+        const hint = await handle.evaluate((element) => {
+          const tag = element.tagName.toLowerCase().slice(0, 32);
+          const role = element.getAttribute('role')?.trim().slice(0, 64) || undefined;
+          const explicit =
+            element.getAttribute('aria-label') ??
+            element.getAttribute('alt') ??
+            element.getAttribute('title');
+          const text = /^(input|select|textarea)$/u.test(tag) ? undefined : element.textContent;
+          const name = (explicit ?? text)?.replace(/\s+/gu, ' ').trim().slice(0, 120) || undefined;
+          return { tag, role, name };
+        });
+        const ref = `@e${randomUUID().replaceAll('-', '')}`;
+        handles.push({ handle, expiresAt: this.now() + ELEMENT_REF_TTL_MS });
+        views.push({
+          ref,
+          tag: hint.tag,
+          ...(hint.role === undefined ? {} : { role: hint.role }),
+          ...(hint.name === undefined ? {} : { name: hint.name }),
+        });
+      }
+      throwIfCancelled(control.signal);
+    } catch (error) {
+      await Promise.allSettled(handles.map((entry) => entry.handle.dispose()));
+      throw error;
+    }
+    const prior = this.elementRefs.get(pageHandle.id);
+    const next = new Map<string, ElementReferenceEntry>();
+    views.forEach((view, index) => {
+      const entry = handles.at(index);
+      if (entry !== undefined) next.set(view.ref, entry);
+    });
+    this.elementRefs.set(pageHandle.id, next);
+    if (prior !== undefined)
+      await Promise.allSettled(Array.from(prior.values(), (entry) => entry.handle.dispose()));
+    return views;
+  }
+
   private dropContext(contextId: symbol): void {
     const context = this.contexts.get(contextId);
     if (context !== undefined) {
-      for (const [id, page] of this.pages) if (page.context() === context) this.pages.delete(id);
+      for (const [id, page] of this.pages) {
+        if (page.context() !== context) continue;
+        this.elementRefs.delete(id);
+        this.pages.delete(id);
+      }
     }
     this.contexts.delete(contextId);
   }
@@ -725,6 +855,7 @@ export class PlaywrightBrowserEngine implements BrowserEnginePort {
     this.browser = undefined;
     this.launchState = 'failed';
     this.pages.clear();
+    this.elementRefs.clear();
     this.contexts.clear();
     if (this.stopping) return;
     for (const listener of this.disconnectedListeners) listener();
@@ -755,7 +886,7 @@ export class PlaywrightBrowserEngine implements BrowserEnginePort {
   private async wrapElement<T>(
     action: () => Promise<T>,
     operation: string,
-    locator: Locator,
+    locator: ElementTarget,
     timeoutMs: number,
   ): Promise<T> {
     try {
@@ -949,7 +1080,8 @@ function safeObservedUrl(value: string): string {
   }
 }
 
-function describeLocator(locator: Locator): string {
+function describeLocator(locator: ElementTarget): string {
+  if ('ref' in locator) return `ref=${locator.ref}`;
   const name =
     locator.strategy === 'role' && locator.name !== undefined ? `, name=${locator.name}` : '';
   const exact =
@@ -957,6 +1089,14 @@ function describeLocator(locator: Locator): string {
       ? `, exact=${String(locator.exact ?? true)}`
       : '';
   return `${locator.strategy}=${locator.value}${name}${exact}`;
+}
+
+function staleElementReference(ref: string): BrowserMeshError {
+  return new BrowserMeshError(
+    'STALE_ELEMENT_REFERENCE',
+    'Element reference is stale; capture a new snapshot and retry',
+    { details: { ref } },
+  );
 }
 
 function redactSecretValues(snapshot: string, secrets: readonly string[]): string {

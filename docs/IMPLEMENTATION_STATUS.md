@@ -42,7 +42,7 @@ pending and does not retroactively make the baseline incomplete.
 | Structured MCP output, annotations, cancellation       | Complete: structured output, annotations, end-to-end request signals, queue-safe cancellation                                                                              | ADR 0008 |
 | Passive waits and atomic action/wait                   | Partial: passive conditions, click/press + navigation/response, and cancellation complete; popup pending                                                                   | ADR 0009 |
 | Bounded redacted browser observability                 | Complete: console/page-error and correlated network/failed-request collectors                                                                                              | ADR 0010 |
-| Bounded snapshots, context options, typed interactions | Partial: bounded scoped snapshots, safe context settings, and hover/focus/check/double-click/scroll complete; tree filters, refs, and lifecycle-heavy interactions pending | ADR 0011 |
+| Bounded snapshots, context options, typed interactions | Partial: bounded scoped snapshots, safe context settings, short-lived element refs, and hover/focus/check/double-click/scroll complete; tree filters and lifecycle-heavy interactions pending | ADRs 0011, 0013 |
 | Filesystem-backed artifacts                            | Design gate accepted; capability ADR and implementation deferred                                                                                                           | ADR 0012 |
 
 Remote HTTP/multi-client security and internal agent orchestration are not part of the accepted
@@ -145,13 +145,17 @@ Latest post-v0.1 slice verification:
 - ADR 0011 bounded snapshots now provide semantic scope, documented Playwright depth/box controls,
   runtime-owned Unicode/UTF-8 content caps, and explicit applied-bound/partial/truncation metadata.
   Partial output is labelled `aria-yaml-fragment`. Password redaction, per-session serialization,
-  cancellation, and cleanup remain intact. `interactiveOnly`, `maxChildren`, pagination/refs,
+  cancellation, and cleanup remain intact. `interactiveOnly`, `maxChildren`, pagination,
   context options, and typed interactions remain later slices.
 - Bounded-snapshot `npm run verify`: passed after merging context settings and typed interactions
   (23 files, 116 tests, coverage thresholds, lint,
   format, typecheck, and build). Targeted MCP contract and real-Chromium integration tests passed.
 - `BROWSERMESH_HEADLESS=true npm run verify:package`: passed, including the built tarball,
   clean-package MCP discovery, bounded scoped-snapshot contract, real-Chromium smoke, and shutdown.
+- ADR 0013 element refs are adapter-generated opaque values, bounded to 100 per page with a
+  30-second TTL and replacement cleanup. Real-Chromium coverage verifies typed actions,
+  cross-session/page rejection, DOM replacement, navigation/page-close invalidation, expiry, and
+  queue recovery; no Playwright locator or element handle crosses the engine port.
 
 - ADR 0008 cancellation is complete: every asynchronous MCP handler forwards the request signal, the runtime
   owns engine-independent signal/deadline metadata, queued cancellations never execute, and an

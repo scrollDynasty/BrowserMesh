@@ -22,6 +22,7 @@ import type {
   ActionAndWaitResult,
   ActionWaitCondition,
   BrowserAction,
+  ElementTarget,
   Locator,
   OperationResult,
   PageAddressedOperationResult,
@@ -463,6 +464,8 @@ export class BrowserMeshRuntime {
           ...(normalized.scope === undefined ? {} : { scope: normalized.scope }),
           ...(normalized.maxDepth === undefined ? {} : { maxDepth: normalized.maxDepth }),
           includeBoundingBoxes: normalized.includeBoundingBoxes,
+          includeRefs: normalized.includeRefs,
+          maxRefs: normalized.maxRefs,
         },
         control,
       );
@@ -479,7 +482,10 @@ export class BrowserMeshRuntime {
     );
   }
 
-  click(target: OperationTarget, locator: Locator): Promise<PageAddressedOperationResult<null>> {
+  click(
+    target: OperationTarget,
+    locator: ElementTarget,
+  ): Promise<PageAddressedOperationResult<null>> {
     return this.pageOperation(target, async (page, control) => {
       await this.options.engine.click(page, locator, control);
       return null;
@@ -488,7 +494,7 @@ export class BrowserMeshRuntime {
 
   doubleClick(
     target: OperationTarget,
-    locator: Locator,
+    locator: ElementTarget,
   ): Promise<PageAddressedOperationResult<null>> {
     return this.pageOperation(target, async (page, control) => {
       await this.options.engine.doubleClick(page, locator, control);
@@ -496,28 +502,40 @@ export class BrowserMeshRuntime {
     });
   }
 
-  hover(target: OperationTarget, locator: Locator): Promise<PageAddressedOperationResult<null>> {
+  hover(
+    target: OperationTarget,
+    locator: ElementTarget,
+  ): Promise<PageAddressedOperationResult<null>> {
     return this.pageOperation(target, async (page, control) => {
       await this.options.engine.hover(page, locator, control);
       return null;
     });
   }
 
-  focus(target: OperationTarget, locator: Locator): Promise<PageAddressedOperationResult<null>> {
+  focus(
+    target: OperationTarget,
+    locator: ElementTarget,
+  ): Promise<PageAddressedOperationResult<null>> {
     return this.pageOperation(target, async (page, control) => {
       await this.options.engine.focus(page, locator, control);
       return null;
     });
   }
 
-  check(target: OperationTarget, locator: Locator): Promise<PageAddressedOperationResult<null>> {
+  check(
+    target: OperationTarget,
+    locator: ElementTarget,
+  ): Promise<PageAddressedOperationResult<null>> {
     return this.pageOperation(target, async (page, control) => {
       await this.options.engine.check(page, locator, control);
       return null;
     });
   }
 
-  uncheck(target: OperationTarget, locator: Locator): Promise<PageAddressedOperationResult<null>> {
+  uncheck(
+    target: OperationTarget,
+    locator: ElementTarget,
+  ): Promise<PageAddressedOperationResult<null>> {
     return this.pageOperation(target, async (page, control) => {
       await this.options.engine.uncheck(page, locator, control);
       return null;
@@ -526,7 +544,7 @@ export class BrowserMeshRuntime {
 
   scrollIntoView(
     target: OperationTarget,
-    locator: Locator,
+    locator: ElementTarget,
   ): Promise<PageAddressedOperationResult<null>> {
     return this.pageOperation(target, async (page, control) => {
       await this.options.engine.scrollIntoView(page, locator, control);
@@ -536,7 +554,7 @@ export class BrowserMeshRuntime {
 
   fill(
     target: OperationTarget,
-    locator: Locator,
+    locator: ElementTarget,
     value: string,
   ): Promise<PageAddressedOperationResult<null>> {
     return this.pageOperation(target, async (page, control) => {
@@ -547,7 +565,7 @@ export class BrowserMeshRuntime {
 
   press(
     target: OperationTarget,
-    locator: Locator,
+    locator: ElementTarget,
     key: string,
   ): Promise<PageAddressedOperationResult<null>> {
     return this.pageOperation(target, async (page, control) => {
@@ -558,7 +576,7 @@ export class BrowserMeshRuntime {
 
   selectOption(
     target: OperationTarget,
-    locator: Locator,
+    locator: ElementTarget,
     value: string,
   ): Promise<PageAddressedOperationResult<null>> {
     return this.pageOperation(target, async (page, control) => {
@@ -1095,12 +1113,13 @@ function normalizeWaitCondition(condition: WaitCondition): WaitCondition {
 }
 
 function normalizeAction(action: BrowserAction): BrowserAction {
+  const target = action.target ?? action.locator;
   if (action.kind === 'press') {
     if (action.key.length === 0 || action.key.length > 64)
       throw new BrowserMeshError('INVALID_ARGUMENT', 'Action key must contain 1 to 64 characters');
-    return { kind: 'press', locator: action.locator, key: action.key };
+    return { kind: 'press', target, key: action.key };
   }
-  return { kind: 'click', locator: action.locator };
+  return { kind: 'click', target };
 }
 
 function normalizeActionWait(wait: ActionWaitCondition): ActionWaitCondition {

@@ -349,8 +349,10 @@ Do not expose raw Playwright `Locator` or `ElementHandle` objects.
 
 Implementation checkpoint: the first bounded-snapshot slice implements semantic scope,
 `maxDepth`, optional bounding boxes, and explicit snapshot-content `maxChars`/`maxBytes` partial metadata using the
-documented Playwright 1.62 API. `interactiveOnly`, `maxChildren`, pagination, and references remain
-deferred until their engine-neutral transform or lifecycle contract is complete.
+documented Playwright 1.62 API. ADR 0013 completes short-lived adapter-generated refs with explicit
+session/page scope, 30-second TTL, per-page quota/replacement, lifecycle and DOM-staleness checks,
+and typed-action support. `interactiveOnly`, `maxChildren`, and pagination remain deferred until
+their engine-neutral transform or cursor contract is complete.
 
 ## 9. P1: browser-context and interaction coverage
 

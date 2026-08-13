@@ -161,6 +161,17 @@ export async function startTestWebServer(): Promise<TestWebServer> {
       );
       return;
     }
+    if (url.pathname === '/element-refs') {
+      response.end(
+        page(
+          'Element refs',
+          `<input aria-label="Ref input" />
+          <button data-testid="replace" onclick="this.outerHTML='<button data-testid=replace>Replacement</button>'">Replace me</button>
+          <div data-testid="status">ready</div>`,
+        ),
+      );
+      return;
+    }
     if (url.pathname === '/observability') {
       response.end(
         page(

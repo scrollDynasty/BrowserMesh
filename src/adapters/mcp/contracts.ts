@@ -82,6 +82,10 @@ const locatorSchema = z.discriminatedUnion('strategy', [
   }),
 ]);
 const nullableLocatorSchema = locatorSchema.nullable();
+const elementTargetSchema = z.union([
+  locatorSchema,
+  z.object({ ref: z.string().regex(/^@e[a-f0-9]{32}$/u) }),
+]);
 const urlMatcherSchema = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('exact'), value: z.string() }),
   z.object({ kind: z.literal('glob'), value: z.string() }),
@@ -97,8 +101,8 @@ const waitConditionSchema = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('text'), text: z.string(), state: z.enum(['present', 'absent']) }),
 ]);
 const browserActionSchema = z.discriminatedUnion('kind', [
-  z.object({ kind: z.literal('click'), locator: locatorSchema }),
-  z.object({ kind: z.literal('press'), locator: locatorSchema, key: z.string() }),
+  z.object({ kind: z.literal('click'), target: elementTargetSchema }),
+  z.object({ kind: z.literal('press'), target: elementTargetSchema, key: z.string() }),
 ]);
 const actionWaitSchema = z.discriminatedUnion('kind', [
   z.object({
@@ -212,12 +216,22 @@ export const outputSchemas = {
     snapshot: z.string(),
     contentFormat: z.enum(['aria-yaml', 'aria-yaml-fragment']),
     partial: z.boolean(),
+    refs: z.array(
+      z.object({
+        ref: z.string().regex(/^@e[a-f0-9]{32}$/u),
+        tag: z.string().min(1).max(32),
+        role: z.string().max(64).optional(),
+        name: z.string().max(120).optional(),
+      }),
+    ),
     appliedBounds: z.object({
       scope: nullableLocatorSchema,
       maxDepth: z.number().int().nonnegative().nullable(),
       includeBoundingBoxes: z.boolean(),
       maxChars: z.number().int().positive(),
       maxBytes: z.number().int().positive(),
+      includeRefs: z.boolean(),
+      maxRefs: z.number().int().positive(),
     }),
     truncation: z.object({
       truncated: z.boolean(),

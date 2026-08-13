@@ -44,6 +44,19 @@ export type Locator =
       readonly value: string;
     };
 
+export interface ElementReferenceTarget {
+  readonly ref: string;
+}
+
+export type ElementTarget = Locator | ElementReferenceTarget;
+
+export interface ElementReferenceView {
+  readonly ref: string;
+  readonly tag: string;
+  readonly role?: string;
+  readonly name?: string;
+}
+
 export interface SnapshotOptions {
   /** Restrict the snapshot to one explicitly resolved page locator. */
   readonly scope?: Locator;
@@ -55,6 +68,8 @@ export interface SnapshotOptions {
   readonly maxChars?: number;
   /** Maximum UTF-8 bytes returned in snapshot content. */
   readonly maxBytes?: number;
+  readonly includeRefs?: boolean;
+  readonly maxRefs?: number;
 }
 
 export interface SnapshotResult {
@@ -62,12 +77,15 @@ export interface SnapshotResult {
   /** A partial result is an ARIA YAML fragment and must not be parsed as a complete snapshot. */
   readonly contentFormat: 'aria-yaml' | 'aria-yaml-fragment';
   readonly partial: boolean;
+  readonly refs: readonly ElementReferenceView[];
   readonly appliedBounds: {
     readonly scope: Locator | null;
     readonly maxDepth: number | null;
     readonly includeBoundingBoxes: boolean;
     readonly maxChars: number;
     readonly maxBytes: number;
+    readonly includeRefs: boolean;
+    readonly maxRefs: number;
   };
   readonly truncation: {
     readonly truncated: boolean;
@@ -99,8 +117,20 @@ export type WaitCondition =
     };
 
 export type BrowserAction =
-  | { readonly kind: 'click'; readonly locator: Locator }
-  | { readonly kind: 'press'; readonly locator: Locator; readonly key: string };
+  | { readonly kind: 'click'; readonly target: ElementTarget; readonly locator?: never }
+  | { readonly kind: 'click'; readonly locator: Locator; readonly target?: never }
+  | {
+      readonly kind: 'press';
+      readonly target: ElementTarget;
+      readonly locator?: never;
+      readonly key: string;
+    }
+  | {
+      readonly kind: 'press';
+      readonly locator: Locator;
+      readonly target?: never;
+      readonly key: string;
+    };
 
 export type ActionWaitCondition =
   | {

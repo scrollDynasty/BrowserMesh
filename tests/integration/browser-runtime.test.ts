@@ -5,6 +5,11 @@ import type { BrowserMeshRuntime, OperationTarget } from '../../src/runtime/brow
 import { createRealRuntimeHarness, type RealRuntimeHarness } from '../support/real-runtime.js';
 import { startTestWebServer, type TestWebServer } from '../support/test-web-server.js';
 
+function requireRef(ref: string | undefined): string {
+  if (ref === undefined) throw new Error('Expected snapshot element ref');
+  return ref;
+}
+
 describe('real Chromium runtime', () => {
   let runtime: BrowserMeshRuntime;
   let harness: RealRuntimeHarness;
@@ -207,12 +212,94 @@ describe('real Chromium runtime', () => {
       includeBoundingBoxes: true,
       maxChars: 80,
       maxBytes: 100,
+      includeRefs: false,
+      maxRefs: 50,
     });
     expect(captured.snapshot).toContain('[box=');
     expect(captured.snapshot).not.toContain('Choice');
     expect(captured.truncation.returnedChars).toBeLessThanOrEqual(80);
     expect(captured.truncation.returnedBytes).toBeLessThanOrEqual(100);
     expect(captured.contentFormat).toBe(captured.partial ? 'aria-yaml-fragment' : 'aria-yaml');
+  });
+
+  it('captures bounded refs, acts through them, and rejects cross-page/session use', async () => {
+    const first = await createTarget();
+    const secondPage = await runtime.createPage(first.sessionId);
+    const otherPage = { sessionId: first.sessionId, pageId: secondPage.pageId };
+    const otherSession = await createTarget();
+    await Promise.all([
+      runtime.navigate(first, `${web.baseUrl}/element-refs`),
+      runtime.navigate(otherPage, `${web.baseUrl}/element-refs`),
+      runtime.navigate(otherSession, `${web.baseUrl}/element-refs`),
+    ]);
+
+    const captured = (await runtime.snapshot(first, { includeRefs: true, maxRefs: 2 })).value;
+    expect(captured.refs).toHaveLength(2);
+    expect(captured.appliedBounds).toMatchObject({ includeRefs: true, maxRefs: 2 });
+    const inputRef = captured.refs.find((item) => item.tag === 'input')?.ref;
+    const buttonRef = captured.refs.find((item) => item.tag === 'button')?.ref;
+    expect(inputRef).toMatch(/^@e[a-f0-9]{32}$/u);
+    expect(buttonRef).toMatch(/^@e[a-f0-9]{32}$/u);
+
+    await runtime.fill(first, { ref: requireRef(inputRef) }, 'through-ref');
+    await runtime.click(first, { ref: requireRef(buttonRef) });
+    await expect(runtime.click(first, { ref: requireRef(buttonRef) })).rejects.toMatchObject({
+      code: 'STALE_ELEMENT_REFERENCE',
+    });
+    await expect(runtime.click(otherPage, { ref: requireRef(inputRef) })).rejects.toMatchObject({
+      code: 'STALE_ELEMENT_REFERENCE',
+    });
+    await expect(runtime.click(otherSession, { ref: requireRef(inputRef) })).rejects.toMatchObject({
+      code: 'STALE_ELEMENT_REFERENCE',
+    });
+  });
+
+  it('invalidates refs on navigation, page close, and replacement by a later snapshot', async () => {
+    const target = await createTarget();
+    await runtime.navigate(target, `${web.baseUrl}/element-refs`);
+    const firstRef = requireRef(
+      (await runtime.snapshot(target, { includeRefs: true, maxRefs: 1 })).value.refs[0]?.ref,
+    );
+    const replacementRef = requireRef(
+      (await runtime.snapshot(target, { includeRefs: true, maxRefs: 1 })).value.refs[0]?.ref,
+    );
+    await expect(runtime.focus(target, { ref: firstRef })).rejects.toMatchObject({
+      code: 'STALE_ELEMENT_REFERENCE',
+    });
+    await expect(runtime.focus(target, { ref: replacementRef })).resolves.toMatchObject({
+      value: null,
+    });
+    await runtime.reload(target);
+    await expect(runtime.focus(target, { ref: replacementRef })).rejects.toMatchObject({
+      code: 'STALE_ELEMENT_REFERENCE',
+    });
+
+    const closeRef = requireRef(
+      (await runtime.snapshot(target, { includeRefs: true, maxRefs: 1 })).value.refs[0]?.ref,
+    );
+    await runtime.closePage(target.sessionId, target.pageId);
+    await expect(runtime.focus(target, { ref: closeRef })).rejects.toMatchObject({
+      code: 'PAGE_NOT_FOUND',
+    });
+  });
+
+  it('expires refs after the bounded TTL and leaves the queue usable', async () => {
+    await harness.cleanup();
+    let clock = 0;
+    harness = await createRealRuntimeHarness(
+      new PlaywrightBrowserEngine({ headless: true, timeoutMs: 5_000 }, () => clock),
+    );
+    runtime = harness.runtime;
+    const target = await createTarget();
+    await runtime.navigate(target, `${web.baseUrl}/element-refs`);
+    const ref = requireRef(
+      (await runtime.snapshot(target, { includeRefs: true, maxRefs: 1 })).value.refs[0]?.ref,
+    );
+    clock = 30_001;
+    await expect(runtime.focus(target, { ref })).rejects.toMatchObject({
+      code: 'STALE_ELEMENT_REFERENCE',
+    });
+    await expect(runtime.getTitle(target)).resolves.toMatchObject({ value: 'Element refs' });
   });
 
   it('cancels snapshot capture and leaves its session queue usable', async () => {
