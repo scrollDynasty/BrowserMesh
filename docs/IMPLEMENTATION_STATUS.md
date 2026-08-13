@@ -39,7 +39,7 @@ pending and does not retroactively make the baseline incomplete.
 | Milestone                                              | Status                                                                                                 | Contract |
 | ------------------------------------------------------ | ------------------------------------------------------------------------------------------------------ | -------- |
 | Version chain, headless config, runtime info, doctor   | Partial: immutable version chain and headless config complete; runtime info and doctor pending         | ADR 0007 |
-| Structured MCP output, annotations, cancellation       | Accepted; pending implementation                                                                       | ADR 0008 |
+| Structured MCP output, annotations, cancellation       | Partial: structured output and annotations complete; wait cancellation pending                         | ADR 0008 |
 | Passive waits and atomic action/wait                   | Partial: passive conditions and click/press + navigation/response complete; popup/cancellation pending | ADR 0009 |
 | Bounded redacted browser observability                 | Accepted; pending implementation                                                                       | ADR 0010 |
 | Bounded snapshots, context options, typed interactions | Accepted; pending implementation                                                                       | ADR 0011 |
@@ -54,6 +54,10 @@ implementation program. The latter remains a separate external layer.
 - Real-Chromium wait coverage includes URL/load/locator/text success, exact-case text timeout and queue recovery, same-session read-after-navigation ordering, cross-session independence, waiter-first navigation/response composites, and redacted response URLs.
 - Unit tests cover lifecycle/limits, terminal-record bounds, operation correlation, queue recovery, navigation policy, persistence naming/atomic concurrency, configuration, structured logging, and architecture dependency rules.
 - MCP tests cover the exact public tool set, descriptions, schema rejection, safe structured errors, successful calls, explicit routing, subprocess stdio negotiation, and exit.
+- All 25 current MCP tools publish object-root output schemas, direct structured success fields,
+  human titles, and exact reviewed risk annotations. Contract tests execute every success schema;
+  stdio/package tests verify installed discovery. Application errors are bounded JSON-only results
+  with typed runtime `operationId` correlation, while SDK input-validation errors remain distinct.
 - The deterministic 50-session stress test verifies runtime routing and cleanup, while a separate
   eight-context real-Chromium stress test verifies bounded adapter isolation and resource release.
 - `scripts/verify-package.ts` tests the generated npm tarball rather than source-tree execution and
@@ -115,6 +119,13 @@ Latest post-v0.1 slice verification:
 - `npm run verify`: passed (17 files, 63 tests, coverage thresholds, build).
 - `BROWSERMESH_HEADLESS=true npm run verify:package`: passed, including installed-tarball MCP and
   Chromium smoke.
+- ADR 0008 structured-output slice: all 25 current tools now expose direct structured results,
+  object-root output schemas, titles, and reviewed annotations; application errors retain bounded
+  safe JSON and accepted-operation correlation without exposing causes.
+- `npm run verify`: passed (17 files, 65 tests, coverage thresholds, lint, format, typecheck, build).
+- `BROWSERMESH_HEADLESS=true npm run verify:package`: passed, including clean tarball installation,
+  installed discovery metadata, MCP navigation/interaction, and Chromium lifecycle smoke.
+- `git diff --check`: passed.
 
 ## Intentional v0.1 non-scope
 

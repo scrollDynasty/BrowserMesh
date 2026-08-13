@@ -525,10 +525,12 @@ files, adapter-private paths, or Playwright objects. The doctor CLI composes the
 ports and owns a bounded, disposable smoke lifecycle. MCP discovery and `browser_runtime_info` do
 not force browser launch.
 
-Structured MCP mapping remains adapter work. Output schemas mirror stable application result
-models, while compatibility text and image blocks are presentation. MCP cancellation is translated
-to an engine-independent operation signal before crossing inward. Annotations are static reviewed
-metadata and never runtime authorization.
+Structured MCP mapping is implemented in the adapter. Central object-root output schemas mirror
+stable application result models, while compatibility text and screenshot image blocks remain
+presentation. Safe application failures carry typed runtime `operationId` correlation into a
+bounded JSON-only MCP error mapper; raw causes never cross the adapter. Annotations are centralized,
+statically reviewed metadata and never runtime authorization. Future cancellable operations will
+translate MCP cancellation to an engine-independent operation signal before crossing inward.
 
 Passive waits and atomic action/wait composites are application operations occupying one session
 queue slot. Engine ports expose typed conditions/actions and cancellation; they do not expose

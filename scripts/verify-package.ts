@@ -27,15 +27,11 @@ const packSchema = z.array(
     files: z.array(z.object({ path: z.string() })),
   }),
 );
-const mcpEnvelopeSchema = z.object({
-  ok: z.literal(true),
-  value: z.object({
+const structuredResultSchema = z
+  .object({
     operationId: z.string().min(1),
-    sessionId: z.string().min(1),
-    pageId: z.string().min(1),
-    value: z.unknown(),
-  }),
-});
+  })
+  .catchall(z.unknown());
 const installedManifestSchema = z.object({
   name: z.literal(packageName),
   version: z.string().min(1),
@@ -152,13 +148,22 @@ async function main(): Promise<void> {
     if (!tools.tools.some(({ name }) => name === 'browser_session_create')) {
       throw new Error('Packaged MCP server did not expose browser_session_create');
     }
+    if (
+      tools.tools.some(
+        ({ title, outputSchema }) => title === undefined || outputSchema?.type !== 'object',
+      )
+    ) {
+      throw new Error('Packaged MCP tool discovery omitted a title or object outputSchema');
+    }
     const created = await client.callTool({
       name: 'browser_session_create',
       arguments: { name: 'package-smoke' },
     });
-    const createdIds = readSuccessfulTextResult(created);
+    const createdIds = z
+      .object({ initialPage: z.object({ sessionId: z.string(), pageId: z.string() }) })
+      .parse(readStructuredResult(created)).initialPage;
     webServer = await startPackageTestServer();
-    readSuccessfulTextResult(
+    readStructuredResult(
       await client.callTool({
         name: 'browser_navigate',
         arguments: {
@@ -168,7 +173,7 @@ async function main(): Promise<void> {
         },
       }),
     );
-    const initialStatus = readSuccessfulTextResult(
+    const initialStatus = readStructuredResult(
       await client.callTool({
         name: 'browser_visible_text',
         arguments: {
@@ -178,10 +183,10 @@ async function main(): Promise<void> {
         },
       }),
     );
-    if (initialStatus.value !== 'ready') {
+    if (initialStatus.text !== 'ready') {
       throw new Error('Packaged MCP browser did not read the expected DOM state');
     }
-    readSuccessfulTextResult(
+    readStructuredResult(
       await client.callTool({
         name: 'browser_click',
         arguments: {
@@ -191,7 +196,7 @@ async function main(): Promise<void> {
         },
       }),
     );
-    const updatedStatus = readSuccessfulTextResult(
+    const updatedStatus = readStructuredResult(
       await client.callTool({
         name: 'browser_visible_text',
         arguments: {
@@ -201,16 +206,16 @@ async function main(): Promise<void> {
         },
       }),
     );
-    if (updatedStatus.value !== 'clicked') {
+    if (updatedStatus.text !== 'clicked') {
       throw new Error('Packaged MCP browser action did not update the DOM');
     }
-    const url = readSuccessfulTextResult(
+    const url = readStructuredResult(
       await client.callTool({
         name: 'browser_get_url',
         arguments: { sessionId: createdIds.sessionId, pageId: createdIds.pageId },
       }),
     );
-    if (url.value !== webServer.url) {
+    if (url.url !== webServer.url) {
       throw new Error('Packaged MCP browser URL did not match the test server');
     }
     const closed = await client.callTool({
@@ -276,13 +281,12 @@ async function assertInstalledBin(binPath: string, installedCliPath: string): Pr
   await access(binPath, constants.X_OK);
 }
 
-function readSuccessfulTextResult(result: unknown): z.infer<typeof mcpEnvelopeSchema>['value'] {
+function readStructuredResult(result: unknown): z.infer<typeof structuredResultSchema> {
   const parsed = z
-    .object({ content: z.array(z.object({ type: z.string(), text: z.string().optional() })) })
+    .object({ structuredContent: z.unknown(), isError: z.boolean().optional() })
     .parse(result);
-  const text = parsed.content.find((block) => block.type === 'text')?.text;
-  if (text === undefined) throw new Error('MCP result did not contain text content');
-  return mcpEnvelopeSchema.parse(JSON.parse(text)).value;
+  if (parsed.isError === true) throw new Error('Packaged MCP tool returned an application error');
+  return structuredResultSchema.parse(parsed.structuredContent);
 }
 
 await main();

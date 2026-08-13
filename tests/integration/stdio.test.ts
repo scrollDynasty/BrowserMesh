@@ -35,6 +35,11 @@ describe('stdio executable', () => {
       expect(tools.tools.length).toBeGreaterThan(20);
       expect(tools.tools.some(({ name }) => name === 'browser_navigate')).toBe(true);
       expect(tools.tools.every(({ description }) => (description?.length ?? 0) > 40)).toBe(true);
+      expect(
+        tools.tools.every(
+          ({ title, outputSchema }) => title !== undefined && outputSchema?.type === 'object',
+        ),
+      ).toBe(true);
 
       const first = readCreated(
         await client.callTool({ name: 'browser_session_create', arguments: { name: 'first' } }),
@@ -47,13 +52,14 @@ describe('stdio executable', () => {
         arguments: { sessionId: first.sessionId, pageId: first.pageId },
       });
       expect(url.isError).not.toBe(true);
-      expect(JSON.stringify(url.content)).toContain('about:blank');
+      expect(url.structuredContent).toMatchObject({ url: 'about:blank' });
       const crossSession = await client.callTool({
         name: 'browser_get_url',
         arguments: { sessionId: first.sessionId, pageId: second.pageId },
       });
       expect(crossSession.isError).toBe(true);
       expect(JSON.stringify(crossSession.content)).toContain('PAGE_NOT_FOUND');
+      expect(JSON.stringify(crossSession.content)).toContain('operationId');
       const invalid = await client.callTool({ name: 'browser_get_url', arguments: {} });
       expect(invalid.isError).toBe(true);
       expect(JSON.stringify(invalid.content)).toContain('Input validation error');
@@ -103,15 +109,10 @@ describe('stdio executable', () => {
 });
 
 const createdSchema = z.object({
-  ok: z.literal(true),
-  value: z.object({ sessionId: z.string(), pageId: z.string() }),
+  initialPage: z.object({ sessionId: z.string(), pageId: z.string() }),
 });
 
-function readCreated(result: unknown): z.infer<typeof createdSchema>['value'] {
-  const parsed = z
-    .object({ content: z.array(z.object({ type: z.string(), text: z.string().optional() })) })
-    .parse(result);
-  const text = parsed.content.find((block) => block.type === 'text')?.text;
-  if (text === undefined) throw new Error('MCP create result did not contain text');
-  return createdSchema.parse(JSON.parse(text)).value;
+function readCreated(result: unknown): z.infer<typeof createdSchema>['initialPage'] {
+  const parsed = z.object({ structuredContent: z.unknown() }).parse(result);
+  return createdSchema.parse(parsed.structuredContent).initialPage;
 }
