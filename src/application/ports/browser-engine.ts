@@ -7,6 +7,7 @@ import type {
   ElementTarget,
   Locator,
   SnapshotOptions,
+  ScreenshotOptions,
   WaitCondition,
 } from '../../domain/models.js';
 import type { BrowserObservation } from '../../domain/observability.js';
@@ -76,6 +77,18 @@ export interface BrowserEnginePort {
     target: ElementTarget,
     control: OperationControl,
   ): Promise<void>;
+  scroll(
+    page: BrowserPageHandle,
+    deltaX: number,
+    deltaY: number,
+    control: OperationControl,
+  ): Promise<void>;
+  dragAndDrop(
+    page: BrowserPageHandle,
+    source: Locator,
+    target: Locator,
+    control: OperationControl,
+  ): Promise<void>;
   fill(
     page: BrowserPageHandle,
     target: ElementTarget,
@@ -107,7 +120,11 @@ export interface BrowserEnginePort {
     locator: Locator,
     control: OperationControl,
   ): Promise<string>;
-  screenshot(page: BrowserPageHandle, control: OperationControl): Promise<Uint8Array>;
+  screenshot(
+    page: BrowserPageHandle,
+    options: ScreenshotOptions,
+    control: OperationControl,
+  ): Promise<Uint8Array>;
   wait(page: BrowserPageHandle, condition: WaitCondition, control: OperationControl): Promise<void>;
   actionAndWait(
     page: BrowserPageHandle,

@@ -42,6 +42,8 @@ describe('stdio executable', () => {
           'browser_check',
           'browser_uncheck',
           'browser_scroll_into_view',
+          'browser_scroll',
+          'browser_drag_and_drop',
         ].every((name) => tools.tools.some((tool) => tool.name === name)),
       ).toBe(true);
       const runtimeInfo = await client.callTool({ name: 'browser_runtime_info', arguments: {} });

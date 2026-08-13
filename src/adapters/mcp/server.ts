@@ -6,6 +6,7 @@ import type {
   ElementTarget,
   Locator,
   SnapshotOptions,
+  ScreenshotOptions,
   WaitCondition,
 } from '../../domain/models.js';
 import { SNAPSHOT_LIMITS } from '../../domain/snapshots.js';
@@ -47,6 +48,14 @@ const targetSchema = {
   pageId: z.string().min(1),
   timeoutMs: z.number().int().positive().max(300_000).optional(),
 };
+const scrollDeltaSchema = z.number().int().min(-1_000_000).max(1_000_000);
+const screenshotCaptureSchema = z
+  .discriminatedUnion('kind', [
+    z.object({ kind: z.literal('viewport') }),
+    z.object({ kind: z.literal('fullPage') }),
+    z.object({ kind: z.literal('element'), locator: locatorSchema }),
+  ])
+  .optional();
 const sessionSchema = { sessionId: z.string().min(1) };
 const urlMatcherSchema = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('exact'), value: z.string().min(1).max(2_048) }),
@@ -588,6 +597,34 @@ export function createMcpServer(runtime: BrowserMeshRuntime): McpServer {
       ),
   );
   server.registerTool(
+    'browser_scroll',
+    {
+      ...contractFor('browser_scroll'),
+      description:
+        'Scroll an explicitly addressed page by bounded integer pixel deltas. Use deltaX for horizontal and deltaY for vertical movement; this typed operation exposes no arbitrary JavaScript and remains serialized within the session.',
+      inputSchema: { ...targetSchema, deltaX: scrollDeltaSchema, deltaY: scrollDeltaSchema },
+    },
+    (input, extra) =>
+      pageCompleted(runtime.scroll(target(input, extra.signal), input.deltaX, input.deltaY)),
+  );
+  server.registerTool(
+    'browser_drag_and_drop',
+    {
+      ...contractFor('browser_drag_and_drop'),
+      description:
+        'Drag one semantic or CSS-located element onto another on one explicitly addressed page. Source and target are resolved in the same page and session, with bounded timeout and strict ambiguity errors.',
+      inputSchema: { ...targetSchema, source: locatorSchema, target: locatorSchema },
+    },
+    (input, extra) =>
+      pageCompleted(
+        runtime.dragAndDrop(
+          target(input, extra.signal),
+          input.source as Locator,
+          input.target as Locator,
+        ),
+      ),
+  );
+  server.registerTool(
     'browser_fill',
     {
       ...contractFor('browser_fill'),
@@ -638,11 +675,17 @@ export function createMcpServer(runtime: BrowserMeshRuntime): McpServer {
       ...contractFor('browser_screenshot'),
       description:
         'Capture an in-memory PNG screenshot of one explicitly addressed page. BrowserMesh returns image content and does not write to a caller-controlled path or inspect another session.',
-      inputSchema: targetSchema,
+      inputSchema: { ...targetSchema, capture: screenshotCaptureSchema },
     },
     async (input, extra) => {
       try {
-        const capture = await runtime.screenshot(target(input, extra.signal));
+        const options: ScreenshotOptions =
+          input.capture?.kind === 'fullPage'
+            ? { fullPage: true }
+            : input.capture?.kind === 'element'
+              ? { locator: input.capture.locator as Locator }
+              : {};
+        const capture = await runtime.screenshot(target(input, extra.signal), options);
         const structuredContent = {
           operationId: capture.operationId,
           sessionId: capture.sessionId,

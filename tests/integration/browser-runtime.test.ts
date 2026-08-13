@@ -176,9 +176,23 @@ describe('real Chromium runtime', () => {
       name: 'Double target',
     });
     expect((await runtime.visibleText(target, status)).value).toBe('double-clicked');
+    await runtime.dragAndDrop(
+      target,
+      { strategy: 'testId', value: 'drag-source' },
+      { strategy: 'testId', value: 'drop-target' },
+    );
+    expect((await runtime.visibleText(target, status)).value).toBe('dropped');
+    await runtime.scroll(target, 0, 1200);
+    await runtime.wait(target, { kind: 'text', text: 'scrolled', state: 'present' });
     await runtime.scrollIntoView(target, { strategy: 'testId', value: 'offscreen' });
     await runtime.wait(target, { kind: 'text', text: 'scrolled', state: 'present' });
     expect((await runtime.visibleText(target, status)).value).toBe('scrolled');
+    const elementCapture = await runtime.screenshot(target, {
+      locator: { strategy: 'testId', value: 'drop-target' },
+    });
+    const fullPageCapture = await runtime.screenshot(target, { fullPage: true });
+    expect(elementCapture.value.startsWith('iVBOR')).toBe(true);
+    expect(fullPageCapture.value.length).toBeGreaterThan(elementCapture.value.length);
   });
 
   it('keeps typed-interaction failures bounded and the real session queue usable', async () => {
