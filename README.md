@@ -431,13 +431,17 @@ BrowserMesh never attempts to serialize a live `BrowserContext`, open pages, pen
 | `BROWSERMESH_MAX_SESSIONS` |           `50` | Active session limit                          |
 | `BROWSERMESH_MAX_PAGES`    |           `20` | Managed pages per session                     |
 | `BROWSERMESH_PERSISTENCE`  |         `true` | Enable saved browser state                    |
+| `BROWSERMESH_HEADLESS`     |        `false` | Launch Chromium without a visible window      |
 
 Configuration is read and validated centrally.
 
-The BrowserMesh CLI always launches Chromium in headed mode when the first browser session is
-created so the user can observe browser automation. Browser startup is lazy so MCP discovery and
-actionable setup errors remain available when Chromium has not been installed yet. Set a larger
-per-tool `timeoutMs` only for operations that are expected to take longer than the safe default.
+BrowserMesh launches Chromium in headed mode by default so the user can observe browser automation.
+Set `BROWSERMESH_HEADLESS=true` for CI, servers, and other environments without a display. Only the
+literal values `true` and `false` are accepted; invalid values fail configuration instead of being
+silently ignored. Browser startup remains lazy in either mode, so MCP discovery and actionable
+setup errors stay available when Chromium has not been installed yet. The configured
+`BROWSERMESH_TIMEOUT_MS` also bounds browser launch. Set a larger per-tool `timeoutMs` only for
+operations that are expected to take longer than the safe default.
 
 Direct scattered `process.env` access throughout the codebase is not allowed.
 

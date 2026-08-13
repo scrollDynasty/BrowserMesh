@@ -7,6 +7,7 @@ import {
 } from 'playwright';
 import type {
   BrowserContextHandle,
+  BrowserEngineLaunchOptions,
   BrowserEnginePort,
   BrowserPageHandle,
 } from '../../application/ports/browser-engine.js';
@@ -29,7 +30,12 @@ export class PlaywrightBrowserEngine implements BrowserEnginePort {
   private readonly contexts = new Map<symbol, BrowserContext>();
   private readonly pages = new Map<symbol, Page>();
 
-  constructor(private readonly headless = false) {}
+  constructor(
+    private readonly launchOptions: BrowserEngineLaunchOptions = {
+      headless: false,
+      timeoutMs: 10_000,
+    },
+  ) {}
 
   onDisconnected(listener: () => void): () => void {
     this.disconnectedListeners.add(listener);
@@ -41,7 +47,10 @@ export class PlaywrightBrowserEngine implements BrowserEnginePort {
     if (this.startPromise !== undefined) return this.startPromise;
     this.startPromise = (async () => {
       try {
-        const browser = await chromium.launch({ headless: this.headless });
+        const browser = await chromium.launch({
+          headless: this.launchOptions.headless,
+          timeout: this.launchOptions.timeoutMs,
+        });
         browser.once('disconnected', () => this.handleDisconnected(browser));
         this.browser = browser;
       } catch (error) {

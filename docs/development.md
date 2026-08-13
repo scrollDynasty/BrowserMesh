@@ -49,6 +49,11 @@ npx playwright install chromium
 npm run verify
 ```
 
+Browser mode is explicit in automation. Use `BROWSERMESH_HEADLESS=true` when no display is
+available. Use `BROWSERMESH_HEADLESS=false` under Xvfb when verifying the default headed product
+behavior. The default is `false`, and only the exact strings `true` and `false` are valid. Browser
+startup remains lazy until the first session is created.
+
 Use the repository lockfile.
 
 Do not delete/regenerate it casually as part of unrelated work.
@@ -623,3 +628,6 @@ Before claiming BrowserMesh v0.1 is complete:
 20. rerun the complete affected verification suite.
 
 Do not call the project complete merely because `npm run build` succeeds.
+
+`npm run verify:package` selects headless mode by default for a portable local smoke test. Set
+`BROWSERMESH_HEADLESS=false` and run it under Xvfb to exercise the headed package path explicitly.

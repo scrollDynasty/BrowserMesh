@@ -13,7 +13,7 @@ export interface RealRuntimeHarness {
 }
 
 export async function createRealRuntimeHarness(
-  engine = new PlaywrightBrowserEngine(true),
+  engine = new PlaywrightBrowserEngine({ headless: true, timeoutMs: 5_000 }),
 ): Promise<RealRuntimeHarness> {
   const dataDirectory = await mkdtemp(join(tmpdir(), 'browsermesh-integration-'));
   const runtime = new BrowserMeshRuntime({

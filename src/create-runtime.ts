@@ -1,13 +1,31 @@
 import { PlaywrightBrowserEngine } from './adapters/playwright/playwright-browser-engine.js';
 import { FileSystemStateRepository } from './adapters/persistence/filesystem-state-repository.js';
+import type {
+  BrowserEngineLaunchOptions,
+  BrowserEnginePort,
+} from './application/ports/browser-engine.js';
 import type { BrowserMeshConfig } from './infrastructure/config.js';
 import { uuidGenerator } from './infrastructure/id.js';
 import { StructuredLogger } from './infrastructure/logger.js';
 import { BrowserMeshRuntime } from './runtime/browsermesh-runtime.js';
 
-export function createRuntime(config: BrowserMeshConfig): BrowserMeshRuntime {
+export interface CreateRuntimeDependencies {
+  createBrowserEngine(options: BrowserEngineLaunchOptions): BrowserEnginePort;
+}
+
+const defaultDependencies: CreateRuntimeDependencies = {
+  createBrowserEngine: (options) => new PlaywrightBrowserEngine(options),
+};
+
+export function createRuntime(
+  config: BrowserMeshConfig,
+  dependencies: CreateRuntimeDependencies = defaultDependencies,
+): BrowserMeshRuntime {
   return new BrowserMeshRuntime({
-    engine: new PlaywrightBrowserEngine(),
+    engine: dependencies.createBrowserEngine({
+      headless: config.headless,
+      timeoutMs: config.defaultTimeoutMs,
+    }),
     stateRepository: new FileSystemStateRepository(config.dataDirectory),
     events: new StructuredLogger(config.logLevel),
     ids: uuidGenerator,

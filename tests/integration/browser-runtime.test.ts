@@ -328,7 +328,9 @@ describe('real Chromium creation/shutdown synchronization', () => {
         return super.createContext(options);
       }
     }
-    const harness = await createRealRuntimeHarness(new GatedPlaywrightEngine(true));
+    const harness = await createRealRuntimeHarness(
+      new GatedPlaywrightEngine({ headless: true, timeoutMs: 5_000 }),
+    );
     try {
       const creation = harness.runtime.createSession();
       await Promise.resolve();

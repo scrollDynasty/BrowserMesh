@@ -8,6 +8,11 @@ export interface BrowserContextHandle {
   readonly id: symbol;
 }
 
+export interface BrowserEngineLaunchOptions {
+  readonly headless: boolean;
+  readonly timeoutMs: number;
+}
+
 export interface BrowserEnginePort {
   onDisconnected(listener: () => void): () => void;
   start(): Promise<void>;
