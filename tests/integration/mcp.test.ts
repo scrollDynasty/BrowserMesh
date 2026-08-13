@@ -147,6 +147,27 @@ describe('MCP adapter', () => {
         ...target,
         locator: { strategy: 'testId', value: 'status' },
       });
+      const targetHandle = requiredValue(Array.from(engine.pages.values())[0]);
+      engine.emitObservation(targetHandle, {
+        kind: 'console',
+        level: 'error',
+        text: 'token=mcp-secret failed',
+      });
+      const defaultConsole = await callSuccess(client, 'browser_console_list', target);
+      const defaultConsoleEvent = z
+        .object({ events: z.array(z.object({ text: z.string().optional() })).min(1) })
+        .parse(defaultConsole.structuredContent).events[0];
+      expect(defaultConsoleEvent).not.toHaveProperty('text');
+      const textConsole = await callSuccess(client, 'browser_console_list', {
+        ...target,
+        includeText: true,
+      });
+      expect(
+        z
+          .object({ events: z.array(z.object({ text: z.string() })).min(1) })
+          .parse(textConsole.structuredContent).events[0]?.text,
+      ).toBe('token=[REDACTED] failed');
+      await callSuccess(client, 'browser_page_errors_list', { ...target, includeText: false });
       await callSuccess(client, 'browser_click', {
         ...target,
         locator: { strategy: 'role', value: 'button', name: 'Submit', exact: true },
@@ -393,4 +414,9 @@ function requireCallResult(result: unknown): ResultLike {
 
 function isToolName(name: string): name is ToolName {
   return Object.prototype.hasOwnProperty.call(outputSchemas, name);
+}
+
+function requiredValue<T>(value: T | null | undefined): T {
+  if (value === undefined || value === null) throw new Error('Expected test value');
+  return value;
 }

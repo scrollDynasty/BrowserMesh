@@ -28,11 +28,18 @@ import type {
 } from '../domain/models.js';
 import type { IdGenerator } from '../infrastructure/id.js';
 import { SerialQueue } from './serial-queue.js';
+import {
+  BoundedObservationStore,
+  type ObservationList,
+  type ObservabilityLimits,
+} from './bounded-observability.js';
 
 interface PageEntry {
   readonly id: string;
   readonly createdAt: string;
   readonly handle: BrowserPageHandle;
+  readonly observations: BoundedObservationStore;
+  readonly stopObserving: () => void;
 }
 
 interface SessionEntry {
@@ -65,6 +72,7 @@ export interface RuntimeOptions {
   readonly nodeVersion: string;
   readonly playwrightVersion: string;
   readonly headless: boolean;
+  readonly observability?: ObservabilityLimits;
 }
 
 export interface BrowserRuntimeInfo {
@@ -188,8 +196,7 @@ export class BrowserMeshRuntime {
                 `Session '${id}' failed because Chromium disconnected during creation`,
               );
             }
-            const initialPage = await this.options.engine.createPage(entry.context);
-            const page = this.addPage(entry, initialPage);
+            const page = await this.createManagedPage(entry, entry.context);
             entry.defaultPageId = page.id;
             createdPageId = page.id;
             entry.status = 'ready';
@@ -210,7 +217,7 @@ export class BrowserMeshRuntime {
                 );
               }
             }
-            entry.pages.clear();
+            this.disposePages(entry);
             entry.defaultPageId = undefined;
             entry.context = undefined;
             this.rememberTerminalSession(entry);
@@ -287,7 +294,7 @@ export class BrowserMeshRuntime {
               );
             }
             const context = this.requireContext(entry);
-            const page = this.addPage(entry, await this.options.engine.createPage(context));
+            const page = await this.createManagedPage(entry, context);
             this.emit('page.created', { sessionId, pageId: page.id });
             return this.pageView(entry, page);
           },
@@ -329,6 +336,7 @@ export class BrowserMeshRuntime {
           async (entry) => {
             const page = this.getPageEntry(entry, pageId);
             await this.options.engine.closePage(page.handle);
+            page.stopObserving();
             entry.pages.delete(pageId);
             if (entry.defaultPageId === pageId)
               entry.defaultPageId = entry.pages.keys().next().value;
@@ -359,6 +367,28 @@ export class BrowserMeshRuntime {
       await this.options.engine.navigate(page, parsed.href, control);
       return this.options.engine.url(page);
     });
+  }
+
+  listConsole(
+    target: OperationTarget,
+    input: {
+      readonly sinceEventId?: string;
+      readonly limit?: number;
+      readonly includeText?: boolean;
+    },
+  ): Promise<PageAddressedOperationResult<ObservationList>> {
+    return this.observationList(target, 'console', input);
+  }
+
+  listPageErrors(
+    target: OperationTarget,
+    input: {
+      readonly sinceEventId?: string;
+      readonly limit?: number;
+      readonly includeText?: boolean;
+    },
+  ): Promise<PageAddressedOperationResult<ObservationList>> {
+    return this.observationList(target, 'page_error', input);
   }
 
   back(target: OperationTarget): Promise<PageAddressedOperationResult<string>> {
@@ -648,6 +678,22 @@ export class BrowserMeshRuntime {
     }
   }
 
+  private observationList(
+    target: OperationTarget,
+    kind: 'console' | 'page_error',
+    input: {
+      readonly sinceEventId?: string;
+      readonly limit?: number;
+      readonly includeText?: boolean;
+    },
+  ): Promise<PageAddressedOperationResult<ObservationList>> {
+    return this.pageOperation(target, () => {
+      const entry = this.readySession(target.sessionId);
+      const page = this.getPageEntry(entry, target.pageId);
+      return Promise.resolve(page.observations.list({ kind, ...input }));
+    });
+  }
+
   private requirePageAddress<T>(result: OperationResult<T>): PageAddressedOperationResult<T> {
     if (result.sessionId === undefined || result.pageId === undefined) {
       throw new BrowserMeshError('INTERNAL_ERROR', 'Operation result is missing its page address');
@@ -712,13 +758,55 @@ export class BrowserMeshRuntime {
   }
 
   private addPage(entry: SessionEntry, handle: BrowserPageHandle): PageEntry {
+    const pageId = this.options.ids.next('page');
+    const observations = new BoundedObservationStore(
+      this.options.observability ?? {
+        maxEventsPerPage: 200,
+        maxStringLength: 2_048,
+        maxPageSize: 100,
+        maxResponseBytes: 65_536,
+      },
+      this.options.ids.next('cursor'),
+    );
     const page: PageEntry = {
-      id: this.options.ids.next('page'),
+      id: pageId,
       createdAt: this.timestamp(),
       handle,
+      observations,
+      stopObserving: this.options.engine.observePage(handle, (event) => {
+        observations.append({
+          ...event,
+          timestamp: this.timestamp(),
+          sessionId: entry.id,
+          pageId,
+        });
+      }),
     };
     entry.pages.set(page.id, page);
     return page;
+  }
+
+  private async createManagedPage(
+    entry: SessionEntry,
+    context: BrowserContextHandle,
+  ): Promise<PageEntry> {
+    const handle = await this.options.engine.createPage(context);
+    try {
+      return this.addPage(entry, handle);
+    } catch (error) {
+      try {
+        await this.options.engine.closePage(handle);
+      } catch (cleanupError) {
+        throw new BrowserMeshError(
+          'BROWSER_ERROR',
+          'Page creation and observability cleanup both failed',
+          {
+            cause: new AggregateError([error, cleanupError]),
+          },
+        );
+      }
+      throw error;
+    }
   }
 
   private sessionView(entry: SessionEntry): SessionView {
@@ -780,7 +868,7 @@ export class BrowserMeshRuntime {
   private closeFailedSession(entry: SessionEntry): SessionView {
     entry.status = 'closed';
     entry.accepting = false;
-    entry.pages.clear();
+    this.disposePages(entry);
     entry.context = undefined;
     this.rememberTerminalSession(entry);
     return this.sessionView(entry);
@@ -793,8 +881,11 @@ export class BrowserMeshRuntime {
       if (entry.status === 'closed') return this.sessionView(entry);
       if (entry.status === 'failed') return this.closeFailedSession(entry);
       entry.status = 'closing';
-      if (entry.context !== undefined) await this.options.engine.closeContext(entry.context);
-      entry.pages.clear();
+      try {
+        if (entry.context !== undefined) await this.options.engine.closeContext(entry.context);
+      } finally {
+        this.disposePages(entry);
+      }
       entry.defaultPageId = undefined;
       entry.context = undefined;
       entry.status = 'closed';
@@ -829,7 +920,7 @@ export class BrowserMeshRuntime {
         entry.accepting = false;
         entry.disconnected = true;
         entry.context = undefined;
-        entry.pages.clear();
+        this.disposePages(entry);
         entry.defaultPageId = undefined;
         entry.lastActivityAt = this.timestamp();
         this.emit('session.failed', { sessionId: entry.id });
@@ -841,6 +932,11 @@ export class BrowserMeshRuntime {
 
   private timestamp(): string {
     return this.now().toISOString();
+  }
+
+  private disposePages(entry: SessionEntry): void {
+    for (const page of entry.pages.values()) page.stopObserving();
+    entry.pages.clear();
   }
 
   private emit(

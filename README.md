@@ -318,6 +318,18 @@ A completely unknown session ID still returns `SESSION_NOT_FOUND`.
 - `browser_snapshot`
 - `browser_visible_text`
 
+### Observability
+
+- `browser_console_list`
+- `browser_page_errors_list`
+
+Both tools require an explicit `sessionId` and `pageId`. Reads are metadata-only by default; set
+`includeText=true` for bounded, best-effort-redacted evidence. Use `nextCursor` as the next
+non-destructive `sinceEventId` checkpoint. Always inspect `gap` and `droppedCount` before concluding
+that an event was absent. Text may be truncated further to satisfy the total response-byte limit;
+the event and its cursor are still returned so pagination cannot stall. BrowserMesh never captures
+console argument objects or raw error stacks.
+
 ### Interaction
 
 - `browser_click`
@@ -481,15 +493,19 @@ BrowserMesh never attempts to serialize a live `BrowserContext`, open pages, pen
 
 ## Configuration
 
-| Environment variable       |        Default | Meaning                                       |
-| -------------------------- | -------------: | --------------------------------------------- |
-| `BROWSERMESH_TIMEOUT_MS`   |        `10000` | Default bounded operation timeout             |
-| `BROWSERMESH_DATA_DIR`     | `.browsermesh` | Private local data directory                  |
-| `BROWSERMESH_LOG_LEVEL`    |         `info` | `debug`, `info`, `warn`, `error`, or `silent` |
-| `BROWSERMESH_MAX_SESSIONS` |           `50` | Active session limit                          |
-| `BROWSERMESH_MAX_PAGES`    |           `20` | Managed pages per session                     |
-| `BROWSERMESH_PERSISTENCE`  |         `true` | Enable saved browser state                    |
-| `BROWSERMESH_HEADLESS`     |        `false` | Launch Chromium without a visible window      |
+| Environment variable                       |        Default | Meaning                                        |
+| ------------------------------------------ | -------------: | ---------------------------------------------- |
+| `BROWSERMESH_TIMEOUT_MS`                   |        `10000` | Default bounded operation timeout              |
+| `BROWSERMESH_DATA_DIR`                     | `.browsermesh` | Private local data directory                   |
+| `BROWSERMESH_LOG_LEVEL`                    |         `info` | `debug`, `info`, `warn`, `error`, or `silent`  |
+| `BROWSERMESH_MAX_SESSIONS`                 |           `50` | Active session limit                           |
+| `BROWSERMESH_MAX_PAGES`                    |           `20` | Managed pages per session                      |
+| `BROWSERMESH_PERSISTENCE`                  |         `true` | Enable saved browser state                     |
+| `BROWSERMESH_HEADLESS`                     |        `false` | Launch Chromium without a visible window       |
+| `BROWSERMESH_OBSERVABILITY_EVENTS`         |          `200` | Retained console/error events per page         |
+| `BROWSERMESH_OBSERVABILITY_STRING_CHARS`   |         `2048` | Maximum exposed event string length            |
+| `BROWSERMESH_OBSERVABILITY_PAGE_SIZE`      |          `100` | Maximum events returned by one read            |
+| `BROWSERMESH_OBSERVABILITY_RESPONSE_BYTES` |        `65536` | Maximum serialized observability response size |
 
 Configuration is read and validated centrally.
 

@@ -548,6 +548,12 @@ contracts. Each page owns at most one listener set. Teardown removes listeners b
 discarded. Ring-buffer overflow is observable through dropped counts. Browser event bodies,
 headers, console object graphs, and raw exceptions never enter the normalized event port.
 
+The first observability slice normalizes only `console` and `pageerror` subscriptions through the
+browser-engine port. Runtime page entries own the disposer and one bounded mixed event store; reads
+filter by event kind without creating an adapter dependency. Page-scoped cursor namespaces reject a
+cursor presented for another page even inside the same session. Network normalization follows in a
+separate slice of ADR 0010.
+
 Snapshot bounds, context settings, and new actions are engine-independent value contracts.
 Short-lived element references, if introduced, are runtime IDs resolving only inside the adapter;
 they are bounded and invalidated with page/document lifecycle. They are conveniences, not durable
