@@ -34,6 +34,10 @@ describe('stdio executable', () => {
       const tools = await client.listTools();
       expect(tools.tools.length).toBeGreaterThan(20);
       expect(tools.tools.some(({ name }) => name === 'browser_navigate')).toBe(true);
+      const runtimeInfo = await client.callTool({ name: 'browser_runtime_info', arguments: {} });
+      expect(runtimeInfo.isError).not.toBe(true);
+      expect(JSON.stringify(runtimeInfo.content)).toContain('not_started');
+      expect(JSON.stringify(runtimeInfo.content)).toContain(BROWSERMESH_VERSION);
       expect(tools.tools.every(({ description }) => (description?.length ?? 0) > 40)).toBe(true);
 
       const first = readCreated(
@@ -94,6 +98,10 @@ describe('stdio executable', () => {
       expect(JSON.stringify(creation.content)).toContain(
         'npx -y multi-agent-browser-mcp --install-browser',
       );
+      const runtimeInfo = await client.callTool({ name: 'browser_runtime_info', arguments: {} });
+      const serializedRuntimeInfo = JSON.stringify(runtimeInfo.content);
+      expect(serializedRuntimeInfo).toContain('\\"browserLaunchState\\":\\"failed\\"');
+      expect(serializedRuntimeInfo).toContain('\\"browserVersion\\":null');
     } finally {
       await client.close();
       await transport.close();

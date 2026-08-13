@@ -36,14 +36,14 @@ pending and does not retroactively make the baseline incomplete.
 
 ## Professional MCP improvement program
 
-| Milestone                                              | Status                                                                                         | Contract |
-| ------------------------------------------------------ | ---------------------------------------------------------------------------------------------- | -------- |
-| Version chain, headless config, runtime info, doctor   | Partial: immutable version chain and headless config complete; runtime info and doctor pending | ADR 0007 |
-| Structured MCP output, annotations, cancellation       | Accepted; pending implementation                                                               | ADR 0008 |
-| Passive waits and atomic action/wait                   | Accepted; pending implementation                                                               | ADR 0009 |
-| Bounded redacted browser observability                 | Accepted; pending implementation                                                               | ADR 0010 |
-| Bounded snapshots, context options, typed interactions | Accepted; pending implementation                                                               | ADR 0011 |
-| Filesystem-backed artifacts                            | Design gate accepted; capability ADR and implementation deferred                               | ADR 0012 |
+| Milestone                                              | Status                                                                                                                      | Contract |
+| ------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------- | -------- |
+| Version chain, headless config, runtime info, doctor   | Complete: immutable exact version chain, validated launch config, safe non-launching runtime info, and bounded doctor smoke | ADR 0007 |
+| Structured MCP output, annotations, cancellation       | Accepted; pending implementation                                                                                            | ADR 0008 |
+| Passive waits and atomic action/wait                   | Accepted; pending implementation                                                                                            | ADR 0009 |
+| Bounded redacted browser observability                 | Accepted; pending implementation                                                                                            | ADR 0010 |
+| Bounded snapshots, context options, typed interactions | Accepted; pending implementation                                                                                            | ADR 0011 |
+| Filesystem-backed artifacts                            | Design gate accepted; capability ADR and implementation deferred                                                            | ADR 0012 |
 
 Remote HTTP/multi-client security and internal agent orchestration are not part of the accepted
 implementation program. The latter remains a separate external layer.
@@ -114,6 +114,14 @@ Latest post-v0.1 slice verification:
 - `npm run verify`: passed (17 files, 63 tests, coverage thresholds, build).
 - `BROWSERMESH_HEADLESS=true npm run verify:package`: passed, including installed-tarball MCP and
   Chromium smoke.
+- `browser_runtime_info` reports exact generated BrowserMesh/resolved Playwright versions, Node
+  version, nullable live Chromium version, launch state, effective safe configuration, and bounded
+  session counts without launching Chromium.
+- `browsermesh --doctor --json` provides schema version `1`, stable required check IDs, safe
+  remediation, non-zero failure exits, data-directory create/read/write probing without listing,
+  executable availability, and a real bounded launch/context/page/cleanup smoke.
+- Unit, in-memory MCP, real stdio, real Chromium doctor, and installed-tarball doctor/runtime-info
+  verification cover ADR 0007. Full verification results for this slice are recorded in its PR.
 
 ## Intentional v0.1 non-scope
 

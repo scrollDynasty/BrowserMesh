@@ -37,6 +37,17 @@ export class FakeEngine implements BrowserEnginePort {
   onNavigationStart: (() => void) | undefined;
   private readonly disconnectedListeners = new Set<() => void>();
 
+  diagnostics(): { launchState: 'not_started' | 'ready'; browserVersion: string | null } {
+    return {
+      launchState: this.started ? 'ready' : 'not_started',
+      browserVersion: this.started ? '123.0.0.0' : null,
+    };
+  }
+
+  async isExecutableAvailable(): Promise<boolean> {
+    return true;
+  }
+
   get disconnectListenerCount(): number {
     return this.disconnectedListeners.size;
   }
@@ -209,6 +220,10 @@ export function testRuntime(
       maxSessions: 50,
       maxPagesPerSession: 5,
       persistenceEnabled: true,
+      serverVersion: '0.1.3-test',
+      nodeVersion: '24.0.0-test',
+      playwrightVersion: '1.62.1-test',
+      headless: true,
       ...overrides,
     }),
     engine,

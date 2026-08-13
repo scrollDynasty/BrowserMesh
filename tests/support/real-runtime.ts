@@ -5,6 +5,10 @@ import { PlaywrightBrowserEngine } from '../../src/adapters/playwright/playwrigh
 import { FileSystemStateRepository } from '../../src/adapters/persistence/filesystem-state-repository.js';
 import { uuidGenerator } from '../../src/infrastructure/id.js';
 import { BrowserMeshRuntime } from '../../src/runtime/browsermesh-runtime.js';
+import {
+  BROWSERMESH_VERSION,
+  PLAYWRIGHT_VERSION,
+} from '../../src/infrastructure/generated/version.js';
 
 export interface RealRuntimeHarness {
   readonly runtime: BrowserMeshRuntime;
@@ -25,6 +29,10 @@ export async function createRealRuntimeHarness(
     maxSessions: 50,
     maxPagesPerSession: 10,
     persistenceEnabled: true,
+    serverVersion: BROWSERMESH_VERSION,
+    nodeVersion: process.versions.node,
+    playwrightVersion: PLAYWRIGHT_VERSION,
+    headless: true,
   });
   return {
     runtime,

@@ -38,6 +38,15 @@ describe('MCP adapter', () => {
     expect(clickTool?.inputSchema).toHaveProperty('properties.locator');
     const snapshotTool = tools.tools.find(({ name }) => name === 'browser_snapshot');
     expect(snapshotTool?.description).toContain('password-input values are redacted');
+    const runtimeInfoTool = tools.tools.find(({ name }) => name === 'browser_runtime_info');
+    expect(runtimeInfoTool?.annotations).toMatchObject({
+      readOnlyHint: true,
+      destructiveHint: false,
+      idempotentHint: true,
+    });
+    const runtimeInfo = await expectToolSuccess(client, 'browser_runtime_info', {});
+    expect(JSON.stringify(runtimeInfo)).toContain('not_started');
+    expect(JSON.stringify(runtimeInfo)).toContain(BROWSERMESH_VERSION);
     const created = await client.callTool({
       name: 'browser_session_create',
       arguments: { name: 'mcp' },
@@ -130,6 +139,7 @@ const expectedToolNames = [
   'browser_page_list',
   'browser_press',
   'browser_reload',
+  'browser_runtime_info',
   'browser_screenshot',
   'browser_select_option',
   'browser_session_close',

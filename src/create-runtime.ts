@@ -7,6 +7,7 @@ import type {
 import type { BrowserMeshConfig } from './infrastructure/config.js';
 import { uuidGenerator } from './infrastructure/id.js';
 import { StructuredLogger } from './infrastructure/logger.js';
+import { BROWSERMESH_VERSION, PLAYWRIGHT_VERSION } from './infrastructure/generated/version.js';
 import { BrowserMeshRuntime } from './runtime/browsermesh-runtime.js';
 
 export interface CreateRuntimeDependencies {
@@ -33,5 +34,9 @@ export function createRuntime(
     maxSessions: config.maxSessions,
     maxPagesPerSession: config.maxPagesPerSession,
     persistenceEnabled: config.persistenceEnabled,
+    serverVersion: BROWSERMESH_VERSION,
+    nodeVersion: process.versions.node,
+    playwrightVersion: PLAYWRIGHT_VERSION,
+    headless: config.headless,
   });
 }

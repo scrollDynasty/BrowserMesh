@@ -643,3 +643,14 @@ Do not call the project complete merely because `npm run build` succeeds.
 
 `npm run verify:package` selects headless mode by default for a portable local smoke test. Set
 `BROWSERMESH_HEADLESS=false` and run it under Xvfb to exercise the headed package path explicitly.
+
+Installation diagnostics use the built CLI (or `npm run dev -- --doctor --json` from source):
+
+```sh
+node dist/cli.js --doctor --json
+```
+
+The doctor has stable schema version `1` and check IDs `node-version`, `version-consistency`,
+`data-directory-access`, `chromium-executable`, and `browser-smoke`. Any failed required check
+produces a non-zero exit. The browser smoke is real and bounded; all created pages, contexts, and
+the diagnostic browser are closed before completion.

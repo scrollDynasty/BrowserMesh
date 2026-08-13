@@ -36,6 +36,12 @@ const mcpEnvelopeSchema = z.object({
     value: z.unknown(),
   }),
 });
+const mcpValueSchema = z.object({ ok: z.literal(true), value: z.unknown() });
+const doctorResultSchema = z.object({
+  schemaVersion: z.literal('1'),
+  status: z.literal('passed'),
+  checks: z.array(z.object({ id: z.string(), status: z.literal('passed') })).length(5),
+});
 const installedManifestSchema = z.object({
   name: z.literal(packageName),
   version: z.string().min(1),
@@ -128,6 +134,18 @@ async function main(): Promise<void> {
       cwd: consumerDirectory,
       maxBuffer: 10 * 1024 * 1024,
     });
+    const doctor = await execFileAsync(process.execPath, [installedCliPath, '--doctor', '--json'], {
+      cwd: consumerDirectory,
+      env: {
+        ...getDefaultEnvironment(),
+        BROWSERMESH_LOG_LEVEL: 'silent',
+        BROWSERMESH_HEADLESS: 'true',
+        BROWSERMESH_DATA_DIR: join(consumerDirectory, '.browsermesh-doctor'),
+      },
+      timeout: 45_000,
+      maxBuffer: 10 * 1024 * 1024,
+    });
+    doctorResultSchema.parse(JSON.parse(doctor.stdout));
     transport = new StdioClientTransport({
       command: process.platform === 'win32' ? process.execPath : binPath,
       ...(process.platform === 'win32' ? { args: [installedCliPath] } : {}),
@@ -152,6 +170,34 @@ async function main(): Promise<void> {
     if (!tools.tools.some(({ name }) => name === 'browser_session_create')) {
       throw new Error('Packaged MCP server did not expose browser_session_create');
     }
+    const runtimeInfo = readSuccessfulValue(
+      await client.callTool({ name: 'browser_runtime_info', arguments: {} }),
+    );
+    const installedPlaywright = z
+      .object({ version: z.string().min(1) })
+      .parse(
+        JSON.parse(
+          await readFile(
+            join(consumerDirectory, 'node_modules', 'playwright', 'package.json'),
+            'utf8',
+          ),
+        ),
+      );
+    z.object({
+      serverVersion: z.literal(installedManifest.version),
+      nodeVersion: z.literal(process.versions.node),
+      playwrightVersion: z.literal(installedPlaywright.version),
+      browserProduct: z.literal('chromium'),
+      browserVersion: z.null(),
+      browserLaunchState: z.literal('not_started'),
+      headless: z.boolean(),
+      persistenceEnabled: z.boolean(),
+      defaultTimeoutMs: z.number().positive(),
+      maxSessions: z.number().positive(),
+      maxPagesPerSession: z.number().positive(),
+      activeSessions: z.literal(0),
+      failedSessions: z.literal(0),
+    }).parse(runtimeInfo);
     const created = await client.callTool({
       name: 'browser_session_create',
       arguments: { name: 'package-smoke' },
@@ -283,6 +329,15 @@ function readSuccessfulTextResult(result: unknown): z.infer<typeof mcpEnvelopeSc
   const text = parsed.content.find((block) => block.type === 'text')?.text;
   if (text === undefined) throw new Error('MCP result did not contain text content');
   return mcpEnvelopeSchema.parse(JSON.parse(text)).value;
+}
+
+function readSuccessfulValue(result: unknown): unknown {
+  const parsed = z
+    .object({ content: z.array(z.object({ type: z.string(), text: z.string().optional() })) })
+    .parse(result);
+  const text = parsed.content.find((block) => block.type === 'text')?.text;
+  if (text === undefined) throw new Error('MCP result did not contain compatibility JSON text');
+  return mcpValueSchema.parse(JSON.parse(text)).value;
 }
 
 await main();
