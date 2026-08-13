@@ -305,6 +305,25 @@ A completely unknown session ID still returns `SESSION_NOT_FOUND`.
 - `browser_press`
 - `browser_select_option`
 
+### Deterministic waits
+
+- `browser_wait`
+- `browser_action_and_wait`
+
+`browser_wait` observes one passive, typed condition through the owning session queue: an exact or
+safe-glob URL, `domcontentloaded`/`load`, locator state, or bounded text presence/absence. Text
+matching is a case-sensitive substring check against at most the first 1,000,000 characters of
+the page body's rendered `innerText`; `absent` means that substring is not present in that bounded
+observation. Caller regular expressions, JavaScript predicates, arbitrary sleeps, and
+`networkidle` are not supported.
+
+Do not queue a passive wait before the same-session action expected to satisfy it. For an action
+that triggers navigation or an HTTP response, `browser_action_and_wait` registers the typed waiter
+first and then performs one click or key press under one shared deadline. Returned response URLs
+remove credentials and fragments and redact common sensitive query values. Popup waiting remains
+deferred until popup pages can be atomically assigned a BrowserMesh `pageId` while enforcing the
+per-session page limit.
+
 ### Capture
 
 - `browser_screenshot`

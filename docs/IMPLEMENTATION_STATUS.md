@@ -36,14 +36,14 @@ pending and does not retroactively make the baseline incomplete.
 
 ## Professional MCP improvement program
 
-| Milestone                                              | Status                                                                                         | Contract |
-| ------------------------------------------------------ | ---------------------------------------------------------------------------------------------- | -------- |
-| Version chain, headless config, runtime info, doctor   | Partial: immutable version chain and headless config complete; runtime info and doctor pending | ADR 0007 |
-| Structured MCP output, annotations, cancellation       | Accepted; pending implementation                                                               | ADR 0008 |
-| Passive waits and atomic action/wait                   | Accepted; pending implementation                                                               | ADR 0009 |
-| Bounded redacted browser observability                 | Accepted; pending implementation                                                               | ADR 0010 |
-| Bounded snapshots, context options, typed interactions | Accepted; pending implementation                                                               | ADR 0011 |
-| Filesystem-backed artifacts                            | Design gate accepted; capability ADR and implementation deferred                               | ADR 0012 |
+| Milestone                                              | Status                                                                                                 | Contract |
+| ------------------------------------------------------ | ------------------------------------------------------------------------------------------------------ | -------- |
+| Version chain, headless config, runtime info, doctor   | Partial: immutable version chain and headless config complete; runtime info and doctor pending         | ADR 0007 |
+| Structured MCP output, annotations, cancellation       | Accepted; pending implementation                                                                       | ADR 0008 |
+| Passive waits and atomic action/wait                   | Partial: passive conditions and click/press + navigation/response complete; popup/cancellation pending | ADR 0009 |
+| Bounded redacted browser observability                 | Accepted; pending implementation                                                                       | ADR 0010 |
+| Bounded snapshots, context options, typed interactions | Accepted; pending implementation                                                                       | ADR 0011 |
+| Filesystem-backed artifacts                            | Design gate accepted; capability ADR and implementation deferred                                       | ADR 0012 |
 
 Remote HTTP/multi-client security and internal agent orchestration are not part of the accepted
 implementation program. The latter remains a separate external layer.
@@ -51,6 +51,7 @@ implementation program. The latter remains a separate external layer.
 ## Acceptance evidence
 
 - Real-Chromium integration covers isolated cookies, localStorage, pages, URLs, password redaction, exact/ambiguous role locators, DOM reads, screenshots, page lifecycle, history, interactions, persistence, ordering, parallelism, timeout recovery, shutdown, disconnect, and cleanup.
+- Real-Chromium wait coverage includes URL/load/locator/text success, exact-case text timeout and queue recovery, same-session read-after-navigation ordering, cross-session independence, waiter-first navigation/response composites, and redacted response URLs.
 - Unit tests cover lifecycle/limits, terminal-record bounds, operation correlation, queue recovery, navigation policy, persistence naming/atomic concurrency, configuration, structured logging, and architecture dependency rules.
 - MCP tests cover the exact public tool set, descriptions, schema rejection, safe structured errors, successful calls, explicit routing, subprocess stdio negotiation, and exit.
 - The deterministic 50-session stress test verifies runtime routing and cleanup, while a separate

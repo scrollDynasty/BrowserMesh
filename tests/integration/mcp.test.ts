@@ -100,6 +100,21 @@ describe('MCP adapter', () => {
       value: 'two',
     });
     await expectToolSuccess(client, 'browser_screenshot', target);
+    await expectToolSuccess(client, 'browser_wait', {
+      ...target,
+      condition: {
+        kind: 'url',
+        matcher: { kind: 'exact', value: 'https://example.test/contract' },
+      },
+    });
+    await expectToolSuccess(client, 'browser_action_and_wait', {
+      ...target,
+      action: { kind: 'click', locator: { strategy: 'role', value: 'button', name: 'Submit' } },
+      wait: {
+        kind: 'response',
+        matcher: { kind: 'exact', value: 'https://example.test/result' },
+      },
+    });
     await expectToolSuccess(client, 'browser_state_save', {
       sessionId: target.sessionId,
       stateId: 'contract-state',
@@ -118,6 +133,7 @@ describe('MCP adapter', () => {
 });
 
 const expectedToolNames = [
+  'browser_action_and_wait',
   'browser_back',
   'browser_click',
   'browser_fill',
@@ -141,6 +157,7 @@ const expectedToolNames = [
   'browser_state_remove',
   'browser_state_save',
   'browser_visible_text',
+  'browser_wait',
 ].sort();
 
 const successfulTargetSchema = z.object({

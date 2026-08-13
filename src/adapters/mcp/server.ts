@@ -2,7 +2,12 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { z } from 'zod';
 import { asBrowserMeshError } from '../../domain/errors.js';
-import type { Locator } from '../../domain/models.js';
+import type {
+  ActionWaitCondition,
+  BrowserAction,
+  Locator,
+  WaitCondition,
+} from '../../domain/models.js';
 import { BROWSERMESH_VERSION } from '../../infrastructure/generated/version.js';
 import type { BrowserMeshRuntime, OperationTarget } from '../../runtime/browsermesh-runtime.js';
 
@@ -36,6 +41,44 @@ const targetSchema = {
   timeoutMs: z.number().int().positive().max(300_000).optional(),
 };
 const sessionSchema = { sessionId: z.string().min(1) };
+const urlMatcherSchema = z.discriminatedUnion('kind', [
+  z.object({ kind: z.literal('exact'), value: z.string().min(1).max(2_048) }),
+  z.object({ kind: z.literal('glob'), value: z.string().min(1).max(2_048) }),
+]);
+const waitConditionSchema = z.discriminatedUnion('kind', [
+  z.object({ kind: z.literal('url'), matcher: urlMatcherSchema }),
+  z.object({ kind: z.literal('load'), state: z.enum(['domcontentloaded', 'load']) }),
+  z.object({
+    kind: z.literal('locator'),
+    locator: locatorSchema,
+    state: z.enum(['visible', 'hidden', 'attached', 'detached', 'enabled', 'disabled']),
+  }),
+  z.object({
+    kind: z.literal('text'),
+    text: z.string().min(1).max(2_000),
+    state: z.enum(['present', 'absent']),
+  }),
+]);
+const browserActionSchema = z.discriminatedUnion('kind', [
+  z.object({ kind: z.literal('click'), locator: locatorSchema }),
+  z.object({ kind: z.literal('press'), locator: locatorSchema, key: z.string().min(1).max(64) }),
+]);
+const actionWaitSchema = z.discriminatedUnion('kind', [
+  z.object({
+    kind: z.literal('navigation'),
+    matcher: urlMatcherSchema.optional(),
+    loadState: z.enum(['domcontentloaded', 'load']).optional(),
+  }),
+  z.object({
+    kind: z.literal('response'),
+    matcher: urlMatcherSchema,
+    method: z
+      .string()
+      .regex(/^[A-Z]{1,16}$/u)
+      .optional(),
+    status: z.number().int().min(100).max(599).optional(),
+  }),
+]);
 
 function target(input: {
   sessionId: string;
@@ -279,6 +322,32 @@ export function createMcpServer(runtime: BrowserMeshRuntime): McpServer {
         });
       }
     },
+  );
+
+  server.registerTool(
+    'browser_wait',
+    {
+      description:
+        'Wait for one deterministic passive condition on an explicitly addressed page: an exact/safe-glob URL, domcontentloaded/load state, locator state, or case-sensitive text presence/absence. The wait occupies that session queue, is bounded by timeoutMs, and must not depend on a later action queued in the same session; use browser_action_and_wait for action-triggered events.',
+      inputSchema: { ...targetSchema, condition: waitConditionSchema },
+    },
+    (input) => result(() => runtime.wait(target(input), input.condition as WaitCondition)),
+  );
+  server.registerTool(
+    'browser_action_and_wait',
+    {
+      description:
+        'Atomically register a navigation or response waiter first, then click or press on the explicitly addressed page under one shared deadline. Use this instead of parallel same-session calls when an action triggers the event; BrowserMesh preserves queue serialization and returns bounded event metadata.',
+      inputSchema: { ...targetSchema, action: browserActionSchema, wait: actionWaitSchema },
+    },
+    (input) =>
+      result(() =>
+        runtime.actionAndWait(
+          target(input),
+          input.action as BrowserAction,
+          input.wait as ActionWaitCondition,
+        ),
+      ),
   );
 
   server.registerTool(

@@ -10,6 +10,12 @@ import type {
 } from '../../src/application/ports/state-repository.js';
 import { BrowserMeshError } from '../../src/domain/errors.js';
 import type { BrowserStorageState, Locator } from '../../src/domain/models.js';
+import type {
+  ActionAndWaitResult,
+  ActionWaitCondition,
+  BrowserAction,
+  WaitCondition,
+} from '../../src/domain/models.js';
 import type { IdGenerator } from '../../src/infrastructure/id.js';
 import { BrowserMeshRuntime, type RuntimeOptions } from '../../src/runtime/browsermesh-runtime.js';
 
@@ -35,6 +41,11 @@ export class FakeEngine implements BrowserEnginePort {
   failNextNavigation = false;
   navigationGate: Promise<void> | undefined;
   onNavigationStart: (() => void) | undefined;
+  waitGate: Promise<void> | undefined;
+  failNextWait = false;
+  readonly compositeOrder: string[] = [];
+  compositeGate: Promise<void> | undefined;
+  onCompositeStart: (() => void) | undefined;
   private readonly disconnectedListeners = new Set<() => void>();
 
   get disconnectListenerCount(): number {
@@ -130,6 +141,48 @@ export class FakeEngine implements BrowserEnginePort {
   }
   async screenshot(): Promise<Uint8Array> {
     return new Uint8Array([137, 80, 78, 71]);
+  }
+  async wait(handle: BrowserPageHandle, condition: WaitCondition): Promise<void> {
+    const page = this.page(handle);
+    await this.concurrent(page.contextId, async () => {
+      if (this.waitGate !== undefined) await this.waitGate;
+      if (this.failNextWait) {
+        this.failNextWait = false;
+        throw new BrowserMeshError('OPERATION_TIMEOUT', 'simulated wait timeout');
+      }
+      if (
+        condition.kind === 'url' &&
+        condition.matcher.kind === 'exact' &&
+        page.currentUrl !== condition.matcher.value
+      )
+        throw new BrowserMeshError('OPERATION_TIMEOUT', 'simulated wait timeout');
+    });
+  }
+  async actionAndWait(
+    handle: BrowserPageHandle,
+    action: BrowserAction,
+    wait: ActionWaitCondition,
+  ): Promise<ActionAndWaitResult['event']> {
+    const page = this.page(handle);
+    this.compositeOrder.push('waiter');
+    this.onCompositeStart?.();
+    if (this.compositeGate !== undefined) await this.compositeGate;
+    this.compositeOrder.push(action.kind);
+    if (this.failNextWait) {
+      this.failNextWait = false;
+      throw new BrowserMeshError('OPERATION_TIMEOUT', 'simulated wait timeout');
+    }
+    if (wait.kind === 'navigation') {
+      const url = wait.matcher?.value ?? page.currentUrl;
+      page.currentUrl = url;
+      return { kind: 'navigation', url };
+    }
+    return {
+      kind: 'response',
+      url: wait.matcher.value,
+      method: wait.method ?? 'GET',
+      status: wait.status ?? 200,
+    };
   }
   async storageState(): Promise<BrowserStorageState> {
     return { cookies: [], origins: [] };

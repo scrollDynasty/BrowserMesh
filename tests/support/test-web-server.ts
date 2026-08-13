@@ -42,6 +42,50 @@ export async function startTestWebServer(): Promise<TestWebServer> {
       );
       return;
     }
+    if (url.pathname === '/waits') {
+      response.end(
+        page(
+          'Wait conditions',
+          `<div data-testid="delayed" style="display:none">Delayed visible</div>
+          <div data-testid="removed">Remove me</div>
+          <div data-testid="hidden-later">Hide me</div>
+          <button data-testid="toggle" disabled>Toggle</button>
+          <button data-testid="disabled" disabled>Disabled</button>
+          <div data-testid="text"></div>
+          <script>
+            setTimeout(() => {
+              document.querySelector('[data-testid=delayed]').style.display = 'block';
+              document.querySelector('[data-testid=toggle]').disabled = false;
+              document.querySelector('[data-testid=text]').textContent = 'Case-Sensitive Ready';
+            }, 50);
+            setTimeout(() => {
+              document.querySelector('[data-testid=removed]').remove();
+              document.querySelector('[data-testid=hidden-later]').style.display = 'none';
+            }, 100);
+          </script>`,
+        ),
+      );
+      return;
+    }
+    if (url.pathname === '/action-waits') {
+      response.end(
+        page(
+          'Action waits',
+          `<button data-testid="navigate" onclick="location.href='/action-destination'">Navigate</button>
+          <button data-testid="request" onclick="fetch('/api/result?token=top-secret')">Request</button>`,
+        ),
+      );
+      return;
+    }
+    if (url.pathname === '/action-destination') {
+      response.end(page('Action destination', '<div data-testid="status">arrived</div>'));
+      return;
+    }
+    if (url.pathname === '/api/result') {
+      response.setHeader('content-type', 'application/json');
+      response.end(JSON.stringify({ ok: true }));
+      return;
+    }
     if (url.pathname === '/buyer') {
       response.end(
         page(
