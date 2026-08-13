@@ -1,5 +1,7 @@
 export { BrowserMeshError, asBrowserMeshError, errorCodes } from './domain/errors.js';
 export type * from './domain/models.js';
+export type * from './domain/context-settings.js';
+export { normalizeContextSettings } from './domain/context-settings.js';
 export type * from './application/ports/browser-engine.js';
 export type * from './application/ports/events.js';
 export type * from './application/ports/state-repository.js';

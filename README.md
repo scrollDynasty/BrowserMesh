@@ -385,6 +385,26 @@ Without `stateId`, it creates a fresh isolated context.
 
 With `stateId`, it initializes the new context using a previously saved BrowserMesh state.
 
+`browser_session_create` also accepts an optional `contextSettings` object for an isolated viewport,
+device scale factor, locale, timezone, color scheme, reduced-motion preference, and user agent. The
+session result returns the normalized effective settings. Use separate sessions for different
+device/accessibility profiles. Geolocation and browser permissions are intentionally unavailable
+until their origin-scoping policy is specified.
+
+```text
+browser_session_create({
+  name: "mobile-fr",
+  contextSettings: {
+    viewport: { width: 390, height: 844 },
+    deviceScaleFactor: 3,
+    locale: "fr-FR",
+    timezoneId: "Europe/Paris",
+    colorScheme: "dark",
+    reducedMotion: "reduce"
+  }
+})
+```
+
 Example conceptually:
 
 ```text

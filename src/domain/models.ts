@@ -1,3 +1,5 @@
+import type { BrowserContextSettings } from './context-settings.js';
+
 export type SessionStatus = 'creating' | 'ready' | 'closing' | 'closed' | 'failed';
 
 export interface SessionView {
@@ -8,6 +10,7 @@ export interface SessionView {
   readonly lastActivityAt: string;
   readonly metadata: Readonly<Record<string, string>>;
   readonly restoredFromStateId?: string;
+  readonly contextSettings: BrowserContextSettings;
 }
 
 export interface PageView {

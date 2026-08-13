@@ -133,6 +133,7 @@ async function runSmokeCheck(options: DoctorOptions, remainingMs: number): Promi
         Math.min(options.operationTimeoutMs, remainingMs),
         options.signal,
       ),
+      settings: {},
     });
     page = await options.engine.createPage(context);
   } catch (error) {

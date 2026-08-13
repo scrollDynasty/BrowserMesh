@@ -12,6 +12,12 @@ import {
   type OperationControl,
 } from '../application/operation-control.js';
 import { BrowserMeshError, correlateBrowserMeshError } from '../domain/errors.js';
+import {
+  copyContextSettings,
+  normalizeContextSettings,
+  type BrowserContextSettings,
+  type BrowserContextSettingsInput,
+} from '../domain/context-settings.js';
 import type {
   ActionAndWaitResult,
   ActionWaitCondition,
@@ -51,6 +57,7 @@ interface SessionEntry {
   lastActivityAt: string;
   readonly metadata: Readonly<Record<string, string>>;
   readonly restoredFromStateId: string | undefined;
+  readonly contextSettings: BrowserContextSettings;
   context: BrowserContextHandle | undefined;
   readonly pages: Map<string, PageEntry>;
   defaultPageId: string | undefined;
@@ -150,6 +157,7 @@ export class BrowserMeshRuntime {
       readonly name?: string | undefined;
       readonly metadata?: Readonly<Record<string, string>> | undefined;
       readonly stateId?: string | undefined;
+      readonly contextSettings?: BrowserContextSettingsInput | undefined;
     } = {},
     options: OperationOptions = {},
   ): Promise<PageAddressedOperationResult<SessionView>> {
@@ -166,6 +174,7 @@ export class BrowserMeshRuntime {
         }
         const id = this.options.ids.next('session');
         const timestamp = this.timestamp();
+        const contextSettings = normalizeContextSettings(input.contextSettings);
         const entry: SessionEntry = {
           id,
           ...(input.name === undefined ? {} : { name: input.name }),
@@ -174,6 +183,7 @@ export class BrowserMeshRuntime {
           lastActivityAt: timestamp,
           metadata: { ...(input.metadata ?? {}) },
           restoredFromStateId: input.stateId,
+          contextSettings,
           context: undefined,
           pages: new Map(),
           defaultPageId: undefined,
@@ -189,6 +199,7 @@ export class BrowserMeshRuntime {
               input.stateId === undefined ? undefined : await this.loadState(input.stateId);
             entry.context = await this.options.engine.createContext({
               control,
+              settings: contextSettings,
               ...(storageState === undefined ? {} : { storageState }),
             });
             throwIfCancelled(options.signal);
@@ -847,6 +858,7 @@ export class BrowserMeshRuntime {
       ...(entry.restoredFromStateId === undefined
         ? {}
         : { restoredFromStateId: entry.restoredFromStateId }),
+      contextSettings: copyContextSettings(entry.contextSettings),
     };
   }
 
