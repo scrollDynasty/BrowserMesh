@@ -564,6 +564,12 @@ is invoked. Each session entry retains an immutable effective value and passes i
 schema duplicates basic bounds for early feedback, while runtime validation remains authoritative
 for direct API callers. Saved storage state and context settings are orthogonal: restoring storage
 does not persist or override the newly requested context profile.
+
+Typed hover, focus, check, uncheck, double-click, and scroll-into-view follow that boundary: MCP
+validates a semantic locator, runtime routes through the addressed session queue, and only the
+Playwright adapter resolves and acts on the concrete locator. Queued cancellation never reaches the
+engine, while an in-flight action retains its queue slot until it settles so later same-session work
+cannot overtake it.
 Short-lived element references, if introduced, are runtime IDs resolving only inside the adapter;
 they are bounded and invalidated with page/document lifecycle. They are conveniences, not durable
 identity or exposed locator handles.

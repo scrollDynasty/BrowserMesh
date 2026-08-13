@@ -141,6 +141,26 @@ export async function startTestWebServer(): Promise<TestWebServer> {
       );
       return;
     }
+    if (url.pathname === '/interactions') {
+      response.end(
+        page(
+          'Typed interactions',
+          `<div data-testid="status">ready</div>
+          <button data-testid="hover" onmouseenter="document.querySelector('[data-testid=status]').textContent='hovered'">Hover target</button>
+          <input aria-label="Focus target" onfocus="document.querySelector('[data-testid=status]').textContent='focused'" />
+          <label><input type="checkbox" aria-label="Enabled" onchange="document.querySelector('[data-testid=status]').textContent=this.checked?'checked':'unchecked'" /> Enabled</label>
+          <button data-testid="double" ondblclick="document.querySelector('[data-testid=status]').textContent='double-clicked'">Double target</button>
+          <div style="height:2000px"></div>
+          <button data-testid="offscreen">Offscreen target</button>
+          <script>
+            addEventListener('scroll', () => {
+              if (scrollY > 1000) document.querySelector('[data-testid=status]').textContent='scrolled';
+            });
+          </script>`,
+        ),
+      );
+      return;
+    }
     if (url.pathname === '/observability') {
       response.end(
         page(

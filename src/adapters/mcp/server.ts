@@ -432,6 +432,72 @@ export function createMcpServer(runtime: BrowserMeshRuntime): McpServer {
       pageCompleted(runtime.click(target(input, extra.signal), input.locator as Locator)),
   );
   server.registerTool(
+    'browser_double_click',
+    {
+      ...contractFor('browser_double_click'),
+      description:
+        'Double-click a semantic or CSS locator on one explicitly addressed page. Use this only when the application assigns distinct double-click behavior; the action is serialized with all browser work in that session and an ambiguous locator returns LOCATOR_AMBIGUOUS.',
+      inputSchema: { ...targetSchema, locator: locatorSchema },
+    },
+    (input, extra) =>
+      pageCompleted(runtime.doubleClick(target(input, extra.signal), input.locator as Locator)),
+  );
+  server.registerTool(
+    'browser_hover',
+    {
+      ...contractFor('browser_hover'),
+      description:
+        'Move the pointer over a semantic or CSS locator on one explicitly addressed page. Use this to reveal hover-driven controls or state before inspecting or interacting; BrowserMesh preserves same-session accepted order.',
+      inputSchema: { ...targetSchema, locator: locatorSchema },
+    },
+    (input, extra) =>
+      pageCompleted(runtime.hover(target(input, extra.signal), input.locator as Locator)),
+  );
+  server.registerTool(
+    'browser_focus',
+    {
+      ...contractFor('browser_focus'),
+      description:
+        'Focus a semantic or CSS locator on one explicitly addressed page without entering a value. Use this for focus-driven UI state or before a separate key action; the locator remains scoped to the supplied sessionId and pageId.',
+      inputSchema: { ...targetSchema, locator: locatorSchema },
+    },
+    (input, extra) =>
+      pageCompleted(runtime.focus(target(input, extra.signal), input.locator as Locator)),
+  );
+  server.registerTool(
+    'browser_check',
+    {
+      ...contractFor('browser_check'),
+      description:
+        'Ensure a checkbox or radio located semantically or by CSS is checked on one explicitly addressed page. The operation is idempotent, bounded by timeoutMs, and isolated to the supplied session.',
+      inputSchema: { ...targetSchema, locator: locatorSchema },
+    },
+    (input, extra) =>
+      pageCompleted(runtime.check(target(input, extra.signal), input.locator as Locator)),
+  );
+  server.registerTool(
+    'browser_uncheck',
+    {
+      ...contractFor('browser_uncheck'),
+      description:
+        'Ensure a checkbox located semantically or by CSS is unchecked on one explicitly addressed page. The operation is idempotent, bounded by timeoutMs, and isolated to the supplied session.',
+      inputSchema: { ...targetSchema, locator: locatorSchema },
+    },
+    (input, extra) =>
+      pageCompleted(runtime.uncheck(target(input, extra.signal), input.locator as Locator)),
+  );
+  server.registerTool(
+    'browser_scroll_into_view',
+    {
+      ...contractFor('browser_scroll_into_view'),
+      description:
+        'Scroll one semantic or CSS locator into the viewport of an explicitly addressed page. Use this before inspection or interaction when an off-screen target must become visible; it never accepts arbitrary JavaScript or coordinates.',
+      inputSchema: { ...targetSchema, locator: locatorSchema },
+    },
+    (input, extra) =>
+      pageCompleted(runtime.scrollIntoView(target(input, extra.signal), input.locator as Locator)),
+  );
+  server.registerTool(
     'browser_fill',
     {
       ...contractFor('browser_fill'),

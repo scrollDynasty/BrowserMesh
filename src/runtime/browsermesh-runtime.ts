@@ -470,6 +470,54 @@ export class BrowserMeshRuntime {
     });
   }
 
+  doubleClick(
+    target: OperationTarget,
+    locator: Locator,
+  ): Promise<PageAddressedOperationResult<null>> {
+    return this.pageOperation(target, async (page, control) => {
+      await this.options.engine.doubleClick(page, locator, control);
+      return null;
+    });
+  }
+
+  hover(target: OperationTarget, locator: Locator): Promise<PageAddressedOperationResult<null>> {
+    return this.pageOperation(target, async (page, control) => {
+      await this.options.engine.hover(page, locator, control);
+      return null;
+    });
+  }
+
+  focus(target: OperationTarget, locator: Locator): Promise<PageAddressedOperationResult<null>> {
+    return this.pageOperation(target, async (page, control) => {
+      await this.options.engine.focus(page, locator, control);
+      return null;
+    });
+  }
+
+  check(target: OperationTarget, locator: Locator): Promise<PageAddressedOperationResult<null>> {
+    return this.pageOperation(target, async (page, control) => {
+      await this.options.engine.check(page, locator, control);
+      return null;
+    });
+  }
+
+  uncheck(target: OperationTarget, locator: Locator): Promise<PageAddressedOperationResult<null>> {
+    return this.pageOperation(target, async (page, control) => {
+      await this.options.engine.uncheck(page, locator, control);
+      return null;
+    });
+  }
+
+  scrollIntoView(
+    target: OperationTarget,
+    locator: Locator,
+  ): Promise<PageAddressedOperationResult<null>> {
+    return this.pageOperation(target, async (page, control) => {
+      await this.options.engine.scrollIntoView(page, locator, control);
+      return null;
+    });
+  }
+
   fill(
     target: OperationTarget,
     locator: Locator,

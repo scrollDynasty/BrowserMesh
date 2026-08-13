@@ -62,6 +62,19 @@ describe('MCP adapter', () => {
       expect(clickTool?.description).toContain('exactly by default');
       expect(clickTool?.description).toContain('LOCATOR_AMBIGUOUS');
       expect(clickTool?.inputSchema).toHaveProperty('properties.locator');
+      expect(toolPresentation.browser_hover).toEqual({
+        title: 'Hover over page element',
+        annotations: {
+          readOnlyHint: false,
+          destructiveHint: false,
+          idempotentHint: true,
+          openWorldHint: true,
+        },
+      });
+      expect(toolPresentation.browser_double_click.annotations).toMatchObject({
+        destructiveHint: true,
+        idempotentHint: false,
+      });
       expect(
         discovered.tools.find(({ name }) => name === 'browser_snapshot')?.description,
       ).toContain('password-input values are redacted');
@@ -213,6 +226,20 @@ describe('MCP adapter', () => {
         ...target,
         locator: { strategy: 'role', value: 'button', name: 'Submit', exact: true },
       });
+      for (const name of [
+        'browser_double_click',
+        'browser_hover',
+        'browser_focus',
+        'browser_check',
+        'browser_uncheck',
+        'browser_scroll_into_view',
+      ] as const) {
+        const result = await callSuccess(client, name, {
+          ...target,
+          locator: { strategy: 'testId', value: 'control' },
+        });
+        expect(result.structuredContent).toMatchObject({ ...target, completed: true });
+      }
       await callSuccess(client, 'browser_fill', {
         ...target,
         locator: { strategy: 'label', value: 'Name' },

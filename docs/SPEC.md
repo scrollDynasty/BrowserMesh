@@ -504,6 +504,12 @@ Tool-description semantics must instead be covered through contract review/tests
 - `browser_wait`
 - `browser_action_and_wait`
 - `browser_click`
+- `browser_double_click`
+- `browser_hover`
+- `browser_focus`
+- `browser_check`
+- `browser_uncheck`
+- `browser_scroll_into_view`
 - `browser_fill`
 - `browser_press`
 - `browser_select_option`
@@ -1089,9 +1095,11 @@ characters. Invalid locale/timezone input returns `INVALID_ARGUMENT` before brow
 created. Geolocation/permissions remain deferred pending an exact permission allowlist and safe
 origin policy.
 
-Typed interactions may add hover/focus, check/uncheck, double-click, scroll/scroll-into-view,
-drag/drop, dialog handling, popup wait, iframe-scoped semantic targeting, and full-page/element
-screenshots. Arbitrary JavaScript, arbitrary paths, upload, and download are not implied.
+Typed hover, focus, check, uncheck, double-click, and scroll-into-view are explicit page operations.
+They use semantic locators, bounded timeouts, request cancellation, and the owning session queue.
+Page-coordinate scroll, drag/drop, dialog handling, popup wait, iframe-scoped semantic targeting,
+and full-page/element screenshots remain later slices. Arbitrary JavaScript, arbitrary paths,
+upload, and download are not implied.
 
 ### 22.6 Artifacts-before-code and deferred scope
 
