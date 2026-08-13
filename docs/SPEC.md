@@ -672,6 +672,10 @@ v0.1 configuration includes:
 - maximum pages per session;
 - persistence enabled/disabled.
 
+The accepted observability extension also centrally validates hard maximums for retained events per
+page, exposed string characters, read page size, and serialized response bytes. Defaults are 200,
+2048, 100, and 65536 respectively; environment names match the README configuration table.
+
 Configuration is validated centrally.
 
 MCP negotiation and tool discovery do not depend on a successful Chromium launch. A missing
@@ -1053,6 +1057,12 @@ cookies, storage, console argument-object serialization, and raw stacks are excl
 redacted console/error text is caller-requested evidence and must also support metadata-only reads.
 Listeners attach once and are detached on page/context close, failed creation, disconnect, and
 shutdown. Ownership checks prevent cross-page or cross-session evidence access.
+
+The console/page-error vertical slice is exposed as `browser_console_list` and
+`browser_page_errors_list`. Both are read-only, execute through the owning session queue, default to
+metadata-only results, and accept `includeText`, `limit`, and `sinceEventId`. Network and
+failed-request collectors remain the next ADR 0010 slice; console/page-error implementation does not
+capture network data implicitly.
 
 ### 22.5 Snapshots, context, and typed interactions
 

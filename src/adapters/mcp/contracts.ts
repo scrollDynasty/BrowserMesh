@@ -94,6 +94,23 @@ const waitedEventSchema = z.discriminatedUnion('kind', [
   }),
 ]);
 
+const observationEventSchema = z.object({
+  eventId: z.string().min(1),
+  timestamp,
+  sessionId,
+  pageId,
+  kind: z.enum(['console', 'page_error']),
+  level: z.string().optional(),
+  text: z.string().optional(),
+});
+const observationList = {
+  ...pageOperation,
+  events: z.array(observationEventSchema),
+  nextCursor: z.string().nullable(),
+  droppedCount: z.number().int().nonnegative(),
+  gap: z.boolean(),
+} as const;
+
 export const outputSchemas = {
   browser_runtime_info: z.object({
     serverVersion: z.string().min(1),
@@ -129,6 +146,8 @@ export const outputSchemas = {
   browser_get_title: z.object({ ...pageOperation, title: z.string() }),
   browser_snapshot: z.object({ ...pageOperation, snapshot: z.string() }),
   browser_visible_text: z.object({ ...pageOperation, text: z.string() }),
+  browser_console_list: z.object(observationList),
+  browser_page_errors_list: z.object(observationList),
   browser_click: z.object({ ...pageOperation, completed: z.literal(true) }),
   browser_fill: z.object({ ...pageOperation, completed: z.literal(true) }),
   browser_press: z.object({ ...pageOperation, completed: z.literal(true) }),
@@ -199,6 +218,8 @@ export const toolPresentation: Readonly<Record<ToolName, ToolPresentation>> = {
   browser_get_title: presentation('Get browser page title', true, false, true, true),
   browser_snapshot: presentation('Get accessibility snapshot', true, false, true, true),
   browser_visible_text: presentation('Get visible page text', true, false, true, true),
+  browser_console_list: presentation('List browser console events', true, false, true, true),
+  browser_page_errors_list: presentation('List browser page errors', true, false, true, true),
   browser_click: presentation('Click page element', false, true, false, true),
   browser_fill: presentation('Fill page field', false, false, false, true),
   browser_press: presentation('Press key on page element', false, true, false, true),

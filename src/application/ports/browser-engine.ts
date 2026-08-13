@@ -27,6 +27,10 @@ export interface BrowserEngineDiagnostics {
   readonly browserVersion: string | null;
 }
 
+export type BrowserObservation =
+  | { readonly kind: 'console'; readonly level: string; readonly text: string }
+  | { readonly kind: 'page_error'; readonly text: string };
+
 export interface BrowserEnginePort {
   diagnostics(): BrowserEngineDiagnostics;
   isExecutableAvailable(): Promise<boolean>;
@@ -41,6 +45,7 @@ export interface BrowserEnginePort {
   createPage(context: BrowserContextHandle): Promise<BrowserPageHandle>;
   listPages(context: BrowserContextHandle): readonly BrowserPageHandle[];
   closePage(page: BrowserPageHandle): Promise<void>;
+  observePage(page: BrowserPageHandle, listener: (event: BrowserObservation) => void): () => void;
   url(page: BrowserPageHandle): string;
   title(page: BrowserPageHandle, timeoutMs: number): Promise<string>;
   navigate(page: BrowserPageHandle, url: string, timeoutMs: number): Promise<void>;
