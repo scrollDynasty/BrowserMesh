@@ -687,6 +687,7 @@ export class PlaywrightBrowserEngine implements BrowserEnginePort {
           (await this.locate(this.getPage(handle), screenshotLocator, control)).screenshot({
             timeout: remainingMs(control.deadlineAt),
             type: 'png',
+            scale: 'css',
           }),
         'capture screenshot',
         screenshotLocator,
@@ -699,9 +700,66 @@ export class PlaywrightBrowserEngine implements BrowserEnginePort {
           timeout: control.timeoutMs,
           type: 'png',
           fullPage: options.fullPage ?? false,
+          scale: 'css',
         }),
       'BROWSER_ERROR',
       'Failed to capture page screenshot',
+      control.timeoutMs,
+    );
+  }
+
+  async screenshotDimensions(
+    handle: BrowserPageHandle,
+    options: ScreenshotOptions,
+    control: OperationControl,
+  ): Promise<{ readonly width: number; readonly height: number }> {
+    throwIfCancelled(control.signal);
+    const page = this.getPage(handle);
+    const screenshotLocator = options.locator;
+    if (screenshotLocator !== undefined) {
+      return this.wrapElement(
+        async () => {
+          const box = await (
+            await this.locate(page, screenshotLocator, control)
+          ).boundingBox({
+            timeout: remainingMs(control.deadlineAt),
+          });
+          if (box === null)
+            throw new BrowserMeshError('ELEMENT_NOT_FOUND', 'Screenshot element has no box');
+          return { width: Math.ceil(box.width), height: Math.ceil(box.height) };
+        },
+        'measure screenshot element',
+        screenshotLocator,
+        control.timeoutMs,
+      );
+    }
+    return this.wrapAction(
+      async () => {
+        if (options.fullPage === true) {
+          return page.evaluate(() => {
+            const root = document.documentElement;
+            const body = document.body;
+            return {
+              width: Math.ceil(
+                Math.max(root.scrollWidth, root.clientWidth, body.scrollWidth, body.clientWidth),
+              ),
+              height: Math.ceil(
+                Math.max(
+                  root.scrollHeight,
+                  root.clientHeight,
+                  body.scrollHeight,
+                  body.clientHeight,
+                ),
+              ),
+            };
+          });
+        }
+        const viewport = page.viewportSize();
+        if (viewport !== null) return viewport;
+        return page.evaluate(() => ({ width: window.innerWidth, height: window.innerHeight }));
+      },
+      'BROWSER_ERROR',
+      'Failed to measure screenshot dimensions',
       control.timeoutMs,
     );
   }

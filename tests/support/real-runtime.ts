@@ -9,6 +9,7 @@ import {
   BROWSERMESH_VERSION,
   PLAYWRIGHT_VERSION,
 } from '../../src/infrastructure/generated/version.js';
+import type { ResourceLimits } from '../../src/domain/resource-limits.js';
 
 export interface RealRuntimeHarness {
   readonly runtime: BrowserMeshRuntime;
@@ -18,6 +19,7 @@ export interface RealRuntimeHarness {
 
 export async function createRealRuntimeHarness(
   engine = new PlaywrightBrowserEngine({ headless: true, timeoutMs: 5_000 }),
+  resources?: ResourceLimits,
 ): Promise<RealRuntimeHarness> {
   const dataDirectory = await mkdtemp(join(tmpdir(), 'browsermesh-integration-'));
   const runtime = new BrowserMeshRuntime({
@@ -33,6 +35,7 @@ export async function createRealRuntimeHarness(
     nodeVersion: process.versions.node,
     playwrightVersion: PLAYWRIGHT_VERSION,
     headless: true,
+    ...(resources === undefined ? {} : { resources }),
   });
   return {
     runtime,
