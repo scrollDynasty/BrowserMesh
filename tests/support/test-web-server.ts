@@ -226,6 +226,29 @@ export async function startTestWebServer(): Promise<TestWebServer> {
       );
       return;
     }
+    if (url.pathname === '/geolocation') {
+      response.end(
+        page(
+          'Geolocation settings',
+          `<div data-testid="geolocation">pending</div><script>
+            navigator.permissions.query({ name: 'geolocation' }).then(({ state }) => {
+              if (state !== 'granted') {
+                document.querySelector('[data-testid=geolocation]').textContent = state;
+                return;
+              }
+              navigator.geolocation.getCurrentPosition(
+                ({ coords }) => document.querySelector('[data-testid=geolocation]').textContent =
+                  [state, coords.latitude, coords.longitude, coords.accuracy].join('|'),
+                ({ code }) => document.querySelector('[data-testid=geolocation]').textContent =
+                  'error|' + code,
+                { timeout: 1000 }
+              );
+            });
+          </script>`,
+        ),
+      );
+      return;
+    }
     if (url.pathname === '/network-observability') {
       response.end(
         page(

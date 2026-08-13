@@ -8,6 +8,31 @@ export interface ViewportSettings {
 export type ColorScheme = 'light' | 'dark' | 'no-preference';
 export type ReducedMotion = 'reduce' | 'no-preference';
 
+export interface GeolocationSettingsInput {
+  readonly latitude: number;
+  readonly longitude: number;
+  readonly accuracy?: number | undefined;
+}
+
+export interface GeolocationSettings {
+  readonly latitude: number;
+  readonly longitude: number;
+  readonly accuracy?: number;
+}
+
+export interface BrowserPermissionGrant {
+  /** BrowserMesh intentionally exposes no open-ended browser permission name. */
+  readonly permission: 'geolocation';
+  /** Canonical absolute HTTP(S) origin, never a URL pattern. */
+  readonly origin: string;
+}
+
+export interface BrowserPermissionGrantInput {
+  /** Runtime validation remains authoritative for non-MCP callers. */
+  readonly permission: string;
+  readonly origin: string;
+}
+
 /** Engine-independent, caller-supplied browser-context settings. */
 export interface BrowserContextSettingsInput {
   readonly viewport?: ViewportSettings | undefined;
@@ -17,6 +42,8 @@ export interface BrowserContextSettingsInput {
   readonly colorScheme?: ColorScheme | undefined;
   readonly reducedMotion?: ReducedMotion | undefined;
   readonly userAgent?: string | undefined;
+  readonly geolocation?: GeolocationSettingsInput | undefined;
+  readonly permissions?: readonly BrowserPermissionGrantInput[] | undefined;
 }
 
 /** Immutable settings BrowserMesh applies to one isolated browser context. */
@@ -28,6 +55,8 @@ export interface BrowserContextSettings {
   readonly colorScheme?: ColorScheme;
   readonly reducedMotion?: ReducedMotion;
   readonly userAgent?: string;
+  readonly geolocation?: GeolocationSettings;
+  readonly permissions?: readonly BrowserPermissionGrant[];
 }
 
 function hasControlCharacters(value: string): boolean {
@@ -76,6 +105,40 @@ function normalizeTimezone(value: string): string {
   }
 }
 
+function boundedFinite(value: number, field: string, minimum: number, maximum: number): number {
+  if (!Number.isFinite(value) || value < minimum || value > maximum) {
+    invalid(field, `must be a finite number from ${String(minimum)} through ${String(maximum)}`);
+  }
+  return value;
+}
+
+function normalizePermissionOrigin(value: string, index: number): string {
+  safeText(value, `permissions.${String(index)}.origin`, 2_000);
+  let url: URL;
+  try {
+    url = new URL(value);
+  } catch {
+    return invalid(
+      `permissions.${String(index)}.origin`,
+      'must be an absolute HTTP(S) origin without credentials, path, query, or fragment',
+    );
+  }
+  if (
+    (url.protocol !== 'http:' && url.protocol !== 'https:') ||
+    url.username !== '' ||
+    url.password !== '' ||
+    url.pathname !== '/' ||
+    url.search !== '' ||
+    url.hash !== ''
+  ) {
+    invalid(
+      `permissions.${String(index)}.origin`,
+      'must be an absolute HTTP(S) origin without credentials, path, query, or fragment',
+    );
+  }
+  return url.origin;
+}
+
 export function normalizeContextSettings(
   input: BrowserContextSettingsInput | undefined,
 ): BrowserContextSettings {
@@ -106,6 +169,47 @@ export function normalizeContextSettings(
   ) {
     invalid('reducedMotion', 'must be reduce or no-preference');
   }
+  const geolocation =
+    input.geolocation === undefined
+      ? undefined
+      : Object.freeze({
+          latitude: boundedFinite(input.geolocation.latitude, 'geolocation.latitude', -90, 90),
+          longitude: boundedFinite(input.geolocation.longitude, 'geolocation.longitude', -180, 180),
+          ...(input.geolocation.accuracy === undefined
+            ? {}
+            : {
+                accuracy: boundedFinite(
+                  input.geolocation.accuracy,
+                  'geolocation.accuracy',
+                  0,
+                  100_000,
+                ),
+              }),
+        });
+  if (input.permissions !== undefined && input.permissions.length > 100) {
+    invalid('permissions', 'must contain at most 100 origin-scoped grants');
+  }
+  if ((input.permissions?.length ?? 0) > 0 && geolocation === undefined) {
+    invalid('permissions', 'geolocation grants require contextSettings.geolocation');
+  }
+  const permissions = input.permissions?.map((grant, index) => {
+    if (grant.permission !== 'geolocation') {
+      invalid(
+        `permissions.${String(index)}.permission`,
+        'must be geolocation; no other browser permission is supported',
+      );
+    }
+    return Object.freeze({
+      permission: 'geolocation' as const,
+      origin: normalizePermissionOrigin(grant.origin, index),
+    });
+  });
+  if (permissions !== undefined) {
+    const origins = permissions.map(({ origin }) => origin);
+    if (new Set(origins).size !== origins.length) {
+      invalid('permissions', 'must not contain duplicate geolocation origins');
+    }
+  }
   return Object.freeze({
     ...(viewport === undefined ? {} : { viewport }),
     ...(deviceScaleFactor === undefined ? {} : { deviceScaleFactor }),
@@ -116,6 +220,8 @@ export function normalizeContextSettings(
     ...(input.userAgent === undefined
       ? {}
       : { userAgent: safeText(input.userAgent, 'userAgent', 512) }),
+    ...(geolocation === undefined ? {} : { geolocation }),
+    ...(permissions === undefined ? {} : { permissions: Object.freeze(permissions) }),
   });
 }
 
@@ -123,5 +229,9 @@ export function copyContextSettings(settings: BrowserContextSettings): BrowserCo
   return {
     ...settings,
     ...(settings.viewport === undefined ? {} : { viewport: { ...settings.viewport } }),
+    ...(settings.geolocation === undefined ? {} : { geolocation: { ...settings.geolocation } }),
+    ...(settings.permissions === undefined
+      ? {}
+      : { permissions: settings.permissions.map((permission) => ({ ...permission })) }),
   };
 }

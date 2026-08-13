@@ -1113,9 +1113,13 @@ The implemented safe context slice validates viewport width/height as integers `
 scale factor as a finite number `0.1..10`, locale as one canonical Unicode locale identifier,
 timezone as a canonical IANA timezone ID, color scheme as `light|dark|no-preference`, reduced
 motion as `reduce|no-preference`, and user agent as 1..512 characters. Text rejects C0/C1 control
-characters. Invalid locale/timezone input returns `INVALID_ARGUMENT` before browser resources are
-created. Geolocation/permissions remain deferred pending an exact permission allowlist and safe
-origin policy.
+characters. Geolocation accepts finite latitude `-90..90`, longitude `-180..180`, and optional
+accuracy `0..100000` metres. The only permission allowlisted in v0.1 is `geolocation`, granted to
+at most 100 explicit canonical absolute HTTP(S) origins. Wildcards, URL patterns, credentials,
+paths, queries, fragments, duplicate origins, grants without configured geolocation, and all other
+permission names return `INVALID_ARGUMENT` before browser resources are created. Geolocation may
+be configured without a grant for permission-denied testing. Grants are context-local, are not
+restored from saved storage state, and disappear when the context closes.
 
 Typed hover, focus, check, uncheck, double-click, and scroll-into-view are explicit page operations.
 They use semantic locators, bounded timeouts, request cancellation, and the owning session queue.
