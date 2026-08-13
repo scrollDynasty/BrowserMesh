@@ -23,6 +23,7 @@ import type {
   ActionWaitCondition,
   BrowserAction,
   Locator,
+  ScreenshotOptions,
   OperationResult,
   PageAddressedOperationResult,
   PageView,
@@ -534,6 +535,28 @@ export class BrowserMeshRuntime {
     });
   }
 
+  scroll(
+    target: OperationTarget,
+    deltaX: number,
+    deltaY: number,
+  ): Promise<PageAddressedOperationResult<null>> {
+    return this.pageOperation(target, async (page, control) => {
+      await this.options.engine.scroll(page, deltaX, deltaY, control);
+      return null;
+    });
+  }
+
+  dragAndDrop(
+    target: OperationTarget,
+    source: Locator,
+    destination: Locator,
+  ): Promise<PageAddressedOperationResult<null>> {
+    return this.pageOperation(target, async (page, control) => {
+      await this.options.engine.dragAndDrop(page, source, destination, control);
+      return null;
+    });
+  }
+
   fill(
     target: OperationTarget,
     locator: Locator,
@@ -567,9 +590,12 @@ export class BrowserMeshRuntime {
     });
   }
 
-  screenshot(target: OperationTarget): Promise<PageAddressedOperationResult<string>> {
+  screenshot(
+    target: OperationTarget,
+    options: ScreenshotOptions = {},
+  ): Promise<PageAddressedOperationResult<string>> {
     return this.pageOperation(target, async (page, control) =>
-      Buffer.from(await this.options.engine.screenshot(page, control)).toString('base64'),
+      Buffer.from(await this.options.engine.screenshot(page, options, control)).toString('base64'),
     );
   }
 

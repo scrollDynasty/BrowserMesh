@@ -36,14 +36,14 @@ pending and does not retroactively make the baseline incomplete.
 
 ## Professional MCP improvement program
 
-| Milestone                                              | Status                                                                                                                                                                     | Contract |
-| ------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------- |
-| Version chain, headless config, runtime info, doctor   | Complete: exact version chain, validated config, non-launching runtime info, and bounded doctor                                                                            | ADR 0007 |
-| Structured MCP output, annotations, cancellation       | Complete: structured output, annotations, end-to-end request signals, queue-safe cancellation                                                                              | ADR 0008 |
-| Passive waits and atomic action/wait                   | Partial: passive conditions, click/press + navigation/response, and cancellation complete; popup pending                                                                   | ADR 0009 |
-| Bounded redacted browser observability                 | Complete: console/page-error and correlated network/failed-request collectors                                                                                              | ADR 0010 |
-| Bounded snapshots, context options, typed interactions | Partial: bounded scoped snapshots, safe context settings, and hover/focus/check/double-click/scroll complete; tree filters, refs, and lifecycle-heavy interactions pending | ADR 0011 |
-| Filesystem-backed artifacts                            | Design gate accepted; capability ADR and implementation deferred                                                                                                           | ADR 0012 |
+| Milestone                                              | Status                                                                                                                                                                                                                                                  | Contract |
+| ------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------- |
+| Version chain, headless config, runtime info, doctor   | Complete: exact version chain, validated config, non-launching runtime info, and bounded doctor                                                                                                                                                         | ADR 0007 |
+| Structured MCP output, annotations, cancellation       | Complete: structured output, annotations, end-to-end request signals, queue-safe cancellation                                                                                                                                                           | ADR 0008 |
+| Passive waits and atomic action/wait                   | Partial: passive conditions, click/press + navigation/response, and cancellation complete; popup pending                                                                                                                                                | ADR 0009 |
+| Bounded redacted browser observability                 | Complete: console/page-error and correlated network/failed-request collectors                                                                                                                                                                           | ADR 0010 |
+| Bounded snapshots, context options, typed interactions | Partial: bounded scoped snapshots, safe context settings, hover/focus/check/double-click/scroll/scroll-into-view/drag-drop, and viewport/full-page/element in-memory screenshots complete; tree filters, refs, and lifecycle-heavy interactions pending | ADR 0011 |
+| Filesystem-backed artifacts                            | Design gate accepted; capability ADR and implementation deferred                                                                                                                                                                                        | ADR 0012 |
 
 Remote HTTP/multi-client security and internal agent orchestration are not part of the accepted
 implementation program. The latter remains a separate external layer.
@@ -152,6 +152,17 @@ Latest post-v0.1 slice verification:
   format, typecheck, and build). Targeted MCP contract and real-Chromium integration tests passed.
 - `BROWSERMESH_HEADLESS=true npm run verify:package`: passed, including the built tarball,
   clean-package MCP discovery, bounded scoped-snapshot contract, real-Chromium smoke, and shutdown.
+
+- ADR 0011 advanced-action slice adds bounded integer coordinate scroll, semantic source/target
+  drag-and-drop, and viewport/full-page/element screenshot modes. Screenshots remain in-memory PNG
+  MCP content and no arbitrary JavaScript or filesystem path is exposed. All actions pass through
+  the owning session queue with request cancellation and typed MCP output. Iframe scoping remains
+  deferred until a follow-up contract defines engine-neutral frame identity, ambiguity, and stale
+  frame semantics; dialog and popup lifecycle slices remain separate.
+- Advanced-action `npm run verify`: passed after rebasing onto bounded snapshots (23 files, 116
+  tests, coverage thresholds, lint, formatting, typecheck, and build).
+  `BROWSERMESH_HEADLESS=true npm run verify:package`: passed, including clean tarball installation,
+  MCP discovery, real Chromium lifecycle smoke, and cleanup.
 
 - ADR 0008 cancellation is complete: every asynchronous MCP handler forwards the request signal, the runtime
   owns engine-independent signal/deadline metadata, queued cancellations never execute, and an

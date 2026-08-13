@@ -274,6 +274,12 @@ describe('MCP adapter', () => {
         });
         expect(result.structuredContent).toMatchObject({ ...target, completed: true });
       }
+      await callSuccess(client, 'browser_scroll', { ...target, deltaX: 0, deltaY: 400 });
+      await callSuccess(client, 'browser_drag_and_drop', {
+        ...target,
+        source: { strategy: 'testId', value: 'source' },
+        target: { strategy: 'testId', value: 'destination' },
+      });
       await callSuccess(client, 'browser_fill', {
         ...target,
         locator: { strategy: 'label', value: 'Name' },
@@ -291,6 +297,10 @@ describe('MCP adapter', () => {
       });
       const screenshot = await callSuccess(client, 'browser_screenshot', target);
       expect(screenshot.content.some((block) => block.type === 'image')).toBe(true);
+      await callSuccess(client, 'browser_screenshot', {
+        ...target,
+        capture: { kind: 'element', locator: { strategy: 'testId', value: 'control' } },
+      });
       await callSuccess(client, 'browser_wait', {
         ...target,
         condition: {

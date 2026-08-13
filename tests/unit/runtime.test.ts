@@ -175,6 +175,8 @@ describe('BrowserMeshRuntime', () => {
     await runtime.uncheck(a, locator);
     await runtime.doubleClick(a, locator);
     await runtime.scrollIntoView(a, locator);
+    await runtime.scroll(a, 0, 100);
+    await runtime.dragAndDrop(a, locator, locator);
     expect(engine.interactionOrder).toEqual([
       'hover',
       'focus',
@@ -182,6 +184,8 @@ describe('BrowserMeshRuntime', () => {
       'uncheck',
       'double-click',
       'scroll-into-view',
+      'scroll',
+      'drag-and-drop',
     ]);
 
     await expect(

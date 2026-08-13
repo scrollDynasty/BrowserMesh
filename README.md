@@ -357,14 +357,18 @@ transport-level failures appear in `browser_failed_requests_list`.
 - `browser_check`
 - `browser_uncheck`
 - `browser_scroll_into_view`
+- `browser_scroll`
+- `browser_drag_and_drop`
 - `browser_fill`
 - `browser_press`
 - `browser_select_option`
 
 These typed operations use the same semantic locator contract as click/fill. They are explicitly
 addressed, bounded by `timeoutMs`, cancellation-aware, and serialized with all browser work in the
-owning session. `check` and `uncheck` ensure the requested state idempotently; scroll-into-view does
-not expose arbitrary coordinates or page JavaScript.
+owning session. `check` and `uncheck` ensure the requested state idempotently. `browser_scroll`
+accepts bounded integer pixel deltas (`deltaX` and `deltaY` from -1,000,000 through 1,000,000),
+while drag-and-drop resolves both source and target with the same strict locator semantics. None of
+these tools exposes arbitrary page JavaScript.
 
 ### Deterministic waits
 
@@ -389,7 +393,9 @@ per-session page limit.
 
 - `browser_screenshot`
 
-Screenshots are returned as MCP image content instead of being written to a caller-controlled filesystem path.
+Screenshots are returned as MCP image content instead of being written to a caller-controlled
+filesystem path. The optional `capture` mode selects the viewport, the full scrollable page, or one
+strictly resolved semantic/CSS element; the default remains the viewport.
 
 ### Persistence
 

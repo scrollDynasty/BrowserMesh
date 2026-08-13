@@ -510,6 +510,8 @@ Tool-description semantics must instead be covered through contract review/tests
 - `browser_check`
 - `browser_uncheck`
 - `browser_scroll_into_view`
+- `browser_scroll`
+- `browser_drag_and_drop`
 - `browser_fill`
 - `browser_press`
 - `browser_select_option`
