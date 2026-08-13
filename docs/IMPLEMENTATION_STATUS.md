@@ -120,7 +120,7 @@ Known blockers: none.
 
 Latest post-v0.1 slice verification:
 
-- ADR 0008 cancellation is complete: every MCP handler forwards the request signal, the runtime
+- ADR 0008 cancellation is complete: every asynchronous MCP handler forwards the request signal, the runtime
   owns engine-independent signal/deadline metadata, queued cancellations never execute, and an
   in-flight non-abortable action retains its session queue slot until it settles. Passive waits and
   atomic event waiters detach owned abort listeners/timers and leave the queue usable.
