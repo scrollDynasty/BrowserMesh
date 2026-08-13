@@ -4,6 +4,7 @@ import {
   type BrowserContext,
   type Dialog,
   type Frame,
+  type FrameLocator,
   type ElementHandle,
   type Locator as PwLocator,
   type Page,
@@ -35,6 +36,7 @@ import type {
   ElementReferenceView,
   ElementTarget,
   Locator,
+  LocatorSelector,
   SnapshotOptions,
   ScreenshotOptions,
   UrlMatcher,
@@ -403,7 +405,10 @@ export class PlaywrightBrowserEngine implements BrowserEnginePort {
   ): Promise<void> {
     throwIfCancelled(control.signal);
     await this.wrapElement(
-      async () => (await this.actionable(handle, locator)).click({ timeout: control.timeoutMs }),
+      async () =>
+        (await this.actionable(handle, locator, control)).click({
+          timeout: remainingMs(control.deadlineAt),
+        }),
       'click',
       locator,
       control.timeoutMs,
@@ -417,7 +422,10 @@ export class PlaywrightBrowserEngine implements BrowserEnginePort {
   ): Promise<void> {
     throwIfCancelled(control.signal);
     await this.wrapElement(
-      async () => (await this.actionable(handle, locator)).dblclick({ timeout: control.timeoutMs }),
+      async () =>
+        (await this.actionable(handle, locator, control)).dblclick({
+          timeout: remainingMs(control.deadlineAt),
+        }),
       'double-click',
       locator,
       control.timeoutMs,
@@ -431,7 +439,10 @@ export class PlaywrightBrowserEngine implements BrowserEnginePort {
   ): Promise<void> {
     throwIfCancelled(control.signal);
     await this.wrapElement(
-      async () => (await this.actionable(handle, locator)).hover({ timeout: control.timeoutMs }),
+      async () =>
+        (await this.actionable(handle, locator, control)).hover({
+          timeout: remainingMs(control.deadlineAt),
+        }),
       'hover over',
       locator,
       control.timeoutMs,
@@ -445,7 +456,10 @@ export class PlaywrightBrowserEngine implements BrowserEnginePort {
   ): Promise<void> {
     throwIfCancelled(control.signal);
     await this.wrapElement(
-      async () => (await this.actionable(handle, locator)).focus(),
+      async () =>
+        (await this.actionable(handle, locator, control)).focus({
+          timeout: remainingMs(control.deadlineAt),
+        }),
       'focus',
       locator,
       control.timeoutMs,
@@ -459,7 +473,10 @@ export class PlaywrightBrowserEngine implements BrowserEnginePort {
   ): Promise<void> {
     throwIfCancelled(control.signal);
     await this.wrapElement(
-      async () => (await this.actionable(handle, locator)).check({ timeout: control.timeoutMs }),
+      async () =>
+        (await this.actionable(handle, locator, control)).check({
+          timeout: remainingMs(control.deadlineAt),
+        }),
       'check',
       locator,
       control.timeoutMs,
@@ -473,7 +490,10 @@ export class PlaywrightBrowserEngine implements BrowserEnginePort {
   ): Promise<void> {
     throwIfCancelled(control.signal);
     await this.wrapElement(
-      async () => (await this.actionable(handle, locator)).uncheck({ timeout: control.timeoutMs }),
+      async () =>
+        (await this.actionable(handle, locator, control)).uncheck({
+          timeout: remainingMs(control.deadlineAt),
+        }),
       'uncheck',
       locator,
       control.timeoutMs,
@@ -488,8 +508,8 @@ export class PlaywrightBrowserEngine implements BrowserEnginePort {
     throwIfCancelled(control.signal);
     await this.wrapElement(
       async () =>
-        (await this.actionable(handle, locator)).scrollIntoViewIfNeeded({
-          timeout: control.timeoutMs,
+        (await this.actionable(handle, locator, control)).scrollIntoViewIfNeeded({
+          timeout: remainingMs(control.deadlineAt),
         }),
       'scroll into view',
       locator,
@@ -523,11 +543,11 @@ export class PlaywrightBrowserEngine implements BrowserEnginePort {
     const page = this.getPage(handle);
     await this.wrapElement(
       async () => {
-        const sourceLocator = this.locate(page, source);
-        const targetLocator = this.locate(page, target);
+        const sourceLocator = await this.locate(page, source, control);
+        const targetLocator = await this.locate(page, target, control);
         if ((await sourceLocator.count()) > 1) throw ambiguousLocator(source);
         if ((await targetLocator.count()) > 1) throw ambiguousLocator(target);
-        await sourceLocator.dragTo(targetLocator, { timeout: control.timeoutMs });
+        await sourceLocator.dragTo(targetLocator, { timeout: remainingMs(control.deadlineAt) });
       },
       'drag',
       source,
@@ -544,7 +564,9 @@ export class PlaywrightBrowserEngine implements BrowserEnginePort {
     throwIfCancelled(control.signal);
     await this.wrapElement(
       async () =>
-        (await this.actionable(handle, locator)).fill(value, { timeout: control.timeoutMs }),
+        (await this.actionable(handle, locator, control)).fill(value, {
+          timeout: remainingMs(control.deadlineAt),
+        }),
       'fill',
       locator,
       control.timeoutMs,
@@ -560,7 +582,9 @@ export class PlaywrightBrowserEngine implements BrowserEnginePort {
     throwIfCancelled(control.signal);
     await this.wrapElement(
       async () =>
-        (await this.actionable(handle, locator)).press(key, { timeout: control.timeoutMs }),
+        (await this.actionable(handle, locator, control)).press(key, {
+          timeout: remainingMs(control.deadlineAt),
+        }),
       'press',
       locator,
       control.timeoutMs,
@@ -576,8 +600,8 @@ export class PlaywrightBrowserEngine implements BrowserEnginePort {
     throwIfCancelled(control.signal);
     await this.wrapElement(
       async () =>
-        (await this.actionable(handle, locator))
-          .selectOption(value, { timeout: control.timeoutMs })
+        (await this.actionable(handle, locator, control))
+          .selectOption(value, { timeout: remainingMs(control.deadlineAt) })
           .then(() => undefined),
       'select option',
       locator,
@@ -600,16 +624,18 @@ export class PlaywrightBrowserEngine implements BrowserEnginePort {
       readonly snapshot: string;
       readonly refs: readonly ElementReferenceView[];
     }> => {
-      const passwordValuesBefore = await readPasswordValues(page);
+      const root = await this.resolveFrameRoot(page, scope, control);
+      const scopedLocator = this.locateInRoot(root, scope);
+      const passwordValuesBefore = await readPasswordValues(root);
       throwIfCancelled(control.signal);
-      const snapshot = await this.locate(page, scope).ariaSnapshot({
-        timeout: control.timeoutMs,
+      const snapshot = await scopedLocator.ariaSnapshot({
+        timeout: remainingMs(control.deadlineAt),
         ...(control.signal === undefined ? {} : { signal: control.signal }),
         ...(options.maxDepth === undefined ? {} : { depth: options.maxDepth }),
         boxes: options.includeBoundingBoxes ?? false,
       });
       throwIfCancelled(control.signal);
-      const passwordValuesAfter = await readPasswordValues(page);
+      const passwordValuesAfter = await readPasswordValues(root);
       throwIfCancelled(control.signal);
       const redacted = redactSecretValues(snapshot, [
         ...passwordValuesBefore,
@@ -617,7 +643,7 @@ export class PlaywrightBrowserEngine implements BrowserEnginePort {
       ]);
       const refs =
         options.includeRefs === true
-          ? await this.captureElementRefs(handle, page, scope, options.maxRefs ?? 50, control)
+          ? await this.captureElementRefs(handle, scopedLocator, options.maxRefs ?? 50, control)
           : [];
       return { snapshot: redacted, refs };
     };
@@ -638,7 +664,10 @@ export class PlaywrightBrowserEngine implements BrowserEnginePort {
   ): Promise<string> {
     throwIfCancelled(control.signal);
     return this.wrapElement(
-      () => this.locate(this.getPage(handle), locator).innerText({ timeout: control.timeoutMs }),
+      async () =>
+        (await this.locate(this.getPage(handle), locator, control)).innerText({
+          timeout: remainingMs(control.deadlineAt),
+        }),
       'read visible text',
       locator,
       control.timeoutMs,
@@ -654,9 +683,9 @@ export class PlaywrightBrowserEngine implements BrowserEnginePort {
     const screenshotLocator = options.locator;
     if (screenshotLocator !== undefined) {
       return this.wrapElement(
-        () =>
-          this.locate(this.getPage(handle), screenshotLocator).screenshot({
-            timeout: control.timeoutMs,
+        async () =>
+          (await this.locate(this.getPage(handle), screenshotLocator, control)).screenshot({
+            timeout: remainingMs(control.deadlineAt),
             type: 'png',
           }),
         'capture screenshot',
@@ -702,7 +731,7 @@ export class PlaywrightBrowserEngine implements BrowserEnginePort {
             }, control);
             return;
           case 'locator': {
-            const locator = this.locate(page, condition.locator);
+            const locator = await this.locate(page, condition.locator, control);
             await pollUntil(async (remaining) => {
               const count = await locator.count();
               if (count > 1) throw ambiguousLocator(condition.locator);
@@ -747,14 +776,12 @@ export class PlaywrightBrowserEngine implements BrowserEnginePort {
     throwIfCancelled(control.signal);
     const page = this.getPage(handle);
     const waiter = createEventWaiter(page, wait, control, (popup) => this.registerPage(popup));
-    const actionPromise = this.performCompositeAction(
-      handle,
-      action,
-      remainingMs(control.deadlineAt),
-    ).catch((error: unknown) => {
-      waiter.cancel(error);
-      throw error;
-    });
+    const actionPromise = this.performCompositeAction(handle, action, control).catch(
+      (error: unknown) => {
+        waiter.cancel(error);
+        throw error;
+      },
+    );
     const settled = await Promise.allSettled([actionPromise, waiter.promise]);
     waiter.dispose();
     const actionResult = settled[0];
@@ -778,27 +805,30 @@ export class PlaywrightBrowserEngine implements BrowserEnginePort {
   private async performCompositeAction(
     handle: BrowserPageHandle,
     action: BrowserAction,
-    timeoutMs: number,
+    control: OperationControl,
   ): Promise<void> {
     const target = action.target ?? action.locator;
     switch (action.kind) {
       case 'click':
         await this.wrapElement(
-          async () => (await this.actionable(handle, target)).click({ timeout: timeoutMs }),
+          async () =>
+            (await this.actionable(handle, target, control)).click({
+              timeout: remainingMs(control.deadlineAt),
+            }),
           'click',
           target,
-          timeoutMs,
+          control.timeoutMs,
         );
         return;
       case 'press':
         await this.wrapElement(
           async () =>
-            (await this.actionable(handle, target)).press(action.key, {
-              timeout: timeoutMs,
+            (await this.actionable(handle, target, control)).press(action.key, {
+              timeout: remainingMs(control.deadlineAt),
             }),
           'press',
           target,
-          timeoutMs,
+          control.timeoutMs,
         );
     }
   }
@@ -832,32 +862,67 @@ export class PlaywrightBrowserEngine implements BrowserEnginePort {
     return page;
   }
 
-  private locate(page: Page, locator: Locator): PwLocator {
+  private locateInRoot(root: Page | FrameLocator, locator: LocatorSelector): PwLocator {
     switch (locator.strategy) {
       case 'role':
-        return page.getByRole(
+        return root.getByRole(
           locator.value,
           locator.name === undefined ? {} : { name: locator.name, exact: locator.exact ?? true },
         );
       case 'text':
-        return page.getByText(locator.value, { exact: true });
+        return root.getByText(locator.value, { exact: true });
       case 'label':
-        return page.getByLabel(locator.value, { exact: true });
+        return root.getByLabel(locator.value, { exact: true });
       case 'placeholder':
-        return page.getByPlaceholder(locator.value, { exact: true });
+        return root.getByPlaceholder(locator.value, { exact: true });
       case 'testId':
-        return page.getByTestId(locator.value);
+        return root.getByTestId(locator.value);
       case 'css':
-        return page.locator(locator.value);
+        return root.locator(locator.value);
     }
+  }
+
+  private async resolveFrameRoot(
+    page: Page,
+    locator: Locator,
+    control: OperationControl,
+  ): Promise<Page | FrameLocator> {
+    const frame = locator.frame;
+    if (frame === undefined || frame.kind === 'main') return page;
+    if (frame.chain.length === 0 || frame.chain.length > 5)
+      throw new BrowserMeshError(
+        'INVALID_ARGUMENT',
+        'Iframe locator chain must contain between 1 and 5 selectors',
+        { details: { frameDepth: frame.chain.length, maximumFrameDepth: 5 } },
+      );
+    let root: Page | FrameLocator = page;
+    for (const [frameIndex, selector] of frame.chain.entries()) {
+      const frameElement = this.locateInRoot(root, selector);
+      await pollUntil(async () => {
+        const count = await frameElement.count();
+        if (count > 1) throw ambiguousFrameLocator(selector, frameIndex);
+        return count === 1;
+      }, control);
+      root = frameElement.contentFrame();
+    }
+    return root;
+  }
+
+  private async locate(
+    page: Page,
+    locator: Locator,
+    control: OperationControl,
+  ): Promise<PwLocator> {
+    return this.locateInRoot(await this.resolveFrameRoot(page, locator, control), locator);
   }
 
   private async actionable(
     pageHandle: BrowserPageHandle,
     target: ElementTarget,
+    control: OperationControl,
   ): Promise<ActionableElement> {
     const page = this.getPage(pageHandle);
-    if (!('ref' in target)) return this.locate(page, target);
+    if (!('ref' in target)) return this.locate(page, target, control);
     const registry = this.elementRefs.get(pageHandle.id);
     const entry = registry?.get(target.ref);
     if (entry === undefined || entry.expiresAt <= this.now()) {
@@ -883,12 +948,11 @@ export class PlaywrightBrowserEngine implements BrowserEnginePort {
 
   private async captureElementRefs(
     pageHandle: BrowserPageHandle,
-    page: Page,
-    scope: Locator,
+    scope: PwLocator,
     maxRefs: number,
     control: OperationControl,
   ): Promise<readonly ElementReferenceView[]> {
-    const candidate = this.locate(page, scope).locator(INTERACTIVE_SELECTOR);
+    const candidate = scope.locator(INTERACTIVE_SELECTOR);
     const handles: ElementReferenceEntry[] = [];
     const views: ElementReferenceView[] = [];
     try {
@@ -1082,6 +1146,14 @@ function ambiguousLocator(locator: Locator): BrowserMeshError {
   });
 }
 
+function ambiguousFrameLocator(locator: LocatorSelector, frameIndex: number): BrowserMeshError {
+  return new BrowserMeshError(
+    'LOCATOR_AMBIGUOUS',
+    `Iframe selector at chain step ${String(frameIndex)} matched multiple elements`,
+    { details: { locator, frameIndex } },
+  );
+}
+
 interface EventWaiter {
   readonly promise: Promise<BrowserEngineActionWaitEvent>;
   cancel(error: unknown): void;
@@ -1236,7 +1308,13 @@ function describeLocator(locator: ElementTarget): string {
     locator.strategy === 'role' && locator.name !== undefined
       ? `, exact=${String(locator.exact ?? true)}`
       : '';
-  return `${locator.strategy}=${locator.value}${name}${exact}`;
+  const frame =
+    locator.frame?.kind === 'iframe'
+      ? `, frameDepth=${String(locator.frame.chain.length)}`
+      : locator.frame?.kind === 'main'
+        ? ', frame=main'
+        : '';
+  return `${locator.strategy}=${locator.value}${name}${exact}${frame}`;
 }
 
 function staleElementReference(ref: string): BrowserMeshError {
@@ -1253,8 +1331,8 @@ function redactSecretValues(snapshot: string, secrets: readonly string[]): strin
     .reduce((redacted, secret) => redacted.replaceAll(secret, '[REDACTED]'), snapshot);
 }
 
-async function readPasswordValues(page: Page): Promise<readonly string[]> {
-  const passwordInputs = await page.locator('input[type="password"]').all();
+async function readPasswordValues(root: Page | FrameLocator): Promise<readonly string[]> {
+  const passwordInputs = await root.locator('input[type="password"]').all();
   return Promise.all(passwordInputs.map((passwordInput) => passwordInput.inputValue()));
 }
 

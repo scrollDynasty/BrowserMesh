@@ -36,14 +36,14 @@ pending and does not retroactively make the baseline incomplete.
 
 ## Professional MCP improvement program
 
-| Milestone                                              | Status                                                                                                                                                                                                                                                                                                                          | Contract              |
-| ------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------- |
-| Version chain, headless config, runtime info, doctor   | Complete: exact version chain, validated config, non-launching runtime info, and bounded doctor                                                                                                                                                                                                                                 | ADR 0007              |
-| Structured MCP output, annotations, cancellation       | Complete: structured output, annotations, end-to-end request signals, queue-safe cancellation                                                                                                                                                                                                                                   | ADR 0008              |
-| Passive waits and atomic action/wait                   | Complete: passive conditions and click/press + navigation/response/popup/dialog composites with cancellation and owned cleanup                                                                                                                                                                                                  | ADR 0009              |
-| Bounded redacted browser observability                 | Complete: console/page-error and correlated network/failed-request collectors                                                                                                                                                                                                                                                   | ADR 0010              |
-| Bounded snapshots, context options, typed interactions | Partial: bounded scoped snapshots, safe context settings including origin-scoped geolocation, short-lived refs, hover/focus/check/double-click/scroll/scroll-into-view/drag-drop, viewport/full-page/element in-memory screenshots, popup, and dialog complete; tree filters and remaining lifecycle-heavy interactions pending | ADRs 0011, 0013, 0016 |
-| Filesystem-backed artifacts                            | Design gate accepted; capability ADR and implementation deferred                                                                                                                                                                                                                                                                | ADR 0012              |
+| Milestone                                              | Status                                                                                                                                                                                                                                                                                                                                                           | Contract                    |
+| ------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------- |
+| Version chain, headless config, runtime info, doctor   | Complete: exact version chain, validated config, non-launching runtime info, and bounded doctor                                                                                                                                                                                                                                                                  | ADR 0007                    |
+| Structured MCP output, annotations, cancellation       | Complete: structured output, annotations, end-to-end request signals, queue-safe cancellation                                                                                                                                                                                                                                                                    | ADR 0008                    |
+| Passive waits and atomic action/wait                   | Complete: passive conditions and click/press + navigation/response/popup/dialog composites with cancellation and owned cleanup                                                                                                                                                                                                                                   | ADR 0009                    |
+| Bounded redacted browser observability                 | Complete: console/page-error and correlated network/failed-request collectors                                                                                                                                                                                                                                                                                    | ADR 0010                    |
+| Bounded snapshots, context options, typed interactions | Partial: bounded scoped snapshots, safe context settings including origin-scoped geolocation, short-lived refs, hover/focus/check/double-click/scroll/scroll-into-view/drag-drop, viewport/full-page/element in-memory screenshots, popup/dialog, and iframe-scoped semantic targeting complete; tree filters and remaining lifecycle-heavy interactions pending | ADRs 0011, 0013, 0014, 0016 |
+| Filesystem-backed artifacts                            | Design gate accepted; capability ADR and implementation deferred                                                                                                                                                                                                                                                                                                 | ADR 0012                    |
 
 Remote HTTP/multi-client security and internal agent orchestration are not part of the accepted
 implementation program. The latter remains a separate external layer.
@@ -117,6 +117,17 @@ Last completed v0.1 release verification:
   verification cover the completed ADR 0007 slice.
 
 Known blockers: none.
+
+- ADR 0014 adds engine-neutral main-document or one-through-five-step iframe scopes to every
+  semantic locator consumer. Each iframe step has exact ambiguity semantics and is re-resolved
+  within the owning session queue; no frame handle crosses the engine port. Real-Chromium coverage
+  includes nested same-origin/cross-origin traversal, actions, waits, visible text, scoped
+  snapshots/refs, element screenshots, ambiguity recovery, and stale refs after descendant
+  navigation/detach.
+- Iframe-targeting `npm run verify`: passed after merging origin-scoped geolocation (23 files, 130
+  tests, coverage thresholds, lint, formatting, typecheck, and build).
+  `BROWSERMESH_HEADLESS=true npm run verify:package`: passed, including packed-file inspection,
+  clean tarball installation, MCP discovery, real Chromium lifecycle smoke, and shutdown.
 
 Latest post-v0.1 slice verification:
 

@@ -1123,9 +1123,12 @@ restored from saved storage state, and disappear when the context closes.
 
 Typed hover, focus, check, uncheck, double-click, and scroll-into-view are explicit page operations.
 They use semantic locators, bounded timeouts, request cancellation, and the owning session queue.
-Page-coordinate scroll, drag/drop, iframe-scoped semantic targeting,
-and full-page/element screenshots remain later slices. Arbitrary JavaScript, arbitrary paths,
-upload, and download are not implied.
+Page-coordinate scroll, drag/drop, full-page/element screenshots, and iframe-scoped semantic
+targeting are also implemented. Per ADR 0014, a locator may select the main document or carry a
+one-through-five-step semantic/CSS iframe chain. Every step resolves exactly under the operation
+deadline; ambiguity returns `LOCATOR_AMBIGUOUS`. Chains are re-resolved per operation, refs remain
+page-owned and become stale after descendant navigation/detach, and no engine frame handle crosses
+a port. Arbitrary JavaScript, arbitrary paths, upload, and download are not implied.
 
 ### 22.6 Artifacts-before-code and deferred scope
 

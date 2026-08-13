@@ -21,7 +21,7 @@ export interface PageView {
   readonly isDefault: boolean;
 }
 
-export type Locator =
+export type LocatorSelector =
   | {
       readonly strategy: 'role';
       readonly value:
@@ -43,6 +43,20 @@ export type Locator =
       readonly strategy: 'text' | 'label' | 'placeholder' | 'testId' | 'css';
       readonly value: string;
     };
+
+/** A bounded, engine-neutral path from the top document to a descendant iframe document. */
+export type FrameScope =
+  | { readonly kind: 'main' }
+  | {
+      readonly kind: 'iframe';
+      readonly chain: readonly LocatorSelector[];
+    };
+
+/**
+ * A semantic/CSS element selector resolved either in the top document (the default) or through an
+ * explicitly supplied iframe chain. Frame selectors cannot themselves contain frame scopes.
+ */
+export type Locator = LocatorSelector & { readonly frame?: FrameScope };
 
 export interface ElementReferenceTarget {
   readonly ref: string;

@@ -196,6 +196,50 @@ export async function startTestWebServer(): Promise<TestWebServer> {
       );
       return;
     }
+    if (url.pathname === '/iframes') {
+      response.end(
+        page(
+          'Iframe targeting',
+          `<button data-testid="detach-frame" onclick="document.querySelector('[data-testid=outer-frame]').remove()">Detach frame</button>
+          <button data-testid="navigate-frame" onclick="document.querySelector('[data-testid=outer-frame]').src='/iframe-replaced'">Navigate frame</button>
+          <iframe data-testid="outer-frame" title="Workspace" src="/iframe-level-one"></iframe>
+          <iframe data-testid="duplicate-frame" title="Duplicate" src="/iframe-empty"></iframe>
+          <iframe data-testid="duplicate-frame" title="Duplicate" src="/iframe-empty"></iframe>`,
+        ),
+      );
+      return;
+    }
+    if (url.pathname === '/iframe-level-one') {
+      const port = request.headers.host?.split(':').at(-1) ?? '';
+      response.end(
+        page(
+          'Iframe level one',
+          `<label>Frame input <input aria-label="Frame input" /></label>
+          <button data-testid="frame-action" onclick="document.querySelector('[data-testid=frame-status]').textContent='frame-clicked'">Frame action</button>
+          <div data-testid="frame-status">frame-ready</div>
+          <iframe data-testid="nested-frame" title="Nested workspace" src="http://localhost:${escapeHtml(port)}/iframe-level-two"></iframe>`,
+        ),
+      );
+      return;
+    }
+    if (url.pathname === '/iframe-level-two') {
+      response.end(
+        page(
+          'Iframe level two',
+          `<button data-testid="nested-action" onclick="document.querySelector('[data-testid=nested-status]').textContent='nested-clicked'">Nested action</button>
+          <div data-testid="nested-status">nested-ready</div>`,
+        ),
+      );
+      return;
+    }
+    if (url.pathname === '/iframe-replaced') {
+      response.end(page('Replaced iframe', '<div data-testid="replacement">replaced</div>'));
+      return;
+    }
+    if (url.pathname === '/iframe-empty') {
+      response.end(page('Empty iframe', '<div>empty</div>'));
+      return;
+    }
     if (url.pathname === '/observability') {
       response.end(
         page(
