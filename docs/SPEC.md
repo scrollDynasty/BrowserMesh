@@ -1060,9 +1060,15 @@ shutdown. Ownership checks prevent cross-page or cross-session evidence access.
 
 The console/page-error vertical slice is exposed as `browser_console_list` and
 `browser_page_errors_list`. Both are read-only, execute through the owning session queue, default to
-metadata-only results, and accept `includeText`, `limit`, and `sinceEventId`. Network and
-failed-request collectors remain the next ADR 0010 slice; console/page-error implementation does not
-capture network data implicitly.
+metadata-only results, and accept `includeText`, `limit`, and `sinceEventId`.
+
+The completed network slice exposes `browser_network_list` for correlated request/response metadata
+and `browser_failed_requests_list` for transport-level request failures. Both execute through the
+owning session queue and accept `limit` and `sinceEventId`. A bounded adapter-private in-flight map
+correlates request IDs and durations and discards late terminal events after eviction or teardown.
+Redirect hops are independent request/terminal pairs. Only page-owned HTTP(S) requests are included;
+page EventSource traffic is included, while service-worker traffic, WebSockets, `data:` and `blob:`
+URLs are excluded. HTTP 4xx/5xx responses remain response events rather than request failures.
 
 ### 22.5 Snapshots, context, and typed interactions
 

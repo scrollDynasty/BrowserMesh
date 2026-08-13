@@ -150,6 +150,33 @@ export async function startTestWebServer(): Promise<TestWebServer> {
       );
       return;
     }
+    if (url.pathname === '/network-observability') {
+      response.end(
+        page(
+          'Network observability',
+          `<div data-testid="network-ready">pending</div><script>
+            Promise.allSettled([
+              fetch('/api/server-error?%74oken=encoded-secret&safe=visible#private-fragment'),
+              fetch('/api/duplicate?client_secret=first-secret'),
+              fetch('/api/duplicate?client_secret=second-secret'),
+              fetch('http://127.0.0.1:1/unreachable?password=transport-secret')
+            ]).then(() => document.querySelector('[data-testid=network-ready]').textContent = 'ready');
+          </script>`,
+        ),
+      );
+      return;
+    }
+    if (url.pathname === '/api/server-error') {
+      response.statusCode = 500;
+      response.setHeader('content-type', 'application/json');
+      response.end(JSON.stringify({ secret: 'response-body-must-not-be-captured' }));
+      return;
+    }
+    if (url.pathname === '/api/duplicate') {
+      response.setHeader('content-type', 'application/json');
+      response.end(JSON.stringify({ secret: 'duplicate-body-must-not-be-captured' }));
+      return;
+    }
     if (url.pathname === '/exact') {
       response.end(page('Exact', '<div data-testid="status">exact</div>'));
       return;

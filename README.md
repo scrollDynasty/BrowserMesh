@@ -322,13 +322,24 @@ A completely unknown session ID still returns `SESSION_NOT_FOUND`.
 
 - `browser_console_list`
 - `browser_page_errors_list`
+- `browser_network_list`
+- `browser_failed_requests_list`
 
-Both tools require an explicit `sessionId` and `pageId`. Reads are metadata-only by default; set
+All tools require an explicit `sessionId` and `pageId`. Console and page-error reads are
+metadata-only by default; set
 `includeText=true` for bounded, best-effort-redacted evidence. Use `nextCursor` as the next
 non-destructive `sinceEventId` checkpoint. Always inspect `gap` and `droppedCount` before concluding
 that an event was absent. Text may be truncated further to satisfy the total response-byte limit;
 the event and its cursor are still returned so pagination cannot stall. BrowserMesh never captures
 console argument objects or raw error stacks.
+
+Network reads expose only correlated request/response/request-failed metadata: a bounded request
+ID, method, sanitized URL, resource type, status, duration, and safe failure classification where
+applicable. Credentials and fragments are removed and sensitive query values are redacted before
+storage. Headers, bodies, cookies, storage, service-worker traffic, WebSockets, `data:` URLs, and
+`blob:` URLs are excluded. Page-originated HTTP(S) EventSource requests are included as ordinary
+network metadata. HTTP error responses such as 500 appear in `browser_network_list`; only
+transport-level failures appear in `browser_failed_requests_list`.
 
 ### Interaction
 
@@ -502,7 +513,7 @@ BrowserMesh never attempts to serialize a live `BrowserContext`, open pages, pen
 | `BROWSERMESH_MAX_PAGES`                    |           `20` | Managed pages per session                      |
 | `BROWSERMESH_PERSISTENCE`                  |         `true` | Enable saved browser state                     |
 | `BROWSERMESH_HEADLESS`                     |        `false` | Launch Chromium without a visible window       |
-| `BROWSERMESH_OBSERVABILITY_EVENTS`         |          `200` | Retained console/error events per page         |
+| `BROWSERMESH_OBSERVABILITY_EVENTS`         |          `200` | Retained mixed observability events per page   |
 | `BROWSERMESH_OBSERVABILITY_STRING_CHARS`   |         `2048` | Maximum exposed event string length            |
 | `BROWSERMESH_OBSERVABILITY_PAGE_SIZE`      |          `100` | Maximum events returned by one read            |
 | `BROWSERMESH_OBSERVABILITY_RESPONSE_BYTES` |        `65536` | Maximum serialized observability response size |

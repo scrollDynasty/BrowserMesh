@@ -41,7 +41,7 @@ pending and does not retroactively make the baseline incomplete.
 | Version chain, headless config, runtime info, doctor   | Complete: exact version chain, validated config, non-launching runtime info, and bounded doctor          | ADR 0007 |
 | Structured MCP output, annotations, cancellation       | Complete: structured output, annotations, end-to-end request signals, queue-safe cancellation            | ADR 0008 |
 | Passive waits and atomic action/wait                   | Partial: passive conditions, click/press + navigation/response, and cancellation complete; popup pending | ADR 0009 |
-| Bounded redacted browser observability                 | Partial: console/page-error collectors complete; network/failed-request collectors pending               | ADR 0010 |
+| Bounded redacted browser observability                 | Complete: console/page-error and correlated network/failed-request collectors                            | ADR 0010 |
 | Bounded snapshots, context options, typed interactions | Accepted; pending implementation                                                                         | ADR 0011 |
 | Filesystem-backed artifacts                            | Design gate accepted; capability ADR and implementation deferred                                         | ADR 0012 |
 
@@ -131,12 +131,14 @@ Latest post-v0.1 slice verification:
   format, typecheck, and build). `BROWSERMESH_HEADLESS=true npm run verify:package`: passed,
   including packed-file inspection, clean tarball installation, MCP discovery, browser smoke, and
   shutdown.
-- ADR 0010 console/page-error slice adds engine-neutral normalized Playwright subscriptions,
+- ADR 0010 adds engine-neutral normalized Playwright subscriptions,
   runtime-owned bounded per-page stores and listener disposers, opaque page-scoped monotonic
   cursors, metadata-only defaults, explicit bounded/redacted text, overflow gap/drop accounting,
-  and structured `browser_console_list` / `browser_page_errors_list` MCP tools. Network and failed
-  request collectors remain pending as a focused follow-up slice.
-- Observability slice `npm run verify`: passed (21 files, 87 tests, coverage thresholds, lint,
+  and structured console, page-error, network, and failed-request MCP tools. Network metadata uses
+  bounded in-flight correlation, safe URL/query redaction, explicit protocol/source policy, and
+  never captures headers, bodies, cookies, or storage.
+- Combined cancellation/observability `npm run verify`: passed (22 files, 98 tests, coverage
+  thresholds, lint,
   format, typecheck, and build). `BROWSERMESH_HEADLESS=true npm run verify:package`: passed,
   including installed-tarball MCP discovery and real-Chromium lifecycle smoke.
 

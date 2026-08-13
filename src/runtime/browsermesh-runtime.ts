@@ -31,6 +31,7 @@ import { SerialQueue } from './serial-queue.js';
 import {
   BoundedObservationStore,
   type ObservationList,
+  type ObservationKind,
   type ObservabilityLimits,
 } from './bounded-observability.js';
 
@@ -393,6 +394,20 @@ export class BrowserMeshRuntime {
     return this.observationList(target, 'page_error', input);
   }
 
+  listNetwork(
+    target: OperationTarget,
+    input: { readonly sinceEventId?: string; readonly limit?: number },
+  ): Promise<PageAddressedOperationResult<ObservationList>> {
+    return this.observationList(target, ['request', 'response'], input);
+  }
+
+  listFailedRequests(
+    target: OperationTarget,
+    input: { readonly sinceEventId?: string; readonly limit?: number },
+  ): Promise<PageAddressedOperationResult<ObservationList>> {
+    return this.observationList(target, 'request_failed', input);
+  }
+
   back(target: OperationTarget): Promise<PageAddressedOperationResult<string>> {
     return this.pageOperation(target, async (page, control) => {
       await this.options.engine.back(page, control);
@@ -682,7 +697,7 @@ export class BrowserMeshRuntime {
 
   private observationList(
     target: OperationTarget,
-    kind: 'console' | 'page_error',
+    kind: ObservationKind | readonly ObservationKind[],
     input: {
       readonly sinceEventId?: string;
       readonly limit?: number;
@@ -692,7 +707,9 @@ export class BrowserMeshRuntime {
     return this.pageOperation(target, () => {
       const entry = this.readySession(target.sessionId);
       const page = this.getPageEntry(entry, target.pageId);
-      return Promise.resolve(page.observations.list({ kind, ...input }));
+      return Promise.resolve(
+        page.observations.list({ kinds: Array.isArray(kind) ? kind : [kind], ...input }),
+      );
     });
   }
 
@@ -761,13 +778,14 @@ export class BrowserMeshRuntime {
 
   private addPage(entry: SessionEntry, handle: BrowserPageHandle): PageEntry {
     const pageId = this.options.ids.next('page');
+    const observability = this.options.observability ?? {
+      maxEventsPerPage: 200,
+      maxStringLength: 2_048,
+      maxPageSize: 100,
+      maxResponseBytes: 65_536,
+    };
     const observations = new BoundedObservationStore(
-      this.options.observability ?? {
-        maxEventsPerPage: 200,
-        maxStringLength: 2_048,
-        maxPageSize: 100,
-        maxResponseBytes: 65_536,
-      },
+      observability,
       this.options.ids.next('cursor'),
     );
     const page: PageEntry = {
@@ -775,14 +793,21 @@ export class BrowserMeshRuntime {
       createdAt: this.timestamp(),
       handle,
       observations,
-      stopObserving: this.options.engine.observePage(handle, (event) => {
-        observations.append({
-          ...event,
-          timestamp: this.timestamp(),
-          sessionId: entry.id,
-          pageId,
-        });
-      }),
+      stopObserving: this.options.engine.observePage(
+        handle,
+        {
+          maxInFlightRequests: Math.max(32, observability.maxEventsPerPage * 2),
+          maxStringLength: observability.maxStringLength,
+        },
+        (event) => {
+          observations.append({
+            ...event,
+            timestamp: this.timestamp(),
+            sessionId: entry.id,
+            pageId,
+          });
+        },
+      ),
     };
     entry.pages.set(page.id, page);
     return page;

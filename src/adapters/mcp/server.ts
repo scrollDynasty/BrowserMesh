@@ -86,6 +86,11 @@ const observationInputSchema = {
   limit: z.number().int().positive().max(200).optional(),
   includeText: z.boolean().optional().default(false),
 };
+const networkObservationInputSchema = {
+  ...targetSchema,
+  sinceEventId: z.string().min(1).max(128).optional(),
+  limit: z.number().int().positive().max(200).optional(),
+};
 
 function target(
   input: {
@@ -361,6 +366,50 @@ export function createMcpServer(runtime: BrowserMeshRuntime): McpServer {
           ...(input.sinceEventId === undefined ? {} : { sinceEventId: input.sinceEventId }),
           ...(input.limit === undefined ? {} : { limit: input.limit }),
           includeText: input.includeText,
+        });
+        return {
+          operationId: listed.operationId,
+          sessionId: listed.sessionId,
+          pageId: listed.pageId,
+          ...listed.value,
+        };
+      }),
+  );
+  server.registerTool(
+    'browser_network_list',
+    {
+      ...contractFor('browser_network_list'),
+      description:
+        'List bounded request and response metadata for one explicitly addressed page. Correlated requestId and durationMs support duplicate/retry analysis. URLs remove credentials and fragments and redact sensitive query values; headers, cookies, bodies, storage, WebSockets, service-worker traffic, data URLs, and blob URLs are never captured. Inspect gap and droppedCount before treating the evidence as complete.',
+      inputSchema: networkObservationInputSchema,
+    },
+    (input, extra) =>
+      structuredResult(async () => {
+        const listed = await runtime.listNetwork(target(input, extra.signal), {
+          ...(input.sinceEventId === undefined ? {} : { sinceEventId: input.sinceEventId }),
+          ...(input.limit === undefined ? {} : { limit: input.limit }),
+        });
+        return {
+          operationId: listed.operationId,
+          sessionId: listed.sessionId,
+          pageId: listed.pageId,
+          ...listed.value,
+        };
+      }),
+  );
+  server.registerTool(
+    'browser_failed_requests_list',
+    {
+      ...contractFor('browser_failed_requests_list'),
+      description:
+        'List bounded transport-level request failures for one explicitly addressed page. HTTP error responses such as 500 remain response events in browser_network_list; this tool reports request_failed events with correlated IDs, duration, and a bounded safe failure message. No headers, cookies, or bodies are captured.',
+      inputSchema: networkObservationInputSchema,
+    },
+    (input, extra) =>
+      structuredResult(async () => {
+        const listed = await runtime.listFailedRequests(target(input, extra.signal), {
+          ...(input.sinceEventId === undefined ? {} : { sinceEventId: input.sinceEventId }),
+          ...(input.limit === undefined ? {} : { limit: input.limit }),
         });
         return {
           operationId: listed.operationId,

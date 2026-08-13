@@ -94,15 +94,49 @@ const waitedEventSchema = z.discriminatedUnion('kind', [
   }),
 ]);
 
-const observationEventSchema = z.object({
+const observationCommon = {
   eventId: z.string().min(1),
   timestamp,
   sessionId,
   pageId,
-  kind: z.enum(['console', 'page_error']),
-  level: z.string().optional(),
-  text: z.string().optional(),
-});
+} as const;
+const observationEventSchema = z.discriminatedUnion('kind', [
+  z.object({
+    ...observationCommon,
+    kind: z.literal('console'),
+    level: z.string(),
+    text: z.string().optional(),
+  }),
+  z.object({ ...observationCommon, kind: z.literal('page_error'), text: z.string().optional() }),
+  z.object({
+    ...observationCommon,
+    kind: z.literal('request'),
+    requestId: z.string().min(1),
+    method: z.string().min(1),
+    url: z.url(),
+    resourceType: z.string().min(1),
+  }),
+  z.object({
+    ...observationCommon,
+    kind: z.literal('response'),
+    requestId: z.string().min(1),
+    method: z.string().min(1),
+    url: z.url(),
+    resourceType: z.string().min(1),
+    status: z.number().int().min(0).max(999),
+    durationMs: z.number().int().nonnegative(),
+  }),
+  z.object({
+    ...observationCommon,
+    kind: z.literal('request_failed'),
+    requestId: z.string().min(1),
+    method: z.string().min(1),
+    url: z.url(),
+    resourceType: z.string().min(1),
+    durationMs: z.number().int().nonnegative(),
+    failure: z.string(),
+  }),
+]);
 const observationList = {
   ...pageOperation,
   events: z.array(observationEventSchema),
@@ -148,6 +182,8 @@ export const outputSchemas = {
   browser_visible_text: z.object({ ...pageOperation, text: z.string() }),
   browser_console_list: z.object(observationList),
   browser_page_errors_list: z.object(observationList),
+  browser_network_list: z.object(observationList),
+  browser_failed_requests_list: z.object(observationList),
   browser_click: z.object({ ...pageOperation, completed: z.literal(true) }),
   browser_fill: z.object({ ...pageOperation, completed: z.literal(true) }),
   browser_press: z.object({ ...pageOperation, completed: z.literal(true) }),
@@ -220,6 +256,14 @@ export const toolPresentation: Readonly<Record<ToolName, ToolPresentation>> = {
   browser_visible_text: presentation('Get visible page text', true, false, true, true),
   browser_console_list: presentation('List browser console events', true, false, true, true),
   browser_page_errors_list: presentation('List browser page errors', true, false, true, true),
+  browser_network_list: presentation('List browser network events', true, false, true, true),
+  browser_failed_requests_list: presentation(
+    'List failed browser requests',
+    true,
+    false,
+    true,
+    true,
+  ),
   browser_click: presentation('Click page element', false, true, false, true),
   browser_fill: presentation('Fill page field', false, false, false, true),
   browser_press: presentation('Press key on page element', false, true, false, true),

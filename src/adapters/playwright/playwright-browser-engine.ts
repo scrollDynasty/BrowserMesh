@@ -5,6 +5,7 @@ import {
   type Frame,
   type Locator as PwLocator,
   type Page,
+  type Request,
   type Response,
 } from 'playwright';
 import { constants } from 'node:fs';
@@ -32,6 +33,11 @@ import type {
   UrlMatcher,
   WaitCondition,
 } from '../../domain/models.js';
+import {
+  boundString,
+  redactAndBoundObservationText,
+  sanitizeObservationUrl,
+} from '../../domain/observability.js';
 
 interface ContextHandle extends BrowserContextHandle {
   readonly kind: 'context';
@@ -187,25 +193,94 @@ export class PlaywrightBrowserEngine implements BrowserEnginePort {
 
   observePage(
     handle: BrowserPageHandle,
+    options: { readonly maxInFlightRequests: number; readonly maxStringLength: number },
     listener: (event: BrowserObservation) => void,
   ): () => void {
     const page = this.getPage(handle);
+    const inFlight = new Map<
+      Request,
+      {
+        readonly requestId: string;
+        readonly startedAt: number;
+        readonly method: string;
+        readonly url: string;
+        readonly resourceType: string;
+      }
+    >();
+    let requestSequence = 0;
     const onConsole = (message: import('playwright').ConsoleMessage): void => {
       listener({ kind: 'console', level: message.type(), text: message.text() });
     };
     const onPageError = (error: Error): void => {
       listener({ kind: 'page_error', text: error.message });
     };
+    const onRequest = (request: Request): void => {
+      const url = sanitizeObservationUrl(request.url(), options.maxStringLength);
+      if (url === null) return;
+      const tracked = {
+        requestId: `request_${(++requestSequence).toString(36)}`,
+        startedAt: performance.now(),
+        method: boundString(request.method().toUpperCase(), 32),
+        url,
+        resourceType: boundString(request.resourceType(), 64),
+      };
+      inFlight.set(request, tracked);
+      while (inFlight.size > options.maxInFlightRequests) {
+        const oldest = inFlight.keys().next().value;
+        if (oldest === undefined) break;
+        inFlight.delete(oldest);
+      }
+      listener({ kind: 'request', ...tracked });
+    };
+    const onResponse = (response: Response): void => {
+      const request = response.request();
+      const tracked = inFlight.get(request);
+      if (tracked === undefined) return;
+      inFlight.delete(request);
+      listener({
+        kind: 'response',
+        requestId: tracked.requestId,
+        method: tracked.method,
+        url: tracked.url,
+        resourceType: tracked.resourceType,
+        status: response.status(),
+        durationMs: performance.now() - tracked.startedAt,
+      });
+    };
+    const onRequestFailed = (request: Request): void => {
+      const tracked = inFlight.get(request);
+      if (tracked === undefined) return;
+      inFlight.delete(request);
+      listener({
+        kind: 'request_failed',
+        requestId: tracked.requestId,
+        method: tracked.method,
+        url: tracked.url,
+        resourceType: tracked.resourceType,
+        durationMs: performance.now() - tracked.startedAt,
+        failure: redactAndBoundObservationText(
+          request.failure()?.errorText ?? 'Request failed',
+          options.maxStringLength,
+        ),
+      });
+    };
     let active = true;
     const dispose = (): void => {
       if (!active) return;
       active = false;
+      inFlight.clear();
       page.off('console', onConsole);
       page.off('pageerror', onPageError);
+      page.off('request', onRequest);
+      page.off('response', onResponse);
+      page.off('requestfailed', onRequestFailed);
       page.off('close', dispose);
     };
     page.on('console', onConsole);
     page.on('pageerror', onPageError);
+    page.on('request', onRequest);
+    page.on('response', onResponse);
+    page.on('requestfailed', onRequestFailed);
     page.once('close', dispose);
     return dispose;
   }
