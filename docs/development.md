@@ -29,6 +29,11 @@ Release Please updates the generated module together with `package.json` and bot
 `server.json`. Contract tests verify that chain and MCP handshake tests assert the exact
 `serverInfo.version` in source, stdio, and installed-tarball execution.
 
+MCP contract changes must update the centralized output schema and title/annotation matrix together
+with the handler. Integration tests invoke every public tool successfully, validate its
+`structuredContent`, and compare exact discovery metadata. Package verification also requires every
+installed tool to retain an object-root output schema and title.
+
 Playwright creates one non-persistent Chromium `BrowserContext` per BrowserMesh session.
 
 MCP v0.1 uses local stdio transport.

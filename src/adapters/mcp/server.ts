@@ -1,10 +1,10 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
-import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { z } from 'zod';
-import { asBrowserMeshError } from '../../domain/errors.js';
 import type { Locator } from '../../domain/models.js';
 import { BROWSERMESH_VERSION } from '../../infrastructure/generated/version.js';
 import type { BrowserMeshRuntime, OperationTarget } from '../../runtime/browsermesh-runtime.js';
+import { contractFor } from './contracts.js';
+import { applicationErrorResult, structuredResult } from './results.js';
 
 const role = z.enum([
   'button',
@@ -49,33 +49,13 @@ function target(input: {
   };
 }
 
-async function result(action: () => unknown): Promise<CallToolResult> {
-  try {
-    const value = await action();
-    return { content: [{ type: 'text', text: JSON.stringify({ ok: true, value }) }] };
-  } catch (error) {
-    const mapped = asBrowserMeshError(error);
-    return {
-      isError: true,
-      content: [
-        {
-          type: 'text',
-          text: JSON.stringify({
-            ok: false,
-            error: { code: mapped.code, message: mapped.message, details: mapped.details },
-          }),
-        },
-      ],
-    };
-  }
-}
-
 export function createMcpServer(runtime: BrowserMeshRuntime): McpServer {
   const server = new McpServer({ name: 'browsermesh', version: BROWSERMESH_VERSION });
 
   server.registerTool(
     'browser_session_create',
     {
+      ...contractFor('browser_session_create'),
       description:
         'Create a new isolated browser session with its own cookies, storage, and pages. Create a separate session whenever a task involves a different user, account, role, authentication state, or independent parallel workflow; never reuse one session for identities that must remain isolated. The response directly returns both sessionId and the deterministic initial pageId for immediate navigation. Pass stateId only to restore previously saved browser state.',
       inputSchema: {
@@ -84,175 +64,231 @@ export function createMcpServer(runtime: BrowserMeshRuntime): McpServer {
         stateId: z.string().min(1).max(128).optional(),
       },
     },
-    (input) => result(() => runtime.createSession(input)),
+    (input) =>
+      structuredResult(async () => {
+        const created = await runtime.createSession(input);
+        return {
+          operationId: created.operationId,
+          session: created.value,
+          initialPage: { sessionId: created.sessionId, pageId: created.pageId },
+        };
+      }),
   );
   server.registerTool(
     'browser_session_list',
     {
+      ...contractFor('browser_session_list'),
       description:
         'List every browser session with its explicit sessionId, lifecycle status, name, and neutral workflow metadata. Use this to recover the correct session for each role/account; there is no global active session.',
     },
-    () => result(() => runtime.listSessions()),
+    () =>
+      structuredResult(async () => {
+        const listed = await runtime.listSessions();
+        return { operationId: listed.operationId, sessions: listed.value };
+      }),
   );
   server.registerTool(
     'browser_session_get',
     {
+      ...contractFor('browser_session_get'),
       description:
         'Inspect one explicitly addressed browser session. Session names and metadata are workflow labels, not internal AI agents or owners.',
       inputSchema: { sessionId: z.string().min(1) },
     },
-    ({ sessionId }) => result(() => runtime.getSession(sessionId)),
+    ({ sessionId }) =>
+      structuredResult(async () => {
+        const found = await runtime.getSession(sessionId);
+        return { operationId: found.operationId, sessionId, session: found.value };
+      }),
   );
   server.registerTool(
     'browser_session_close',
     {
+      ...contractFor('browser_session_close'),
       description:
         'Close one explicitly addressed session and release all of its pages and isolated browser context. Close each role/account session when its workflow is complete.',
       inputSchema: { sessionId: z.string().min(1) },
     },
-    ({ sessionId }) => result(() => runtime.closeSession(sessionId)),
+    ({ sessionId }) =>
+      structuredResult(async () => {
+        const closed = await runtime.closeSession(sessionId);
+        return { operationId: closed.operationId, sessionId, session: closed.value };
+      }),
   );
 
   server.registerTool(
     'browser_page_create',
     {
+      ...contractFor('browser_page_create'),
       description:
         "Create an additional page inside one explicitly addressed session. Use it for another tab that must share that session's cookies and storage; use a separate session instead when identity or authentication must be isolated.",
       inputSchema: sessionSchema,
     },
-    ({ sessionId }) => result(() => runtime.createPage(sessionId)),
+    ({ sessionId }) =>
+      structuredResult(async () => {
+        const created = await runtime.createPage(sessionId);
+        return {
+          operationId: created.operationId,
+          sessionId: created.sessionId,
+          pageId: created.pageId,
+          page: created.value,
+        };
+      }),
   );
   server.registerTool(
     'browser_page_list',
     {
+      ...contractFor('browser_page_list'),
       description:
         'List pages belonging only to the addressed session. Session creation already returns the initial pageId; use this tool to rediscover or inspect all pages in that session.',
       inputSchema: sessionSchema,
     },
-    ({ sessionId }) => result(() => runtime.listPages(sessionId)),
+    ({ sessionId }) =>
+      structuredResult(async () => {
+        const listed = await runtime.listPages(sessionId);
+        return { operationId: listed.operationId, sessionId, pages: listed.value };
+      }),
   );
   server.registerTool(
     'browser_page_close',
     {
+      ...contractFor('browser_page_close'),
       description:
         'Close one explicitly addressed page in its owning session. Supply both IDs because BrowserMesh has no global current session or page.',
       inputSchema: { ...sessionSchema, pageId: z.string().min(1) },
     },
-    ({ sessionId, pageId }) => result(() => runtime.closePage(sessionId, pageId)),
+    ({ sessionId, pageId }) =>
+      structuredResult(async () => {
+        const closed = await runtime.closePage(sessionId, pageId);
+        return { operationId: closed.operationId, sessionId, pageId, closed: true };
+      }),
   );
 
   server.registerTool(
     'browser_navigate',
     {
+      ...contractFor('browser_navigate'),
       description:
         'Navigate one explicitly addressed page to an absolute HTTP(S) URL. Keep using the sessionId/pageId pair for the intended account or role; navigation never changes a global active page.',
       inputSchema: { ...targetSchema, url: z.url() },
     },
-    (input) => result(() => runtime.navigate(target(input), input.url)),
+    (input) => pageValue(runtime.navigate(target(input), input.url), 'url'),
   );
   server.registerTool(
     'browser_back',
     {
+      ...contractFor('browser_back'),
       description:
         'Navigate backward in the history of one explicitly addressed page without affecting pages or sessions used by other roles.',
       inputSchema: targetSchema,
     },
-    (input) => result(() => runtime.back(target(input))),
+    (input) => pageValue(runtime.back(target(input)), 'url'),
   );
   server.registerTool(
     'browser_forward',
     {
+      ...contractFor('browser_forward'),
       description:
         'Navigate forward in the history of one explicitly addressed page without affecting other isolated sessions.',
       inputSchema: targetSchema,
     },
-    (input) => result(() => runtime.forward(target(input))),
+    (input) => pageValue(runtime.forward(target(input)), 'url'),
   );
   server.registerTool(
     'browser_reload',
     {
+      ...contractFor('browser_reload'),
       description:
         'Reload one explicitly addressed page in its existing isolated session and authentication state.',
       inputSchema: targetSchema,
     },
-    (input) => result(() => runtime.reload(target(input))),
+    (input) => pageValue(runtime.reload(target(input)), 'url'),
   );
   server.registerTool(
     'browser_get_url',
     {
+      ...contractFor('browser_get_url'),
       description:
         'Read the current URL of one explicitly addressed page. Use the IDs returned for the intended session; there is no global current page.',
       inputSchema: targetSchema,
     },
-    (input) => result(() => runtime.getUrl(target(input))),
+    (input) => pageValue(runtime.getUrl(target(input)), 'url'),
   );
   server.registerTool(
     'browser_get_title',
     {
+      ...contractFor('browser_get_title'),
       description:
         'Read the title of one explicitly addressed page in its owning isolated session.',
       inputSchema: targetSchema,
     },
-    (input) => result(() => runtime.getTitle(target(input))),
+    (input) => pageValue(runtime.getTitle(target(input)), 'title'),
   );
   server.registerTool(
     'browser_snapshot',
     {
+      ...contractFor('browser_snapshot'),
       description:
         'Inspect an accessibility-oriented snapshot of one explicitly addressed page. Non-empty password-input values are redacted before content crosses MCP. Use the snapshot to understand page structure before semantic interaction while preserving session isolation.',
       inputSchema: targetSchema,
     },
-    (input) => result(() => runtime.snapshot(target(input))),
+    (input) => pageValue(runtime.snapshot(target(input)), 'snapshot'),
   );
   server.registerTool(
     'browser_visible_text',
     {
+      ...contractFor('browser_visible_text'),
       description:
         'Read visible text from a semantic or CSS locator on one explicitly addressed page. The lookup is confined to that page and session.',
       inputSchema: { ...targetSchema, locator: locatorSchema },
     },
-    (input) => result(() => runtime.visibleText(target(input), input.locator as Locator)),
+    (input) => pageValue(runtime.visibleText(target(input), input.locator as Locator), 'text'),
   );
   server.registerTool(
     'browser_click',
     {
+      ...contractFor('browser_click'),
       description:
         'Click a semantic or CSS locator on one explicitly addressed page. Role locator names match exactly by default for deterministic selection; pass exact=false only for intentional partial matching. An ambiguous locator returns LOCATOR_AMBIGUOUS without damaging the session. Prefer semantic locators and keep the IDs associated with the intended user/account session.',
       inputSchema: { ...targetSchema, locator: locatorSchema },
     },
-    (input) => result(() => runtime.click(target(input), input.locator as Locator)),
+    (input) => pageCompleted(runtime.click(target(input), input.locator as Locator)),
   );
   server.registerTool(
     'browser_fill',
     {
+      ...contractFor('browser_fill'),
       description:
         'Fill a form field located on one explicitly addressed page. The value is entered only in that session; use separate sessions for different identities.',
       inputSchema: { ...targetSchema, locator: locatorSchema, value: z.string() },
     },
-    (input) => result(() => runtime.fill(target(input), input.locator as Locator, input.value)),
+    (input) => pageCompleted(runtime.fill(target(input), input.locator as Locator, input.value)),
   );
   server.registerTool(
     'browser_press',
     {
+      ...contractFor('browser_press'),
       description:
         'Press a key on a locator within one explicitly addressed page, preserving deterministic ordering with other operations in that session. A missing or unsuitable element returns OPERATION_TIMEOUT within timeoutMs (10 seconds by default) without closing MCP or browser sessions.',
       inputSchema: { ...targetSchema, locator: locatorSchema, key: z.string().min(1).max(64) },
     },
-    (input) => result(() => runtime.press(target(input), input.locator as Locator, input.key)),
+    (input) => pageCompleted(runtime.press(target(input), input.locator as Locator, input.key)),
   );
   server.registerTool(
     'browser_select_option',
     {
+      ...contractFor('browser_select_option'),
       description:
         'Select an option on one explicitly addressed page using a semantic or CSS locator. A missing or unsuitable select returns OPERATION_TIMEOUT within timeoutMs (10 seconds by default), and the supplied session plus all other sessions remain usable.',
       inputSchema: { ...targetSchema, locator: locatorSchema, value: z.string() },
     },
     (input) =>
-      result(() => runtime.selectOption(target(input), input.locator as Locator, input.value)),
+      pageCompleted(runtime.selectOption(target(input), input.locator as Locator, input.value)),
   );
   server.registerTool(
     'browser_screenshot',
     {
+      ...contractFor('browser_screenshot'),
       description:
         'Capture an in-memory PNG screenshot of one explicitly addressed page. BrowserMesh returns image content and does not write to a caller-controlled path or inspect another session.',
       inputSchema: targetSchema,
@@ -260,23 +296,21 @@ export function createMcpServer(runtime: BrowserMeshRuntime): McpServer {
     async (input) => {
       try {
         const capture = await runtime.screenshot(target(input));
+        const structuredContent = {
+          operationId: capture.operationId,
+          sessionId: capture.sessionId,
+          pageId: capture.pageId,
+          mimeType: 'image/png' as const,
+        };
         return {
+          structuredContent,
           content: [
             { type: 'image', mimeType: 'image/png', data: capture.value },
-            {
-              type: 'text',
-              text: JSON.stringify({
-                operationId: capture.operationId,
-                sessionId: capture.sessionId,
-                pageId: capture.pageId,
-              }),
-            },
+            { type: 'text', text: JSON.stringify(structuredContent) },
           ],
         };
       } catch (error) {
-        return result(() => {
-          throw error;
-        });
+        return applicationErrorResult(error);
       }
     },
   );
@@ -284,29 +318,82 @@ export function createMcpServer(runtime: BrowserMeshRuntime): McpServer {
   server.registerTool(
     'browser_state_save',
     {
+      ...contractFor('browser_state_save'),
       description:
         'Save cookies and supported storage from one explicitly addressed session under a safe logical stateId. Use this only when a later new isolated session should restore that authentication state.',
       inputSchema: { ...sessionSchema, stateId: z.string().min(1).max(128) },
     },
-    ({ sessionId, stateId }) => result(() => runtime.saveSessionState(sessionId, stateId)),
+    ({ sessionId, stateId }) =>
+      structuredResult(async () => {
+        const saved = await runtime.saveSessionState(sessionId, stateId);
+        return { operationId: saved.operationId, sessionId, state: saved.value };
+      }),
   );
   server.registerTool(
     'browser_state_list',
     {
+      ...contractFor('browser_state_list'),
       description:
         'List logical saved-state IDs available for optional restoration when creating a new isolated session; state contents and secrets are not returned.',
     },
-    () => result(() => runtime.listSavedStates()),
+    () =>
+      structuredResult(async () => {
+        const listed = await runtime.listSavedStates();
+        return { operationId: listed.operationId, states: listed.value };
+      }),
   );
   server.registerTool(
     'browser_state_remove',
     {
+      ...contractFor('browser_state_remove'),
       description:
         'Delete persisted browser state by its safe logical stateId when it should no longer be restorable. This does not close or alter currently live sessions.',
       inputSchema: { stateId: z.string().min(1).max(128) },
     },
-    ({ stateId }) => result(() => runtime.removeSavedState(stateId)),
+    ({ stateId }) =>
+      structuredResult(async () => {
+        const removed = await runtime.removeSavedState(stateId);
+        return { operationId: removed.operationId, stateId, removed: true };
+      }),
   );
 
   return server;
+}
+
+function pageValue(
+  operation: Promise<{
+    readonly operationId: string;
+    readonly sessionId: string;
+    readonly pageId: string;
+    readonly value: string;
+  }>,
+  key: string,
+) {
+  return structuredResult(async () => {
+    const completed = await operation;
+    return {
+      operationId: completed.operationId,
+      sessionId: completed.sessionId,
+      pageId: completed.pageId,
+      [key]: completed.value,
+    };
+  });
+}
+
+function pageCompleted(
+  operation: Promise<{
+    readonly operationId: string;
+    readonly sessionId: string;
+    readonly pageId: string;
+  }>,
+) {
+  return structuredResult(async () => {
+    const completed = await operation;
+    return {
+      operationId: completed.operationId,
+      sessionId: completed.sessionId,
+      pageId: completed.pageId,
+      completed: true,
+    };
+  });
 }

@@ -28,7 +28,7 @@ describe('external MCP client multi-role workflow', () => {
     const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
     await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
     try {
-      const buyer = readOperation(
+      const buyer = readStructured(
         await client.callTool({
           name: 'browser_session_create',
           arguments: {
@@ -37,7 +37,7 @@ describe('external MCP client multi-role workflow', () => {
           },
         }),
       );
-      const seller = readOperation(
+      const seller = readStructured(
         await client.callTool({
           name: 'browser_session_create',
           arguments: {
@@ -60,7 +60,7 @@ describe('external MCP client multi-role workflow', () => {
         locator: { strategy: 'role', value: 'button', name: 'Create order' },
       });
       expect(
-        readOperation(
+        readStructured(
           await client.callTool({
             name: 'browser_visible_text',
             arguments: {
@@ -68,12 +68,12 @@ describe('external MCP client multi-role workflow', () => {
               locator: { strategy: 'testId', value: 'status' },
             },
           }),
-        ).value,
+        ).text,
       ).toBe('created:book');
 
       await call(client, 'browser_navigate', { ...sellerTarget, url: `${web.baseUrl}/seller` });
       expect(
-        readOperation(
+        readStructured(
           await client.callTool({
             name: 'browser_visible_text',
             arguments: {
@@ -81,7 +81,7 @@ describe('external MCP client multi-role workflow', () => {
               locator: { strategy: 'testId', value: 'order' },
             },
           }),
-        ).value,
+        ).text,
       ).toBe('book');
       await call(client, 'browser_click', {
         ...sellerTarget,
@@ -93,7 +93,7 @@ describe('external MCP client multi-role workflow', () => {
         url: `${web.baseUrl}/buyer-status`,
       });
       expect(
-        readOperation(
+        readStructured(
           await client.callTool({
             name: 'browser_visible_text',
             arguments: {
@@ -101,7 +101,7 @@ describe('external MCP client multi-role workflow', () => {
               locator: { strategy: 'testId', value: 'status' },
             },
           }),
-        ).value,
+        ).text,
       ).toBe('approved');
       const timedOutLocator = await client.callTool({
         name: 'browser_press',
@@ -114,14 +114,16 @@ describe('external MCP client multi-role workflow', () => {
       });
       expect(timedOutLocator.isError).toBe(true);
       expect(JSON.stringify(timedOutLocator.content)).toContain('OPERATION_TIMEOUT');
-      expect(JSON.stringify(timedOutLocator.content)).toContain('css=#missing-select');
+      expect(JSON.stringify(timedOutLocator.content)).toContain('operationId');
       const sessionsAfterError = await client.callTool({
         name: 'browser_session_list',
         arguments: {},
       });
       expect(sessionsAfterError.isError).not.toBe(true);
-      expect(JSON.stringify(sessionsAfterError.content)).toContain(buyerTarget.sessionId);
-      expect(JSON.stringify(sessionsAfterError.content)).toContain(sellerTarget.sessionId);
+      expect(JSON.stringify(sessionsAfterError.structuredContent)).toContain(buyerTarget.sessionId);
+      expect(JSON.stringify(sessionsAfterError.structuredContent)).toContain(
+        sellerTarget.sessionId,
+      );
       const crossSession = await client.callTool({
         name: 'browser_get_url',
         arguments: { sessionId: buyerTarget.sessionId, pageId: sellerTarget.pageId },
@@ -135,30 +137,18 @@ describe('external MCP client multi-role workflow', () => {
   });
 });
 
-const operationSchema = z.object({
-  operationId: z.string().min(1),
-  sessionId: z.string().optional(),
-  pageId: z.string().optional(),
-  value: z.unknown(),
-});
-
-function readOperation(result: unknown): z.infer<typeof operationSchema> {
-  const parsed = z
-    .object({ content: z.array(z.object({ type: z.string(), text: z.string().optional() })) })
-    .parse(result);
-  const text = parsed.content.find((block) => block.type === 'text')?.text;
-  if (text === undefined) throw new Error('MCP result did not include JSON text');
-  return z.object({ ok: z.literal(true), value: operationSchema }).parse(JSON.parse(text)).value;
+function readStructured(result: unknown): Readonly<Record<string, unknown>> {
+  return z.object({ structuredContent: z.record(z.string(), z.unknown()) }).parse(result)
+    .structuredContent;
 }
 
-function requireTarget(operation: z.infer<typeof operationSchema>): {
+function requireTarget(operation: Readonly<Record<string, unknown>>): {
   sessionId: string;
   pageId: string;
 } {
-  if (operation.sessionId === undefined || operation.pageId === undefined) {
-    throw new Error('session creation did not return explicit IDs');
-  }
-  return { sessionId: operation.sessionId, pageId: operation.pageId };
+  return z
+    .object({ initialPage: z.object({ sessionId: z.string(), pageId: z.string() }) })
+    .parse(operation).initialPage;
 }
 
 async function call(

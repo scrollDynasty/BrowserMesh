@@ -1,0 +1,137 @@
+import type { ToolAnnotations } from '@modelcontextprotocol/sdk/types.js';
+import { z } from 'zod';
+
+const operationId = z.string().min(1);
+const sessionId = z.string().min(1);
+const pageId = z.string().min(1);
+const timestamp = z.string().min(1);
+
+export const sessionViewSchema = z.object({
+  sessionId,
+  name: z.string().optional(),
+  status: z.enum(['creating', 'ready', 'closing', 'closed', 'failed']),
+  createdAt: timestamp,
+  lastActivityAt: timestamp,
+  metadata: z.record(z.string(), z.string()),
+  restoredFromStateId: z.string().optional(),
+});
+
+export const pageViewSchema = z.object({
+  pageId,
+  sessionId,
+  createdAt: timestamp,
+  url: z.string(),
+  isDefault: z.boolean(),
+});
+
+export const savedStateViewSchema = z.object({
+  stateId: z.string().min(1),
+  createdAt: timestamp,
+});
+
+const pageOperation = { operationId, sessionId, pageId } as const;
+
+export const outputSchemas = {
+  browser_session_create: z.object({
+    operationId,
+    session: sessionViewSchema,
+    initialPage: z.object({ sessionId, pageId }),
+  }),
+  browser_session_list: z.object({ operationId, sessions: z.array(sessionViewSchema) }),
+  browser_session_get: z.object({ operationId, sessionId, session: sessionViewSchema }),
+  browser_session_close: z.object({ operationId, sessionId, session: sessionViewSchema }),
+  browser_page_create: z.object({ ...pageOperation, page: pageViewSchema }),
+  browser_page_list: z.object({ operationId, sessionId, pages: z.array(pageViewSchema) }),
+  browser_page_close: z.object({ ...pageOperation, closed: z.literal(true) }),
+  browser_navigate: z.object({ ...pageOperation, url: z.string() }),
+  browser_back: z.object({ ...pageOperation, url: z.string() }),
+  browser_forward: z.object({ ...pageOperation, url: z.string() }),
+  browser_reload: z.object({ ...pageOperation, url: z.string() }),
+  browser_get_url: z.object({ ...pageOperation, url: z.string() }),
+  browser_get_title: z.object({ ...pageOperation, title: z.string() }),
+  browser_snapshot: z.object({ ...pageOperation, snapshot: z.string() }),
+  browser_visible_text: z.object({ ...pageOperation, text: z.string() }),
+  browser_click: z.object({ ...pageOperation, completed: z.literal(true) }),
+  browser_fill: z.object({ ...pageOperation, completed: z.literal(true) }),
+  browser_press: z.object({ ...pageOperation, completed: z.literal(true) }),
+  browser_select_option: z.object({ ...pageOperation, completed: z.literal(true) }),
+  browser_screenshot: z.object({
+    ...pageOperation,
+    mimeType: z.literal('image/png'),
+  }),
+  browser_state_save: z.object({ operationId, sessionId, state: savedStateViewSchema }),
+  browser_state_list: z.object({ operationId, states: z.array(savedStateViewSchema) }),
+  browser_state_remove: z.object({
+    operationId,
+    stateId: z.string().min(1),
+    removed: z.literal(true),
+  }),
+} as const;
+
+export type ToolName = keyof typeof outputSchemas;
+
+interface ToolPresentation {
+  readonly title: string;
+  readonly annotations: Required<
+    Pick<ToolAnnotations, 'readOnlyHint' | 'destructiveHint' | 'idempotentHint' | 'openWorldHint'>
+  >;
+}
+
+function presentation(
+  title: string,
+  readOnlyHint: boolean,
+  destructiveHint: boolean,
+  idempotentHint: boolean,
+  openWorldHint: boolean,
+): ToolPresentation {
+  return {
+    title,
+    annotations: { readOnlyHint, destructiveHint, idempotentHint, openWorldHint },
+  };
+}
+
+/** Reviewed UX/risk hints. These are never used as authorization. */
+export const toolPresentation: Readonly<Record<ToolName, ToolPresentation>> = {
+  browser_session_create: presentation(
+    'Create isolated browser session',
+    false,
+    false,
+    false,
+    false,
+  ),
+  browser_session_list: presentation('List browser sessions', true, false, true, false),
+  browser_session_get: presentation('Get browser session', true, false, true, false),
+  browser_session_close: presentation('Close browser session', false, true, true, false),
+  browser_page_create: presentation('Create browser page', false, false, false, false),
+  browser_page_list: presentation('List browser pages', true, false, true, false),
+  browser_page_close: presentation('Close browser page', false, true, false, false),
+  browser_navigate: presentation('Navigate browser page', false, false, false, true),
+  browser_back: presentation('Navigate browser page back', false, false, false, true),
+  browser_forward: presentation('Navigate browser page forward', false, false, false, true),
+  browser_reload: presentation('Reload browser page', false, false, false, true),
+  browser_get_url: presentation('Get browser page URL', true, false, true, false),
+  browser_get_title: presentation('Get browser page title', true, false, true, true),
+  browser_snapshot: presentation('Get accessibility snapshot', true, false, true, true),
+  browser_visible_text: presentation('Get visible page text', true, false, true, true),
+  browser_click: presentation('Click page element', false, true, false, true),
+  browser_fill: presentation('Fill page field', false, false, false, true),
+  browser_press: presentation('Press key on page element', false, true, false, true),
+  browser_select_option: presentation('Select page option', false, false, false, true),
+  browser_screenshot: presentation('Capture page screenshot', true, false, true, true),
+  browser_state_save: presentation('Save browser state', false, true, false, false),
+  browser_state_list: presentation('List saved browser states', true, false, true, false),
+  browser_state_remove: presentation('Remove saved browser state', false, true, false, false),
+};
+
+export function contractFor(name: ToolName): {
+  readonly title: string;
+  readonly outputSchema: (typeof outputSchemas)[ToolName];
+  readonly annotations: ToolAnnotations;
+} {
+  const metadata = toolPresentation[name];
+  return {
+    title: metadata.title,
+    outputSchema: outputSchemas[name],
+    annotations: { title: metadata.title, ...metadata.annotations },
+  };
+}
