@@ -5,7 +5,7 @@ import type {
 } from '../application/ports/browser-engine.js';
 import type { EventSinkPort } from '../application/ports/events.js';
 import type { SavedStateView, StateRepositoryPort } from '../application/ports/state-repository.js';
-import { asBrowserMeshError, BrowserMeshError } from '../domain/errors.js';
+import { BrowserMeshError, correlateBrowserMeshError } from '../domain/errors.js';
 import type {
   Locator,
   OperationResult,
@@ -415,7 +415,7 @@ export class BrowserMeshRuntime {
       pending = Promise.resolve(action());
     } catch (error) {
       this.emit('operation.failed', { operationId, ...identifiers });
-      return Promise.reject(asBrowserMeshError(error));
+      return Promise.reject(correlateBrowserMeshError(error, operationId));
     }
     return pending.then(
       (value) => {
@@ -425,7 +425,7 @@ export class BrowserMeshRuntime {
       },
       (error: unknown) => {
         this.emit('operation.failed', { operationId, ...identifiers });
-        throw asBrowserMeshError(error);
+        throw correlateBrowserMeshError(error, operationId);
       },
     );
   }
@@ -464,7 +464,7 @@ export class BrowserMeshRuntime {
         sessionId: target.sessionId,
         pageId: target.pageId,
       });
-      throw asBrowserMeshError(error);
+      throw correlateBrowserMeshError(error, operationId);
     }
   }
 
