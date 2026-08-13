@@ -13,6 +13,7 @@ Conventional Commit PR title
   → release-please creates vX.Y.Z tag and GitHub Release
   → publish workflow verifies source and installed tarball
   → npm Trusted Publishing (OIDC)
+  → official MCP Registry publication (GitHub OIDC)
 ```
 
 No ordinary push or feature PR publishes to npm.
@@ -115,8 +116,15 @@ Enable Dependabot alerts/security updates and private vulnerability reporting. `
 
 ```sh
 npm view multi-agent-browser-mcp version dist-tags --json
+curl "https://registry.modelcontextprotocol.io/v0.1/servers?search=io.github.scrollDynasty/browsermesh"
 npx -y multi-agent-browser-mcp@latest
 ```
+
+The npm package declares the official Registry identity
+`io.github.scrollDynasty/browsermesh` through `mcpName`. `server.json` is the Registry manifest;
+release-please keeps both of its version fields synchronized with `package.json`. After npm Trusted
+Publishing succeeds, the same tag workflow authenticates to the MCP Registry with GitHub OIDC and
+publishes the manifest. No long-lived MCP Registry token is stored in GitHub.
 
 Future prerelease cycles must be introduced deliberately in a reviewed configuration PR. Do not
 create a prerelease merely by editing an npm dist-tag.
@@ -137,6 +145,8 @@ npm versions are immutable and must never be overwritten. Do not use `npm unpubl
 
 - [release-please action](https://github.com/googleapis/release-please-action)
 - [npm Trusted Publishing](https://docs.npmjs.com/trusted-publishers/)
+- [MCP Registry publishing](https://modelcontextprotocol.io/registry/quickstart)
+- [MCP Registry GitHub Actions](https://modelcontextprotocol.io/registry/github-actions)
 - [GitHub OIDC security guidance](https://docs.github.com/en/actions/concepts/security/openid-connect)
 - [GitHub branch protection](https://docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/managing-protected-branches/about-protected-branches)
 

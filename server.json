@@ -1,0 +1,22 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "io.github.scrollDynasty/browsermesh",
+  "title": "BrowserMesh",
+  "description": "Isolated multi-session Chromium runtime for external MCP clients over stdio.",
+  "repository": {
+    "url": "https://github.com/scrollDynasty/multi-agent-browser-mcp",
+    "source": "github",
+    "id": "1331707544"
+  },
+  "version": "0.1.2",
+  "packages": [
+    {
+      "registryType": "npm",
+      "identifier": "multi-agent-browser-mcp",
+      "version": "0.1.2",
+      "transport": {
+        "type": "stdio"
+      }
+    }
+  ]
+}
