@@ -344,9 +344,20 @@ transport-level failures appear in `browser_failed_requests_list`.
 ### Interaction
 
 - `browser_click`
+- `browser_double_click`
+- `browser_hover`
+- `browser_focus`
+- `browser_check`
+- `browser_uncheck`
+- `browser_scroll_into_view`
 - `browser_fill`
 - `browser_press`
 - `browser_select_option`
+
+These typed operations use the same semantic locator contract as click/fill. They are explicitly
+addressed, bounded by `timeoutMs`, cancellation-aware, and serialized with all browser work in the
+owning session. `check` and `uncheck` ensure the requested state idempotently; scroll-into-view does
+not expose arbitrary coordinates or page JavaScript.
 
 ### Deterministic waits
 

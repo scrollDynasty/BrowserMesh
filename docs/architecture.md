@@ -558,6 +558,11 @@ separate correlated request pairs. Only page-owned HTTP(S) metadata enters the p
 EventSource but excluding service-worker traffic, WebSockets, `data:` and `blob:` URLs.
 
 Snapshot bounds, context settings, and new actions are engine-independent value contracts.
+Typed hover, focus, check, uncheck, double-click, and scroll-into-view follow that boundary: MCP
+validates a semantic locator, runtime routes through the addressed session queue, and only the
+Playwright adapter resolves and acts on the concrete locator. Queued cancellation never reaches the
+engine, while an in-flight action retains its queue slot until it settles so later same-session work
+cannot overtake it.
 Short-lived element references, if introduced, are runtime IDs resolving only inside the adapter;
 they are bounded and invalidated with page/document lifecycle. They are conveniences, not durable
 identity or exposed locator handles.

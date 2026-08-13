@@ -34,6 +34,16 @@ describe('stdio executable', () => {
       const tools = await client.listTools();
       expect(tools.tools.length).toBeGreaterThan(20);
       expect(tools.tools.some(({ name }) => name === 'browser_navigate')).toBe(true);
+      expect(
+        [
+          'browser_double_click',
+          'browser_hover',
+          'browser_focus',
+          'browser_check',
+          'browser_uncheck',
+          'browser_scroll_into_view',
+        ].every((name) => tools.tools.some((tool) => tool.name === name)),
+      ).toBe(true);
       const runtimeInfo = await client.callTool({ name: 'browser_runtime_info', arguments: {} });
       expect(runtimeInfo.isError).not.toBe(true);
       expect(JSON.stringify(runtimeInfo.content)).toContain('not_started');

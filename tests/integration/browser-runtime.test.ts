@@ -109,6 +109,44 @@ describe('real Chromium runtime', () => {
     expect((await runtime.screenshot(target)).value.startsWith('iVBOR')).toBe(true);
   });
 
+  it('performs typed semantic interactions and exposes their resulting page state', async () => {
+    const target = await createTarget();
+    const status = { strategy: 'testId', value: 'status' } as const;
+    await runtime.navigate(target, `${web.baseUrl}/interactions`);
+
+    await runtime.hover(target, { strategy: 'role', value: 'button', name: 'Hover target' });
+    expect((await runtime.visibleText(target, status)).value).toBe('hovered');
+    await runtime.focus(target, { strategy: 'label', value: 'Focus target' });
+    expect((await runtime.visibleText(target, status)).value).toBe('focused');
+    await runtime.check(target, { strategy: 'role', value: 'checkbox', name: 'Enabled' });
+    expect((await runtime.visibleText(target, status)).value).toBe('checked');
+    await runtime.check(target, { strategy: 'role', value: 'checkbox', name: 'Enabled' });
+    await runtime.uncheck(target, { strategy: 'label', value: 'Enabled' });
+    expect((await runtime.visibleText(target, status)).value).toBe('unchecked');
+    await runtime.uncheck(target, { strategy: 'label', value: 'Enabled' });
+    await runtime.doubleClick(target, {
+      strategy: 'role',
+      value: 'button',
+      name: 'Double target',
+    });
+    expect((await runtime.visibleText(target, status)).value).toBe('double-clicked');
+    await runtime.scrollIntoView(target, { strategy: 'testId', value: 'offscreen' });
+    await runtime.wait(target, { kind: 'text', text: 'scrolled', state: 'present' });
+    expect((await runtime.visibleText(target, status)).value).toBe('scrolled');
+  });
+
+  it('keeps typed-interaction failures bounded and the real session queue usable', async () => {
+    const target = await createTarget();
+    await runtime.navigate(target, `${web.baseUrl}/interactions`);
+    await expect(
+      runtime.hover(
+        { ...target, timeoutMs: 25 },
+        { strategy: 'testId', value: 'missing-interaction-target' },
+      ),
+    ).rejects.toMatchObject({ code: 'OPERATION_TIMEOUT' });
+    await expect(runtime.getTitle(target)).resolves.toMatchObject({ value: 'Typed interactions' });
+  });
+
   it('collects bounded redacted console and page-error evidence from real Chromium', async () => {
     const target = await createTarget();
     await runtime.navigate(target, `${web.baseUrl}/observability`);

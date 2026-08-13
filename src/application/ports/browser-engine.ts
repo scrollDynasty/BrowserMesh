@@ -57,6 +57,16 @@ export interface BrowserEnginePort {
   forward(page: BrowserPageHandle, control: OperationControl): Promise<void>;
   reload(page: BrowserPageHandle, control: OperationControl): Promise<void>;
   click(page: BrowserPageHandle, locator: Locator, control: OperationControl): Promise<void>;
+  doubleClick(page: BrowserPageHandle, locator: Locator, control: OperationControl): Promise<void>;
+  hover(page: BrowserPageHandle, locator: Locator, control: OperationControl): Promise<void>;
+  focus(page: BrowserPageHandle, locator: Locator, control: OperationControl): Promise<void>;
+  check(page: BrowserPageHandle, locator: Locator, control: OperationControl): Promise<void>;
+  uncheck(page: BrowserPageHandle, locator: Locator, control: OperationControl): Promise<void>;
+  scrollIntoView(
+    page: BrowserPageHandle,
+    locator: Locator,
+    control: OperationControl,
+  ): Promise<void>;
   fill(
     page: BrowserPageHandle,
     locator: Locator,
