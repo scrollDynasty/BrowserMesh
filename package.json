@@ -29,9 +29,13 @@
     "registry": "https://registry.npmjs.org/"
   },
   "scripts": {
+    "generate:version": "tsx scripts/generate-version.ts",
+    "check:version": "tsx scripts/generate-version.ts --check",
+    "prebuild": "npm run generate:version",
     "build": "tsc -p tsconfig.build.json",
     "dev": "tsx src/cli.ts",
     "start": "node dist/cli.js",
+    "pretypecheck": "npm run check:version",
     "typecheck": "tsc --noEmit",
     "lint": "eslint .",
     "format": "prettier --write .",
@@ -42,6 +46,7 @@
     "test:stress": "vitest run tests/stress",
     "test:all": "vitest run",
     "test:coverage": "vitest run --coverage.enabled",
+    "prepack": "npm run generate:version",
     "verify:package": "npm run build && tsx scripts/verify-package.ts",
     "verify": "npm run typecheck && npm run lint && npm run format:check && npm run test:coverage && npm run build"
   },

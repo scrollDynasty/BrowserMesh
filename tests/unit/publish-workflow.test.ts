@@ -1,5 +1,10 @@
+import { execFile } from 'node:child_process';
 import { readFile } from 'node:fs/promises';
+import { promisify } from 'node:util';
 import { describe, expect, it } from 'vitest';
+import { BROWSERMESH_VERSION } from '../../src/infrastructure/generated/version.js';
+
+const execFileAsync = promisify(execFile);
 
 describe('npm publish workflow', () => {
   it('runs headed Chromium verification inside a virtual display', async () => {
@@ -36,6 +41,7 @@ describe('MCP Registry metadata', () => {
     };
     const releaseConfig = await readFile('release-please-config.json', 'utf8');
 
+    expect(BROWSERMESH_VERSION).toBe(packageJson.version);
     expect(packageJson.mcpName).toBe('io.github.scrollDynasty/browsermesh');
     expect(serverJson.name).toBe(packageJson.mcpName);
     expect(serverJson.version).toBe(packageJson.version);
@@ -48,5 +54,18 @@ describe('MCP Registry metadata', () => {
     ]);
     expect(releaseConfig).toContain('"jsonpath": "$.version"');
     expect(releaseConfig).toContain('"jsonpath": "$.packages[0].version"');
+    expect(releaseConfig).toContain('"path": "src/infrastructure/generated/version.ts"');
+    expect(releaseConfig).toContain('"type": "generic"');
+  });
+
+  it('rejects generated version drift before verification and packaging', async () => {
+    await expect(
+      execFileAsync(process.execPath, [
+        '--import',
+        'tsx',
+        'scripts/generate-version.ts',
+        '--check',
+      ]),
+    ).resolves.toEqual(expect.objectContaining({ stdout: '', stderr: '' }));
   });
 });

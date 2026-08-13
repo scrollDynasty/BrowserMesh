@@ -118,6 +118,11 @@ Example:
 
 The exact configuration format depends on the MCP client.
 
+During MCP initialization, BrowserMesh reports the exact installed package version in
+`serverInfo.version`. This value is generated from package metadata before build/pack and is kept
+in sync with the MCP Registry manifest, so clients can detect stale local installations without
+BrowserMesh reading repository files at runtime.
+
 BrowserMesh itself remains local: Chromium and BrowserMesh run on the user's machine.
 
 No BrowserMesh cloud server is required for the open-source local mode.

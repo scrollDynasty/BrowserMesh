@@ -5,6 +5,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
+import { BROWSERMESH_VERSION } from '../../src/infrastructure/generated/version.js';
 
 describe('stdio executable', () => {
   it('starts, negotiates MCP, discovers tools, and exits when the client closes', async () => {
@@ -25,6 +26,10 @@ describe('stdio executable', () => {
     const client = new Client({ name: 'stdio-test', version: '1.0.0' });
     try {
       await client.connect(transport);
+      expect(client.getServerVersion()).toEqual({
+        name: 'browsermesh',
+        version: BROWSERMESH_VERSION,
+      });
       const tools = await client.listTools();
       expect(tools.tools.length).toBeGreaterThan(20);
       expect(tools.tools.some(({ name }) => name === 'browser_navigate')).toBe(true);
