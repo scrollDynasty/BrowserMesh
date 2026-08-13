@@ -4,6 +4,14 @@ All notable changes to BrowserMesh are documented in this file.
 
 This project follows [Semantic Versioning](https://semver.org/). Release entries are maintained by [release-please](https://github.com/googleapis/release-please) from Conventional Commit pull-request titles.
 
+## [0.1.3](https://github.com/scrollDynasty/multi-agent-browser-mcp/compare/v0.1.2...v0.1.3) (2026-08-13)
+
+
+### Bug Fixes
+
+* harden Playwright integration and security ([#14](https://github.com/scrollDynasty/multi-agent-browser-mcp/issues/14)) ([a060052](https://github.com/scrollDynasty/multi-agent-browser-mcp/commit/a06005229d7ef39a7409f524878eab22b49e03c0))
+* publish BrowserMesh to official MCP Registry ([#16](https://github.com/scrollDynasty/multi-agent-browser-mcp/issues/16)) ([ae4a78d](https://github.com/scrollDynasty/multi-agent-browser-mcp/commit/ae4a78d8dae118ef291087c1b253209c9626e76c))
+
 ## [0.1.2](https://github.com/scrollDynasty/multi-agent-browser-mcp/compare/v0.1.1...v0.1.2) (2026-08-12)
 
 
