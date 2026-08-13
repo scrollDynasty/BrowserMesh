@@ -6,6 +6,7 @@ import type {
   Locator,
   WaitCondition,
 } from '../../domain/models.js';
+import type { BrowserObservation } from '../../domain/observability.js';
 
 export interface BrowserPageHandle {
   readonly id: symbol;
@@ -27,9 +28,7 @@ export interface BrowserEngineDiagnostics {
   readonly browserVersion: string | null;
 }
 
-export type BrowserObservation =
-  | { readonly kind: 'console'; readonly level: string; readonly text: string }
-  | { readonly kind: 'page_error'; readonly text: string };
+export type { BrowserObservation } from '../../domain/observability.js';
 
 export interface BrowserEnginePort {
   diagnostics(): BrowserEngineDiagnostics;
@@ -45,7 +44,11 @@ export interface BrowserEnginePort {
   createPage(context: BrowserContextHandle): Promise<BrowserPageHandle>;
   listPages(context: BrowserContextHandle): readonly BrowserPageHandle[];
   closePage(page: BrowserPageHandle): Promise<void>;
-  observePage(page: BrowserPageHandle, listener: (event: BrowserObservation) => void): () => void;
+  observePage(
+    page: BrowserPageHandle,
+    options: { readonly maxInFlightRequests: number; readonly maxStringLength: number },
+    listener: (event: BrowserObservation) => void,
+  ): () => void;
   url(page: BrowserPageHandle): string;
   title(page: BrowserPageHandle, timeoutMs: number): Promise<string>;
   navigate(page: BrowserPageHandle, url: string, timeoutMs: number): Promise<void>;

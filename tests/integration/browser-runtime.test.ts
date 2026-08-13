@@ -126,6 +126,49 @@ describe('real Chromium runtime', () => {
     expect(pageErrors.events[0]?.text).not.toContain('at ');
   });
 
+  it('collects correlated redacted network, 500, duplicate, and failed-request evidence', async () => {
+    const target = await createTarget();
+    await runtime.navigate(target, `${web.baseUrl}/network-observability`);
+    await runtime.wait(target, {
+      kind: 'text',
+      text: 'ready',
+      state: 'present',
+    });
+
+    const network = (await runtime.listNetwork(target, { limit: 100 })).value;
+    const serialized = JSON.stringify(network);
+    expect(serialized).not.toContain('encoded-secret');
+    expect(serialized).not.toContain('first-secret');
+    expect(serialized).not.toContain('second-secret');
+    expect(serialized).not.toContain('response-body-must-not-be-captured');
+    expect(serialized).not.toContain('private-fragment');
+    const serverError = network.events.find(
+      (event) => event.kind === 'response' && event.status === 500,
+    );
+    expect(serverError).toMatchObject({ method: 'GET', resourceType: 'fetch' });
+    expect(serverError?.url).toContain('token=%5BREDACTED%5D');
+    expect(serverError?.durationMs).toEqual(expect.any(Number));
+    const matchingRequest = network.events.find(
+      (event) => event.kind === 'request' && event.requestId === serverError?.requestId,
+    );
+    expect(matchingRequest).toBeDefined();
+    const duplicates = network.events.filter(
+      (event) => event.kind === 'request' && event.url?.includes('/api/duplicate'),
+    );
+    expect(duplicates).toHaveLength(2);
+    expect(new Set(duplicates.map((event) => event.requestId)).size).toBe(2);
+
+    const failures = (await runtime.listFailedRequests(target, { limit: 100 })).value;
+    expect(failures.events).toHaveLength(1);
+    expect(failures.events[0]).toMatchObject({
+      kind: 'request_failed',
+      method: 'GET',
+      resourceType: 'fetch',
+    });
+    expect(failures.events[0]?.failure).toMatch(/ERR_[A-Z_]+|Request failed/u);
+    expect(JSON.stringify(failures)).not.toContain('transport-secret');
+  });
+
   it('redacts password input values from accessibility snapshots', async () => {
     const target = await createTarget();
     const secretPrefix = 'BrowserMesh-"quoted"-\\secret';

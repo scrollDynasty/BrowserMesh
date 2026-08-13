@@ -168,6 +168,28 @@ describe('MCP adapter', () => {
           .parse(textConsole.structuredContent).events[0]?.text,
       ).toBe('token=[REDACTED] failed');
       await callSuccess(client, 'browser_page_errors_list', { ...target, includeText: false });
+      engine.emitObservation(targetHandle, {
+        kind: 'request',
+        requestId: 'request_mcp',
+        method: 'GET',
+        url: 'https://user:password@example.test/api?token=mcp-network-secret#fragment',
+        resourceType: 'fetch',
+      });
+      engine.emitObservation(targetHandle, {
+        kind: 'request_failed',
+        requestId: 'request_failed_mcp',
+        method: 'POST',
+        url: 'https://example.test/fail?api_key=mcp-failure-secret',
+        resourceType: 'fetch',
+        durationMs: 12,
+        failure: 'token=failure-message-secret connection reset',
+      });
+      const network = await callSuccess(client, 'browser_network_list', target);
+      expect(JSON.stringify(network)).not.toContain('mcp-network-secret');
+      expect(JSON.stringify(network)).not.toContain('password@');
+      const failures = await callSuccess(client, 'browser_failed_requests_list', target);
+      expect(JSON.stringify(failures)).not.toContain('failure-message-secret');
+      expect(JSON.stringify(failures)).not.toContain('mcp-failure-secret');
       await callSuccess(client, 'browser_click', {
         ...target,
         locator: { strategy: 'role', value: 'button', name: 'Submit', exact: true },

@@ -135,6 +135,7 @@ export class FakeEngine implements BrowserEnginePort {
   }
   observePage(
     handle: BrowserPageHandle,
+    _options: { readonly maxInFlightRequests: number; readonly maxStringLength: number },
     listener: (event: BrowserObservation) => void,
   ): () => void {
     if (this.failNextObserve) {

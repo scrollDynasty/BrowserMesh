@@ -547,11 +547,14 @@ contracts. Each page owns at most one listener set. Teardown removes listeners b
 discarded. Ring-buffer overflow is observable through dropped counts. Browser event bodies,
 headers, console object graphs, and raw exceptions never enter the normalized event port.
 
-The first observability slice normalizes only `console` and `pageerror` subscriptions through the
-browser-engine port. Runtime page entries own the disposer and one bounded mixed event store; reads
-filter by event kind without creating an adapter dependency. Page-scoped cursor namespaces reject a
-cursor presented for another page even inside the same session. Network normalization follows in a
-separate slice of ADR 0010.
+Observability normalizes `console`, `pageerror`, `request`, `response`, and `requestfailed`
+subscriptions through the browser-engine port. Runtime page entries own the disposer and one
+bounded mixed event store; reads filter by event kind without creating an adapter dependency.
+Page-scoped cursor namespaces reject a cursor presented for another page even inside the same
+session. The Playwright adapter owns a bounded per-page in-flight request map solely for correlation
+and duration; terminal events remove entries and teardown clears the map. Redirect hops remain
+separate correlated request pairs. Only page-owned HTTP(S) metadata enters the port, including
+EventSource but excluding service-worker traffic, WebSockets, `data:` and `blob:` URLs.
 
 Snapshot bounds, context settings, and new actions are engine-independent value contracts.
 Short-lived element references, if introduced, are runtime IDs resolving only inside the adapter;

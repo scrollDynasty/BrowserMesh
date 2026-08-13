@@ -1,20 +1,18 @@
 import { BrowserMeshError } from '../domain/errors.js';
+import {
+  boundString,
+  redactAndBoundObservationText,
+  sanitizeObservationUrl,
+  type BrowserObservation,
+  type ObservationEvent,
+  type ObservationKind,
+} from '../domain/observability.js';
 
-export type ObservationKind = 'console' | 'page_error';
+export type { ObservationEvent, ObservationKind } from '../domain/observability.js';
 
-export interface ObservationEvent {
-  readonly eventId: string;
-  readonly timestamp: string;
-  readonly sessionId: string;
-  readonly pageId: string;
-  readonly kind: ObservationKind;
-  readonly level?: string;
-  readonly text?: string;
-}
-
-interface StoredEvent extends Omit<ObservationEvent, 'text'> {
+interface StoredEvent {
   readonly sequence: number;
-  readonly text: string;
+  readonly event: ObservationEvent;
 }
 
 export interface ObservationList {
@@ -31,10 +29,6 @@ export interface ObservabilityLimits {
   readonly maxResponseBytes: number;
 }
 
-const SECRET =
-  /((?:authorization|cookie|password|passwd|token|secret|api[_-]?key|session)[\s:=]+)([^\s,;]+)/giu;
-const BEARER = new RegExp('\\bBearer\\s+[A-Za-z0-9._~+/=-]+', 'giu');
-
 export class BoundedObservationStore {
   private readonly events: StoredEvent[] = [];
   private sequence = 0;
@@ -45,23 +39,61 @@ export class BoundedObservationStore {
     private readonly namespace: string,
   ) {}
 
-  append(input: Omit<ObservationEvent, 'eventId' | 'text'> & { readonly text: string }): void {
+  append(
+    input: BrowserObservation & {
+      readonly timestamp: string;
+      readonly sessionId: string;
+      readonly pageId: string;
+    },
+  ): void {
     const sequence = ++this.sequence;
-    this.events.push({
-      ...input,
-      sequence,
+    const common = {
       eventId: this.encodeCursor(sequence),
-      text: redactAndBound(input.text, this.limits.maxStringLength),
-      ...(input.level === undefined ? {} : { level: redactAndBound(input.level, 64) }),
-    });
-    if (this.events.length > this.limits.maxEventsPerPage) {
-      this.events.splice(0, this.events.length - this.limits.maxEventsPerPage);
-      this.droppedCount += 1;
+      timestamp: input.timestamp,
+      sessionId: input.sessionId,
+      pageId: input.pageId,
+      kind: input.kind,
+    } as const;
+    let event: ObservationEvent;
+    if (input.kind === 'console' || input.kind === 'page_error') {
+      event = {
+        ...common,
+        ...(input.kind === 'console' ? { level: boundString(input.level, 64) } : {}),
+        text: redactAndBoundObservationText(input.text, this.limits.maxStringLength),
+      };
+    } else {
+      const url = sanitizeObservationUrl(input.url, this.limits.maxStringLength);
+      if (url === null) return;
+      event = {
+        ...common,
+        requestId: boundString(input.requestId, 128),
+        method: boundString(input.method.toUpperCase(), 32),
+        url,
+        resourceType: boundString(input.resourceType, 64),
+        ...(input.kind === 'response'
+          ? {
+              status: normalizeStatus(input.status),
+              durationMs: normalizeDuration(input.durationMs),
+            }
+          : {}),
+        ...(input.kind === 'request_failed'
+          ? {
+              durationMs: normalizeDuration(input.durationMs),
+              failure: redactAndBoundObservationText(input.failure, this.limits.maxStringLength),
+            }
+          : {}),
+      };
+    }
+    this.events.push({ sequence, event });
+    const overflow = this.events.length - this.limits.maxEventsPerPage;
+    if (overflow > 0) {
+      this.events.splice(0, overflow);
+      this.droppedCount += overflow;
     }
   }
 
   list(input: {
-    readonly kind: ObservationKind;
+    readonly kinds: readonly ObservationKind[];
     readonly sinceEventId?: string;
     readonly limit?: number;
     readonly includeText?: boolean;
@@ -85,16 +117,12 @@ export class BoundedObservationStore {
     let nextCursor: string | null = input.sinceEventId ?? null;
     const responseBudget = Math.max(0, this.limits.maxResponseBytes - 512);
     for (const event of this.events) {
-      if (event.sequence <= since || event.kind !== input.kind) continue;
-      const view: ObservationEvent = {
-        eventId: event.eventId,
-        timestamp: event.timestamp,
-        sessionId: event.sessionId,
-        pageId: event.pageId,
-        kind: event.kind,
-        ...(event.level === undefined ? {} : { level: event.level }),
-        ...(input.includeText === true ? { text: event.text } : {}),
-      };
+      if (event.sequence <= since || !input.kinds.includes(event.event.kind)) continue;
+      const storedView = event.event;
+      const view =
+        input.includeText === true || storedView.text === undefined
+          ? storedView
+          : omitText(storedView);
       let boundedView = view;
       if (serializedBytes([...selected, boundedView]) > responseBudget) {
         if (selected.length > 0) break;
@@ -107,7 +135,7 @@ export class BoundedObservationStore {
         boundedView = fitted;
       }
       selected.push(boundedView);
-      nextCursor = event.eventId;
+      nextCursor = event.event.eventId;
       if (selected.length >= requestedLimit) break;
     }
     return { events: selected, nextCursor, droppedCount: this.droppedCount, gap };
@@ -128,37 +156,60 @@ export class BoundedObservationStore {
   }
 }
 
+function omitText(event: ObservationEvent): ObservationEvent {
+  return {
+    eventId: event.eventId,
+    timestamp: event.timestamp,
+    sessionId: event.sessionId,
+    pageId: event.pageId,
+    kind: event.kind,
+    ...(event.level === undefined ? {} : { level: event.level }),
+    ...(event.requestId === undefined ? {} : { requestId: event.requestId }),
+    ...(event.method === undefined ? {} : { method: event.method }),
+    ...(event.url === undefined ? {} : { url: event.url }),
+    ...(event.resourceType === undefined ? {} : { resourceType: event.resourceType }),
+    ...(event.status === undefined ? {} : { status: event.status }),
+    ...(event.durationMs === undefined ? {} : { durationMs: event.durationMs }),
+    ...(event.failure === undefined ? {} : { failure: event.failure }),
+  };
+}
+
 function fitSingleEvent(event: ObservationEvent, maximumBytes: number): ObservationEvent | null {
   if (serializedBytes([event]) <= maximumBytes) return event;
-  if (event.text === undefined) return null;
-  const characters = Array.from(event.text);
+  const field =
+    event.text === undefined ? (event.failure === undefined ? undefined : 'failure') : 'text';
+  if (field === undefined) return null;
+  const original = event[field];
+  if (original === undefined) return null;
+  const characters = Array.from(original);
   let lower = 0;
   let upper = characters.length;
   let best: ObservationEvent | null = null;
   while (lower <= upper) {
     const length = Math.floor((lower + upper) / 2);
-    const text =
+    const value =
       length === 0
         ? ''
         : length >= characters.length
-          ? event.text
-          : `${characters.slice(0, length - 1).join('')}…`;
-    const candidate = { ...event, text };
+          ? original
+          : `${characters.slice(0, Math.max(0, length - 1)).join('')}…`;
+    const candidate = { ...event, [field]: value };
     if (serializedBytes([candidate]) <= maximumBytes) {
       best = candidate;
       lower = length + 1;
-    } else {
-      upper = length - 1;
-    }
+    } else upper = length - 1;
   }
   return best;
 }
 
-function serializedBytes(value: unknown): number {
-  return Buffer.byteLength(JSON.stringify(value), 'utf8');
+function normalizeStatus(value: number): number {
+  return Number.isInteger(value) && value >= 0 && value <= 999 ? value : 0;
 }
 
-function redactAndBound(value: string, maximum: number): string {
-  const redacted = value.replace(BEARER, 'Bearer [REDACTED]').replace(SECRET, '$1[REDACTED]');
-  return redacted.length <= maximum ? redacted : `${redacted.slice(0, Math.max(0, maximum - 1))}…`;
+function normalizeDuration(value: number): number {
+  return Number.isFinite(value) && value >= 0 ? Math.min(Math.round(value), 86_400_000) : 0;
+}
+
+function serializedBytes(value: unknown): number {
+  return Buffer.byteLength(JSON.stringify(value), 'utf8');
 }
