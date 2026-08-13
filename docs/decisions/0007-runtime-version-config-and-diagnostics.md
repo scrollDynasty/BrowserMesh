@@ -19,7 +19,9 @@ launch arguments, environment dump, state data, or raw failure is exposed.
 
 `browsermesh --doctor --json` is a finite CLI diagnostic with an overall deadline and non-zero exit
 on any failed required check. It checks supported Node, version-chain consistency, data-directory
-access without listing contents, Chromium availability, and a launch/context/page/close smoke. Its
+access without listing contents, Chromium availability, and a launch/context/page/close smoke. A
+missing Linux dependency is classified from that real smoke failure; BrowserMesh does not depend on
+a private Playwright API to claim a separate exhaustive library preflight. Its
 JSON contains a schema version, overall status, bounded per-check status/code/message, and safe
 remediation. It owns and closes all resources it creates. MCP discovery and runtime info remain
 available without launching Chromium.

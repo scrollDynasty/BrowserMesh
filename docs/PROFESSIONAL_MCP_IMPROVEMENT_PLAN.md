@@ -180,7 +180,8 @@ Add a separate `--doctor --json` CLI command for installation diagnosis. It vali
 - Node version;
 - package/runtime version consistency;
 - Chromium executable availability;
-- required Linux libraries;
+- browser launch prerequisites, including missing Linux libraries when the bounded smoke reports
+  them through a safe classified failure;
 - data-directory create/read/write permissions without exposing its contents;
 - an actual bounded launch/create-context/create-page/close smoke;
 - actionable remediation and a non-zero exit code on failure.
@@ -309,7 +310,9 @@ authorization. Examples:
 
 Long-running waits, diagnostics, and artifact operations should honor MCP request cancellation.
 Cancellation must detach event listeners/timers, stop useful work promptly where Playwright permits,
-return a predictable cancellation result, and leave the per-session queue usable. Use progress
+and leave the per-session queue usable. For an MCP request cancelled through the protocol, the
+client observes its SDK's cancellation/`AbortError`; the server must not promise delivery of a
+second tool result after cancellation. Use progress
 notifications only for genuinely multi-step operations with meaningful monotonic progress (for
 example `doctor` or a large artifact export), not for ordinary clicks or waits with no honest total.
 

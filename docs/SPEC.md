@@ -1003,15 +1003,20 @@ explicitly documents a breaking contract.
 
 Every tool must advertise an `outputSchema` and return matching `structuredContent`. JSON-oriented
 successes also include concise compatibility text. Screenshot image content is retained with
-structured metadata. Error results use `isError: true`, a stable safe code (including
-`OPERATION_CANCELLED`), bounded message/details, and correlation metadata.
+structured metadata. Application error results use `isError: true`, a stable safe code, bounded
+message/details, and correlation metadata. Protocol cancellation follows MCP semantics: the client
+observes cancellation/`AbortError`, and delivery of a separate tool result is not guaranteed. An
+internal pre-execution cancellation may use a stable `OPERATION_CANCELLED` application code when a
+result can still be delivered.
 
 Every tool has a human title and tested truthful `readOnlyHint`, `destructiveHint`,
 `idempotentHint`, and `openWorldHint`. These annotations are UX hints, never authorization.
 
 Long waits, doctor work, and future artifact work honor MCP cancellation through an
 engine-independent cancellation signal. Cancellation clears owned listeners and timers, stops
-supported work promptly, and leaves the per-session queue usable. Progress notifications are only
+supported work promptly, and leaves the per-session queue usable. An already-running Playwright
+operation that cannot be aborted must continue owning its queue slot until it actually settles;
+later same-session work must not overtake it. Progress notifications are only
 allowed for genuinely multi-step operations with honest monotonic progress.
 
 ### 22.3 Waits and atomic action/wait
