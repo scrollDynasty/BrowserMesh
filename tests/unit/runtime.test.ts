@@ -3,6 +3,78 @@ import { FakeEngine, testRuntime } from '../support/fakes.js';
 import type { BrowserContextSettingsInput } from '../../src/domain/context-settings.js';
 
 describe('BrowserMeshRuntime', () => {
+  it('paginates an immutable snapshot and rejects cursors outside their lifecycle scope', async () => {
+    let nowMs = 0;
+    const { runtime, engine } = testRuntime(undefined, { now: () => new Date(nowMs) });
+    const firstSession = await runtime.createSession();
+    const secondPage = await runtime.createPage(firstSession.sessionId);
+    const secondSession = await runtime.createSession();
+    engine.snapshotText = '- document:\n  - button "Original immutable value"\n';
+    const first = await runtime.snapshot(firstSession, { maxChars: 12, maxBytes: 100 });
+    expect(first.value.pagination.nextCursor).toBeTruthy();
+    engine.snapshotText = '- document:\n  - button "Mutated live DOM"\n';
+    const cursor = first.value.pagination.nextCursor;
+    if (cursor === null) throw new Error('Expected a paginated snapshot');
+    let nextCursor: string | null = cursor;
+    let reconstructed = first.value.snapshot;
+    while (nextCursor !== null) {
+      const continued = await runtime.snapshot(firstSession, { cursor: nextCursor });
+      reconstructed += continued.value.snapshot;
+      expect(first.value.pagination.snapshotId).toBe(continued.value.pagination.snapshotId);
+      nextCursor = continued.value.pagination.nextCursor;
+    }
+    expect(reconstructed).toContain('Original immutable value');
+    expect(reconstructed).not.toContain('Mutated live DOM');
+
+    await expect(
+      runtime.snapshot(
+        { sessionId: firstSession.sessionId, pageId: secondPage.value.pageId },
+        { cursor },
+      ),
+    ).rejects.toMatchObject({ code: 'STALE_SNAPSHOT_CURSOR' });
+    await expect(runtime.snapshot(secondSession, { cursor })).rejects.toMatchObject({
+      code: 'STALE_SNAPSHOT_CURSOR',
+    });
+
+    for (let capture = 0; capture < 4; capture += 1)
+      await runtime.snapshot(firstSession, { maxChars: 12 });
+    await expect(runtime.snapshot(firstSession, { cursor })).rejects.toMatchObject({
+      code: 'STALE_SNAPSHOT_CURSOR',
+    });
+
+    const expiring = await runtime.snapshot(firstSession, { maxChars: 12 });
+    const expiringCursor = expiring.value.pagination.nextCursor;
+    if (expiringCursor === null) throw new Error('Expected a paginated snapshot');
+    nowMs = 30_000;
+    await expect(runtime.snapshot(firstSession, { cursor: expiringCursor })).rejects.toMatchObject({
+      code: 'STALE_SNAPSHOT_CURSOR',
+    });
+    await runtime.shutdown();
+  });
+
+  it('invalidates immutable snapshot cursors on navigation and page close', async () => {
+    const { runtime, engine } = testRuntime();
+    const session = await runtime.createSession();
+    engine.snapshotText = '- document:\n  - button "Long enough to paginate"\n';
+    const captured = await runtime.snapshot(session, { maxChars: 10 });
+    const cursor = captured.value.pagination.nextCursor;
+    if (cursor === null) throw new Error('Expected a paginated snapshot');
+    await runtime.navigate(session, 'https://example.test/next');
+    await expect(runtime.snapshot(session, { cursor })).rejects.toMatchObject({
+      code: 'STALE_SNAPSHOT_CURSOR',
+    });
+
+    const page = await runtime.createPage(session.sessionId);
+    const pageTarget = { sessionId: session.sessionId, pageId: page.value.pageId };
+    const onPage = await runtime.snapshot(pageTarget, { maxChars: 10 });
+    await runtime.closePage(session.sessionId, page.value.pageId);
+    const pageCursor = onPage.value.pagination.nextCursor;
+    if (pageCursor === null) throw new Error('Expected a paginated snapshot');
+    await expect(runtime.snapshot(pageTarget, { cursor: pageCursor })).rejects.toMatchObject({
+      code: 'PAGE_NOT_FOUND',
+    });
+    await runtime.shutdown();
+  });
   it('registers popup handles as non-default managed pages and closes overflow popups', async () => {
     const { runtime, engine } = testRuntime(undefined, { maxPagesPerSession: 2 });
     const created = await runtime.createSession();

@@ -158,6 +158,9 @@ const snapshotInputSchema = {
   maxBytes: z.number().int().positive().max(SNAPSHOT_LIMITS.maxBytes).optional(),
   includeRefs: z.boolean().optional().default(false),
   maxRefs: z.number().int().positive().max(SNAPSHOT_LIMITS.maxRefs).optional(),
+  interactiveOnly: z.boolean().optional().default(false),
+  maxChildren: z.number().int().positive().max(SNAPSHOT_LIMITS.maxChildren).optional(),
+  cursor: z.string().min(1).max(160).optional(),
 };
 
 type LocatorInput = z.output<typeof locatorSchema>;
@@ -423,20 +426,25 @@ export function createMcpServer(runtime: BrowserMeshRuntime): McpServer {
     {
       ...contractFor('browser_snapshot'),
       description:
-        'Inspect a bounded accessibility-oriented snapshot of one explicitly addressed page, optionally scoped by a locator (including a bounded semantic iframe chain), depth-limited, and annotated with viewport bounding boxes. Non-empty password-input values are redacted before content crosses MCP. Set includeRefs for bounded 30-second element refs used by immediate follow-up actions; refs are page-scoped and stale after navigation or DOM replacement. Results always report applied bounds and truncation; partial content is explicitly aria-yaml-fragment.',
+        'Inspect a bounded accessibility-oriented snapshot of one explicitly addressed page, optionally scoped by a locator including a bounded semantic iframe chain. Use interactiveOnly to retain interactive nodes with ancestor context and maxChildren to limit every node after filtering. A nextCursor continues the immutable captured serialization without rereading a changed DOM; cursors are page-scoped, expire after 30 seconds, and become stale on navigation or close. Semantic scope, depth, boxes, character/byte bounds, omissions, and truncation are explicit; partial content is aria-yaml-fragment. Non-empty password-input values are redacted before content crosses MCP. Optional 30-second element refs are separate short-lived action conveniences.',
       inputSchema: snapshotInputSchema,
     },
     (input, extra) =>
       structuredResult(async () => {
-        const options: SnapshotOptions = {
-          ...(input.scope === undefined ? {} : { scope: input.scope as Locator }),
-          ...(input.maxDepth === undefined ? {} : { maxDepth: input.maxDepth }),
-          includeBoundingBoxes: input.includeBoundingBoxes,
-          ...(input.maxChars === undefined ? {} : { maxChars: input.maxChars }),
-          ...(input.maxBytes === undefined ? {} : { maxBytes: input.maxBytes }),
-          includeRefs: input.includeRefs,
-          ...(input.maxRefs === undefined ? {} : { maxRefs: input.maxRefs }),
-        };
+        const options: SnapshotOptions =
+          input.cursor === undefined
+            ? {
+                ...(input.scope === undefined ? {} : { scope: input.scope as Locator }),
+                ...(input.maxDepth === undefined ? {} : { maxDepth: input.maxDepth }),
+                includeBoundingBoxes: input.includeBoundingBoxes,
+                ...(input.maxChars === undefined ? {} : { maxChars: input.maxChars }),
+                ...(input.maxBytes === undefined ? {} : { maxBytes: input.maxBytes }),
+                includeRefs: input.includeRefs,
+                ...(input.maxRefs === undefined ? {} : { maxRefs: input.maxRefs }),
+                interactiveOnly: input.interactiveOnly,
+                ...(input.maxChildren === undefined ? {} : { maxChildren: input.maxChildren }),
+              }
+            : { cursor: input.cursor };
         const captured = await runtime.snapshot(target(input, extra.signal), options);
         return {
           operationId: captured.operationId,

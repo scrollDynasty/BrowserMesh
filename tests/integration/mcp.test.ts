@@ -274,6 +274,17 @@ describe('MCP adapter', () => {
         includeRefs: false,
         maxRefs: 50,
       });
+      const snapshotCursor = z
+        .object({ pagination: z.object({ nextCursor: z.string() }) })
+        .parse(boundedSnapshot.structuredContent).pagination.nextCursor;
+      const nextSnapshotPage = await callSuccess(client, 'browser_snapshot', {
+        ...target,
+        cursor: snapshotCursor,
+      });
+      expect(nextSnapshotPage.structuredContent).toMatchObject({
+        contentFormat: 'aria-yaml-fragment',
+        pagination: { offsetChars: 4 },
+      });
       await callSuccess(client, 'browser_visible_text', {
         ...target,
         locator: { strategy: 'testId', value: 'status' },

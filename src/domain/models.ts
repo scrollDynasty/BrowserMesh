@@ -84,6 +84,12 @@ export interface SnapshotOptions {
   readonly maxBytes?: number;
   readonly includeRefs?: boolean;
   readonly maxRefs?: number;
+  /** Retain only interactive ARIA nodes and their ancestor context. */
+  readonly interactiveOnly?: boolean;
+  /** Maximum direct children retained independently for every tree node. */
+  readonly maxChildren?: number;
+  /** Continue an immutable captured snapshot. Exclusive with capture controls. */
+  readonly cursor?: string;
 }
 
 export interface SnapshotResult {
@@ -100,6 +106,19 @@ export interface SnapshotResult {
     readonly maxBytes: number;
     readonly includeRefs: boolean;
     readonly maxRefs: number;
+    readonly interactiveOnly: boolean;
+    readonly maxChildren: number | null;
+  };
+  readonly omissions: {
+    readonly nonInteractiveNodes: number;
+    readonly maxChildrenNodes: number;
+    readonly sourceLimitReached: boolean;
+  };
+  readonly pagination: {
+    readonly snapshotId: string | null;
+    readonly nextCursor: string | null;
+    readonly offsetChars: number;
+    readonly expiresAt: string | null;
   };
   readonly truncation: {
     readonly truncated: boolean;

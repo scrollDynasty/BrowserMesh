@@ -370,6 +370,7 @@ export function testRuntime(
       | 'maxPagesPerSession'
       | 'persistenceEnabled'
       | 'observability'
+      | 'now'
     >
   > = {},
 ): {
@@ -387,7 +388,7 @@ export function testRuntime(
       stateRepository: new MemoryStates(),
       events,
       ids,
-      now: () => new Date(0),
+      now: overrides.now ?? (() => new Date(0)),
       defaultTimeoutMs: 1_000,
       maxSessions: 50,
       maxPagesPerSession: 5,

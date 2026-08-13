@@ -37,7 +37,13 @@ import type {
   WaitCondition,
   WaitResult,
 } from '../domain/models.js';
-import { boundSnapshot, normalizeSnapshotOptions } from '../domain/snapshots.js';
+import {
+  normalizeSnapshotOptions,
+  pageSnapshot,
+  prepareSnapshot,
+  SNAPSHOT_LIMITS,
+  type PreparedSnapshot,
+} from '../domain/snapshots.js';
 import type { IdGenerator } from '../infrastructure/id.js';
 import { SerialQueue } from './serial-queue.js';
 import {
@@ -54,6 +60,13 @@ interface PageEntry {
   readonly observations: BoundedObservationStore;
   readonly stopObserving: () => void;
   readonly stopCloseTracking: () => void;
+  readonly snapshots: Map<string, RetainedSnapshot>;
+}
+
+interface RetainedSnapshot {
+  readonly id: string;
+  readonly prepared: PreparedSnapshot;
+  readonly expiresAtMs: number;
 }
 
 interface SessionEntry {
@@ -371,7 +384,7 @@ export class BrowserMeshRuntime {
     target: OperationTarget,
     url: string,
   ): Promise<PageAddressedOperationResult<string>> {
-    return this.pageOperation(target, async (page, control) => {
+    return this.pageOperation(target, async (page, control, pageEntry) => {
       let parsed: URL;
       try {
         parsed = new URL(url);
@@ -381,6 +394,7 @@ export class BrowserMeshRuntime {
       if (!['http:', 'https:'].includes(parsed.protocol)) {
         throw new BrowserMeshError('INVALID_ARGUMENT', 'Only http and https URLs are allowed');
       }
+      pageEntry.snapshots.clear();
       await this.options.engine.navigate(page, parsed.href, control);
       return this.options.engine.url(page);
     });
@@ -423,21 +437,24 @@ export class BrowserMeshRuntime {
   }
 
   back(target: OperationTarget): Promise<PageAddressedOperationResult<string>> {
-    return this.pageOperation(target, async (page, control) => {
+    return this.pageOperation(target, async (page, control, pageEntry) => {
+      pageEntry.snapshots.clear();
       await this.options.engine.back(page, control);
       return this.options.engine.url(page);
     });
   }
 
   forward(target: OperationTarget): Promise<PageAddressedOperationResult<string>> {
-    return this.pageOperation(target, async (page, control) => {
+    return this.pageOperation(target, async (page, control, pageEntry) => {
+      pageEntry.snapshots.clear();
       await this.options.engine.forward(page, control);
       return this.options.engine.url(page);
     });
   }
 
   reload(target: OperationTarget): Promise<PageAddressedOperationResult<string>> {
-    return this.pageOperation(target, async (page, control) => {
+    return this.pageOperation(target, async (page, control, pageEntry) => {
+      pageEntry.snapshots.clear();
       await this.options.engine.reload(page, control);
       return this.options.engine.url(page);
     });
@@ -456,8 +473,23 @@ export class BrowserMeshRuntime {
     options: SnapshotOptions = {},
   ): Promise<PageAddressedOperationResult<SnapshotResult>> {
     const normalized = normalizeSnapshotOptions(options);
-    return this.pageOperation(target, async (page, control) => {
-      const snapshot = await this.options.engine.snapshot(
+    return this.pageOperation(target, async (page, control, pageEntry) => {
+      this.pruneSnapshots(pageEntry);
+      if (normalized.cursor !== undefined) {
+        const { snapshotId, offsetChars } = parseSnapshotCursor(normalized.cursor);
+        const retained = pageEntry.snapshots.get(snapshotId);
+        if (retained === undefined || retained.expiresAtMs <= this.now().getTime()) {
+          if (retained !== undefined) pageEntry.snapshots.delete(snapshotId);
+          throw new BrowserMeshError('STALE_SNAPSHOT_CURSOR', 'Snapshot cursor is stale');
+        }
+        return pageSnapshot(
+          retained.prepared,
+          offsetChars,
+          retained.id,
+          new Date(retained.expiresAtMs).toISOString(),
+        );
+      }
+      const captured = await this.options.engine.snapshot(
         page,
         {
           ...(normalized.scope === undefined ? {} : { scope: normalized.scope }),
@@ -468,7 +500,18 @@ export class BrowserMeshRuntime {
         },
         control,
       );
-      return boundSnapshot(snapshot, normalized);
+      const prepared = prepareSnapshot(captured, normalized);
+      const snapshotId = this.options.ids.next('snapshot');
+      const expiresAtMs = this.now().getTime() + SNAPSHOT_LIMITS.cursorTtlMs;
+      const firstPage = pageSnapshot(prepared, 0, snapshotId, new Date(expiresAtMs).toISOString());
+      if (firstPage.pagination.nextCursor === null) return pageSnapshot(prepared, 0, null, null);
+      pageEntry.snapshots.set(snapshotId, { id: snapshotId, prepared, expiresAtMs });
+      while (pageEntry.snapshots.size > SNAPSHOT_LIMITS.retainedSnapshotsPerPage) {
+        const oldest = pageEntry.snapshots.keys().next().value;
+        if (oldest === undefined) break;
+        pageEntry.snapshots.delete(oldest);
+      }
+      return firstPage;
     });
   }
 
@@ -800,7 +843,11 @@ export class BrowserMeshRuntime {
 
   private async pageOperation<T>(
     target: OperationTarget,
-    action: (page: BrowserPageHandle, control: OperationControl) => Promise<T>,
+    action: (
+      page: BrowserPageHandle,
+      control: OperationControl,
+      pageEntry: PageEntry,
+    ) => Promise<T>,
   ): Promise<PageAddressedOperationResult<T>> {
     const operationId = this.options.ids.next('operation');
     const timeoutMs = target.timeoutMs ?? this.options.defaultTimeoutMs;
@@ -822,7 +869,7 @@ export class BrowserMeshRuntime {
         target.sessionId,
         async (entry) => {
           const page = this.getPageEntry(entry, target.pageId);
-          return action(page.handle, control);
+          return action(page.handle, control, page);
         },
         target.signal,
       );
@@ -962,6 +1009,7 @@ export class BrowserMeshRuntime {
         observations,
         stopObserving,
         stopCloseTracking,
+        snapshots: new Map(),
       };
       entry.pages.set(page.id, page);
       return page;
@@ -1122,6 +1170,7 @@ export class BrowserMeshRuntime {
 
   private disposePages(entry: SessionEntry): void {
     for (const page of entry.pages.values()) {
+      page.snapshots.clear();
       page.stopCloseTracking();
       page.stopObserving();
     }
@@ -1133,9 +1182,17 @@ export class BrowserMeshRuntime {
     if (page === undefined) return;
     page.stopCloseTracking();
     page.stopObserving();
+    page.snapshots.clear();
     entry.pages.delete(pageId);
     if (entry.defaultPageId === pageId) entry.defaultPageId = entry.pages.keys().next().value;
     this.emit('page.closed', { sessionId: entry.id, pageId });
+  }
+
+  private pruneSnapshots(page: PageEntry): void {
+    const now = this.now().getTime();
+    for (const [id, retained] of page.snapshots) {
+      if (retained.expiresAtMs <= now) page.snapshots.delete(id);
+    }
   }
 
   private emit(
@@ -1247,4 +1304,16 @@ function normalizeActionWait(wait: ActionWaitCondition): ActionWaitCondition {
     ...(wait.method === undefined ? {} : { method: wait.method }),
     ...(wait.status === undefined ? {} : { status: wait.status }),
   };
+}
+
+function parseSnapshotCursor(cursor: string): {
+  readonly snapshotId: string;
+  readonly offsetChars: number;
+} {
+  const separator = cursor.lastIndexOf('.');
+  const snapshotId = separator < 1 ? '' : cursor.slice(0, separator);
+  const offsetChars = Number(separator < 0 ? Number.NaN : cursor.slice(separator + 1));
+  if (snapshotId.length === 0 || !Number.isSafeInteger(offsetChars) || offsetChars <= 0)
+    throw new BrowserMeshError('STALE_SNAPSHOT_CURSOR', 'Snapshot cursor is stale');
+  return { snapshotId, offsetChars };
 }

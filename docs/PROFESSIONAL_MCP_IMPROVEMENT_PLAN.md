@@ -351,8 +351,8 @@ Implementation checkpoint: the first bounded-snapshot slice implements semantic 
 `maxDepth`, optional bounding boxes, and explicit snapshot-content `maxChars`/`maxBytes` partial metadata using the
 documented Playwright 1.62 API. ADR 0013 completes short-lived adapter-generated refs with explicit
 session/page scope, 30-second TTL, per-page quota/replacement, lifecycle and DOM-staleness checks,
-and typed-action support. `interactiveOnly`, `maxChildren`, and pagination remain deferred until
-their engine-neutral transform or cursor contract is complete.
+and typed-action support. ADR 0015 completes `interactiveOnly`, per-node `maxChildren`, and stable
+pagination through an engine-neutral YAML-tree transform and bounded immutable cursor store.
 
 ## 9. P1: browser-context and interaction coverage
 
