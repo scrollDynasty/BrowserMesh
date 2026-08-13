@@ -33,6 +33,10 @@ describe('MCP Registry metadata', () => {
       name: string;
       version: string;
       mcpName: string;
+      dependencies: { playwright: string };
+    };
+    const packageLock = JSON.parse(await readFile('package-lock.json', 'utf8')) as {
+      packages: Record<string, { version?: string; dependencies?: { playwright?: string } }>;
     };
     const serverJson = JSON.parse(await readFile('server.json', 'utf8')) as {
       name: string;
@@ -42,6 +46,13 @@ describe('MCP Registry metadata', () => {
     const releaseConfig = await readFile('release-please-config.json', 'utf8');
 
     expect(BROWSERMESH_VERSION).toBe(packageJson.version);
+    expect(packageJson.dependencies.playwright).toMatch(/^\d+\.\d+\.\d+$/u);
+    expect(packageLock.packages['']?.dependencies?.playwright).toBe(
+      packageJson.dependencies.playwright,
+    );
+    expect(packageLock.packages['node_modules/playwright']?.version).toBe(
+      packageJson.dependencies.playwright,
+    );
     expect(packageJson.mcpName).toBe('io.github.scrollDynasty/browsermesh');
     expect(serverJson.name).toBe(packageJson.mcpName);
     expect(serverJson.version).toBe(packageJson.version);

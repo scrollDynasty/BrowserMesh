@@ -707,7 +707,9 @@ export class BrowserMeshRuntime {
     return this.pageOperation(target, async (page, control) => {
       const expected = await this.options.engine.screenshotDimensions(page, options, control);
       this.validateScreenshotDimensions(expected.width, expected.height);
-      const capture = Buffer.from(await this.options.engine.screenshot(page, options, control));
+      const capture = Buffer.from(
+        await this.options.engine.screenshot(page, options, expected, control),
+      );
       const limits = this.resourceLimits().screenshot;
       if (capture.byteLength > limits.maxBytes)
         throw new BrowserMeshError('LIMIT_EXCEEDED', 'Screenshot exceeds the encoded byte limit');

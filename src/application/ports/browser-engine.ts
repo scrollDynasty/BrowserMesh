@@ -34,6 +34,18 @@ export interface BrowserEngineDiagnostics {
   readonly browserVersion: string | null;
 }
 
+export interface ScreenshotCapturePlan {
+  readonly width: number;
+  readonly height: number;
+  /** Immutable main-frame CSS-pixel clip measured before capture. */
+  readonly clip?: {
+    readonly x: number;
+    readonly y: number;
+    readonly width: number;
+    readonly height: number;
+  };
+}
+
 export type BrowserEngineActionWaitEvent =
   | Extract<ActionAndWaitResult['event'], { kind: 'navigation' | 'response' | 'dialog' }>
   | { readonly kind: 'popup'; readonly page: BrowserPageHandle };
@@ -129,10 +141,11 @@ export interface BrowserEnginePort {
     page: BrowserPageHandle,
     options: ScreenshotOptions,
     control: OperationControl,
-  ): Promise<{ readonly width: number; readonly height: number }>;
+  ): Promise<ScreenshotCapturePlan>;
   screenshot(
     page: BrowserPageHandle,
     options: ScreenshotOptions,
+    plan: ScreenshotCapturePlan,
     control: OperationControl,
   ): Promise<Uint8Array>;
   wait(page: BrowserPageHandle, condition: WaitCondition, control: OperationControl): Promise<void>;

@@ -22,6 +22,7 @@ import type {
   BrowserEnginePort,
   BrowserPageHandle,
   BrowserObservation,
+  ScreenshotCapturePlan,
 } from '../../application/ports/browser-engine.js';
 import {
   isCancellation,
@@ -49,6 +50,7 @@ import {
   sanitizeObservationUrl,
 } from '../../domain/observability.js';
 import { classifyBrowserFailure } from './error-classification.js';
+import { SNAPSHOT_LIMITS } from '../../domain/snapshots.js';
 
 interface ContextHandle extends BrowserContextHandle {
   readonly kind: 'context';
@@ -356,7 +358,15 @@ export class PlaywrightBrowserEngine implements BrowserEnginePort {
   async title(handle: BrowserPageHandle, control: OperationControl): Promise<string> {
     throwIfCancelled(control.signal);
     return this.wrapAction(
-      () => this.getPage(handle).title(),
+      () =>
+        this.getPage(handle)
+          .locator('html')
+          .evaluate(
+            /* v8 ignore next -- executed in Chromium; covered by real-browser integration */
+            (element) => element.ownerDocument.title,
+            undefined,
+            operationOptions(control),
+          ),
       'BROWSER_ERROR',
       'Failed to get page title',
       control.timeoutMs,
@@ -368,7 +378,7 @@ export class PlaywrightBrowserEngine implements BrowserEnginePort {
     await this.wrapAction(
       async () =>
         this.getPage(handle)
-          .goto(url, { timeout: control.timeoutMs })
+          .goto(url, operationOptions(control))
           .then(() => undefined),
       'NAVIGATION_FAILED',
       `Navigation failed for ${url}`,
@@ -382,7 +392,7 @@ export class PlaywrightBrowserEngine implements BrowserEnginePort {
     await this.wrapAction(
       async () =>
         this.getPage(handle)
-          .goBack({ timeout: control.timeoutMs })
+          .goBack(operationOptions(control))
           .then(() => undefined),
       'NAVIGATION_FAILED',
       'Back navigation failed',
@@ -395,7 +405,7 @@ export class PlaywrightBrowserEngine implements BrowserEnginePort {
     await this.wrapAction(
       async () =>
         this.getPage(handle)
-          .goForward({ timeout: control.timeoutMs })
+          .goForward(operationOptions(control))
           .then(() => undefined),
       'NAVIGATION_FAILED',
       'Forward navigation failed',
@@ -408,7 +418,7 @@ export class PlaywrightBrowserEngine implements BrowserEnginePort {
     await this.wrapAction(
       async () =>
         this.getPage(handle)
-          .reload({ timeout: control.timeoutMs })
+          .reload(operationOptions(control))
           .then(() => undefined),
       'NAVIGATION_FAILED',
       'Reload failed',
@@ -644,7 +654,8 @@ export class PlaywrightBrowserEngine implements BrowserEnginePort {
     }> => {
       const root = await this.resolveFrameRoot(page, scope, control);
       const scopedLocator = this.locateInRoot(root, scope);
-      const passwordValuesBefore = await readPasswordValues(root);
+      await enforceSnapshotSourceBudget(scopedLocator, control);
+      const passwordValuesBefore = await readPasswordValues(scopedLocator, control);
       throwIfCancelled(control.signal);
       const snapshot = await scopedLocator.ariaSnapshot({
         timeout: remainingOperationTime(control),
@@ -653,7 +664,7 @@ export class PlaywrightBrowserEngine implements BrowserEnginePort {
         boxes: options.includeBoundingBoxes ?? false,
       });
       throwIfCancelled(control.signal);
-      const passwordValuesAfter = await readPasswordValues(root);
+      const passwordValuesAfter = await readPasswordValues(scopedLocator, control);
       throwIfCancelled(control.signal);
       const redacted = redactSecretValues(snapshot, [
         ...passwordValuesBefore,
@@ -695,33 +706,23 @@ export class PlaywrightBrowserEngine implements BrowserEnginePort {
   async screenshot(
     handle: BrowserPageHandle,
     options: ScreenshotOptions,
+    plan: ScreenshotCapturePlan,
     control: OperationControl,
   ): Promise<Uint8Array> {
     throwIfCancelled(control.signal);
-    const screenshotLocator = options.locator;
-    if (screenshotLocator !== undefined) {
-      return this.wrapElement(
-        async () =>
-          (await this.locate(this.getPage(handle), screenshotLocator, control)).screenshot({
-            timeout: remainingOperationTime(control),
-            type: 'png',
-            scale: 'css',
-          }),
-        'capture screenshot',
-        screenshotLocator,
-        control.timeoutMs,
-      );
-    }
     return this.wrapAction(
       () =>
         this.getPage(handle).screenshot({
-          timeout: control.timeoutMs,
+          ...operationOptions(control),
           type: 'png',
-          fullPage: options.fullPage ?? false,
+          fullPage: false,
+          ...(plan.clip === undefined ? {} : { clip: plan.clip, captureBeyondViewport: true }),
           scale: 'css',
         }),
       'BROWSER_ERROR',
-      'Failed to capture page screenshot',
+      options.locator === undefined
+        ? 'Failed to capture page screenshot'
+        : 'Failed to capture measured element screenshot',
       control.timeoutMs,
     );
   }
@@ -730,21 +731,25 @@ export class PlaywrightBrowserEngine implements BrowserEnginePort {
     handle: BrowserPageHandle,
     options: ScreenshotOptions,
     control: OperationControl,
-  ): Promise<{ readonly width: number; readonly height: number }> {
+  ): Promise<ScreenshotCapturePlan> {
     throwIfCancelled(control.signal);
     const page = this.getPage(handle);
     const screenshotLocator = options.locator;
     if (screenshotLocator !== undefined) {
       return this.wrapElement(
         async () => {
-          const box = await (
-            await this.locate(page, screenshotLocator, control)
-          ).boundingBox({
-            timeout: remainingOperationTime(control),
-          });
+          const locator = await this.locate(page, screenshotLocator, control);
+          await locator.scrollIntoViewIfNeeded(operationOptions(control));
+          const box = await locator.boundingBox(operationOptions(control));
           if (box === null)
             throw new BrowserMeshError('ELEMENT_NOT_FOUND', 'Screenshot element has no box');
-          return { width: Math.ceil(box.width), height: Math.ceil(box.height) };
+          const width = Math.ceil(box.width);
+          const height = Math.ceil(box.height);
+          return {
+            width,
+            height,
+            clip: { x: Math.floor(box.x), y: Math.floor(box.y), width, height },
+          };
         },
         'measure screenshot element',
         screenshotLocator,
@@ -754,27 +759,38 @@ export class PlaywrightBrowserEngine implements BrowserEnginePort {
     return this.wrapAction(
       async () => {
         if (options.fullPage === true) {
-          return page.evaluate(() => {
-            const root = document.documentElement;
-            const body = document.body;
-            return {
-              width: Math.ceil(
+          return page.locator('html').evaluate(
+            /* v8 ignore next -- executed in Chromium; covered by real-browser integration */
+            (root) => {
+              const body = root.ownerDocument.body;
+              const width = Math.ceil(
                 Math.max(root.scrollWidth, root.clientWidth, body.scrollWidth, body.clientWidth),
-              ),
-              height: Math.ceil(
+              );
+              const height = Math.ceil(
                 Math.max(
                   root.scrollHeight,
                   root.clientHeight,
                   body.scrollHeight,
                   body.clientHeight,
                 ),
-              ),
-            };
-          });
+              );
+              return { width, height, clip: { x: 0, y: 0, width, height } };
+            },
+            undefined,
+            operationOptions(control),
+          );
         }
         const viewport = page.viewportSize();
         if (viewport !== null) return viewport;
-        return page.evaluate(() => ({ width: window.innerWidth, height: window.innerHeight }));
+        return page.locator('html').evaluate(
+          /* v8 ignore next -- executed in Chromium; covered by real-browser integration */
+          (element) => ({
+            width: element.ownerDocument.defaultView?.innerWidth ?? 0,
+            height: element.ownerDocument.defaultView?.innerHeight ?? 0,
+          }),
+          undefined,
+          operationOptions(control),
+        );
       },
       'BROWSER_ERROR',
       'Failed to measure screenshot dimensions',
@@ -800,7 +816,12 @@ export class PlaywrightBrowserEngine implements BrowserEnginePort {
             return;
           case 'load':
             await pollUntil(async () => {
-              const readyState = await page.evaluate(() => document.readyState);
+              const readyState = await page.locator('html').evaluate(
+                /* v8 ignore next -- executed in Chromium; covered by real-browser integration */
+                (element) => element.ownerDocument.readyState,
+                undefined,
+                operationOptions(control),
+              );
               return condition.state === 'load'
                 ? readyState === 'complete'
                 : readyState === 'interactive' || readyState === 'complete';
@@ -1006,7 +1027,11 @@ export class PlaywrightBrowserEngine implements BrowserEnginePort {
     if (entry === undefined || entry.expiresAt <= this.now()) {
       if (entry !== undefined) {
         registry?.delete(target.ref);
-        await entry.handle.dispose().catch(() => undefined);
+        try {
+          await disposeElementHandles([entry.handle], 'Failed to dispose an expired element ref');
+        } catch (cleanupError) {
+          throw staleElementReference(target.ref, cleanupError);
+        }
       }
       throw staleElementReference(target.ref);
     }
@@ -1018,7 +1043,11 @@ export class PlaywrightBrowserEngine implements BrowserEnginePort {
     }
     if (!connected) {
       registry?.delete(target.ref);
-      await entry.handle.dispose().catch(() => undefined);
+      try {
+        await disposeElementHandles([entry.handle], 'Failed to dispose a detached element ref');
+      } catch (cleanupError) {
+        throw staleElementReference(target.ref, cleanupError);
+      }
       throw staleElementReference(target.ref);
     }
     return entry.handle;
@@ -1060,7 +1089,11 @@ export class PlaywrightBrowserEngine implements BrowserEnginePort {
       }
       throwIfCancelled(control.signal);
     } catch (error) {
-      await Promise.allSettled(handles.map((entry) => entry.handle.dispose()));
+      await disposeElementHandles(
+        handles.map((entry) => entry.handle),
+        'Element-ref capture and cleanup both failed',
+        error,
+      );
       throw error;
     }
     const prior = this.elementRefs.get(pageHandle.id);
@@ -1070,8 +1103,22 @@ export class PlaywrightBrowserEngine implements BrowserEnginePort {
       if (entry !== undefined) next.set(view.ref, entry);
     });
     this.elementRefs.set(pageHandle.id, next);
-    if (prior !== undefined)
-      await Promise.allSettled(Array.from(prior.values(), (entry) => entry.handle.dispose()));
+    if (prior !== undefined) {
+      try {
+        await disposeElementHandles(
+          Array.from(prior.values(), (entry) => entry.handle),
+          'Failed to dispose replaced element refs',
+        );
+      } catch (cleanupError) {
+        this.elementRefs.delete(pageHandle.id);
+        await disposeElementHandles(
+          handles.map((entry) => entry.handle),
+          'Old and replacement element-ref cleanup both failed',
+          cleanupError,
+        );
+        throw cleanupError;
+      }
+    }
     return views;
   }
 
@@ -1451,11 +1498,11 @@ function describeLocator(locator: ElementTarget): string {
   return `${locator.strategy}=${locator.value}${name}${exact}${frame}`;
 }
 
-function staleElementReference(ref: string): BrowserMeshError {
+function staleElementReference(ref: string, cause?: unknown): BrowserMeshError {
   return new BrowserMeshError(
     'STALE_ELEMENT_REFERENCE',
     'Element reference is stale; capture a new snapshot and retry',
-    { details: { ref } },
+    { details: { ref }, ...(cause === undefined ? {} : { cause }) },
   );
 }
 
@@ -1465,9 +1512,110 @@ function redactSecretValues(snapshot: string, secrets: readonly string[]): strin
     .reduce((redacted, secret) => redacted.replaceAll(secret, '[REDACTED]'), snapshot);
 }
 
-async function readPasswordValues(root: Page | FrameLocator): Promise<readonly string[]> {
-  const passwordInputs = await root.locator('input[type="password"]').all();
-  return Promise.all(passwordInputs.map((passwordInput) => passwordInput.inputValue()));
+async function enforceSnapshotSourceBudget(
+  locator: PwLocator,
+  control: OperationControl,
+): Promise<void> {
+  const observed = await locator.evaluate(
+    /* v8 ignore next -- executed in Chromium; covered by real-browser integration */
+    (root, limits) => {
+      const walker = root.ownerDocument.createTreeWalker(
+        root,
+        NodeFilter.SHOW_ELEMENT | NodeFilter.SHOW_TEXT,
+      );
+      let nodes = 0;
+      let characters = 0;
+      let current: Node | null = walker.currentNode;
+      while (current !== null) {
+        nodes += 1;
+        if (current.nodeType === Node.TEXT_NODE) characters += current.textContent?.length ?? 0;
+        else if (current instanceof Element) {
+          for (const attribute of current.attributes)
+            characters += attribute.name.length + attribute.value.length;
+        }
+        if (nodes > limits.maxNodes || characters > limits.maxChars)
+          return { exceeded: true, nodes, characters };
+        current = walker.nextNode();
+      }
+      return { exceeded: false, nodes, characters };
+    },
+    {
+      maxNodes: SNAPSHOT_LIMITS.maxSourceNodes,
+      maxChars: SNAPSHOT_LIMITS.maxSourceChars,
+    },
+    operationOptions(control),
+  );
+  if (observed.exceeded)
+    throw new BrowserMeshError(
+      'LIMIT_EXCEEDED',
+      'Snapshot source exceeds the DOM node or character capture budget',
+      {
+        details: {
+          maxSourceNodes: SNAPSHOT_LIMITS.maxSourceNodes,
+          maxSourceChars: SNAPSHOT_LIMITS.maxSourceChars,
+        },
+      },
+    );
+}
+
+async function readPasswordValues(
+  locator: PwLocator,
+  control: OperationControl,
+): Promise<readonly string[]> {
+  const observed = await locator.evaluate(
+    /* v8 ignore next -- executed in Chromium; covered by real-browser integration */
+    (root, limits) => {
+      const values: string[] = [];
+      let characters = 0;
+      const inputs = root.querySelectorAll<HTMLInputElement>('input[type="password"]');
+      if (inputs.length > limits.maxNodes) return { exceeded: true, values };
+      for (const input of inputs) {
+        characters += input.value.length;
+        if (characters > limits.maxChars) return { exceeded: true, values: [] };
+        values.push(input.value);
+      }
+      return { exceeded: false, values };
+    },
+    {
+      maxNodes: SNAPSHOT_LIMITS.maxSourceNodes,
+      maxChars: SNAPSHOT_LIMITS.maxSourceChars,
+    },
+    operationOptions(control),
+  );
+  if (observed.exceeded)
+    throw new BrowserMeshError(
+      'LIMIT_EXCEEDED',
+      'Password redaction input exceeds snapshot budget',
+    );
+  return observed.values;
+}
+
+async function disposeElementHandles(
+  handles: readonly ElementHandle[],
+  message: string,
+  primaryError?: unknown,
+): Promise<void> {
+  const settled = await Promise.allSettled(handles.map((handle) => handle.dispose()));
+  const failures = settled.flatMap((result) =>
+    result.status === 'rejected' ? [result.reason as unknown] : [],
+  );
+  if (failures.length === 0) return;
+  throw new BrowserMeshError('BROWSER_ERROR', message, {
+    cause: new AggregateError(
+      primaryError === undefined ? failures : [primaryError, ...failures],
+      message,
+    ),
+  });
+}
+
+function operationOptions(control: OperationControl): {
+  readonly timeout: number;
+  readonly signal?: AbortSignal;
+} {
+  return {
+    timeout: remainingOperationTime(control),
+    ...(control.signal === undefined ? {} : { signal: control.signal }),
+  };
 }
 
 function errorMessage(error: unknown): string {

@@ -470,9 +470,10 @@ BrowserMesh does not allow the caller to specify an arbitrary local output path.
 
 This avoids arbitrary filesystem overwrite behavior in v0.1.
 
-The runtime owns screenshot budgets. The browser adapter reports CSS-pixel dimensions before capture;
-the runtime rejects oversized work, then validates actual PNG dimensions and encoded bytes after
-capture. Both checks remain inside the addressed session queue. Visible-text reads use the same queue
+The runtime owns screenshot budgets. The browser adapter reports an immutable CSS-pixel capture
+plan before capture; full-page and element screenshots use that fixed clip even if layout grows
+after measurement. The runtime rejects oversized work, then validates actual PNG dimensions and
+encoded bytes after capture. Both checks remain inside the addressed session queue. Visible-text reads use the same queue
 and are truncated at safe Unicode/UTF-8 boundaries with explicit result metadata.
 
 ## Neutral label boundaries
@@ -554,7 +555,9 @@ statically reviewed metadata and never runtime authorization. MCP handlers trans
 cancellation to an engine-independent operation signal and runtime-owned deadline before crossing
 inward. The deadline is absolute from acceptance: after a queue wait, the runtime rejects an
 expired operation before resolving its page handle or touching the engine. Adapter waits/actions
-use only the remaining budget.
+use only the remaining budget. Navigation, history, screenshot, title, load-state, and capture
+preflight calls pass that remaining budget and request signal through supported public Playwright
+options; no later adapter step receives a renewed full timeout.
 
 Passive waits and atomic action/wait composites are application operations occupying one session
 queue slot. Engine ports expose typed conditions/actions and cancellation; they do not expose
@@ -593,7 +596,8 @@ EventSource but excluding service-worker traffic, WebSockets, `data:` and `blob:
 Snapshot bounds, context settings, and new actions are engine-independent value contracts. The
 runtime owns snapshot-content character/UTF-8 limits and explicit partial metadata; the adapter
 uses only documented engine controls for semantic scope, depth, bounding boxes, timeout, and
-cancellation. Truncated ARIA YAML is identified as a fragment rather than a complete document.
+cancellation. Before native ARIA materialization it performs a bounded cancellable source walk
+with independent node and character ceilings. Truncated ARIA YAML is identified as a fragment rather than a complete document.
 The runtime parses documented ARIA YAML with a conforming parser before applying engine-neutral
 interactive filtering and per-node child limits. Cursor pages are served from a bounded immutable
 per-page serialization (four entries, 30-second TTL, 1,000,000-code-point source cap), so ordinary
@@ -631,6 +635,8 @@ bounded hints. Capture and use remain inside the owning session queue. Main-fram
 all page/context/browser teardown paths clear the page registry; resolution also verifies expiry
 and same-document connectivity before an action. Capture replaces prior refs atomically after a
 successful, non-cancelled enumeration and releases partial results on failure.
+Explicit element-handle disposal failures are aggregated and surfaced; stale refs retain their
+recoverable public code while keeping private cleanup causes inside the adapter.
 
 ADR 0014 extends the engine-neutral `Locator` value with an optional main-document or bounded
 outer-to-inner iframe selector chain. The Playwright adapter alone converts each selector to a

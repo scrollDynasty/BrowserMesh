@@ -472,7 +472,7 @@ export function createMcpServer(runtime: BrowserMeshRuntime): McpServer {
     {
       ...contractFor('browser_snapshot'),
       description:
-        'Inspect a bounded accessibility-oriented snapshot of one explicitly addressed page, optionally scoped by a locator including a bounded semantic iframe chain. Use interactiveOnly to retain interactive nodes with ancestor context and maxChildren to limit every node after filtering. A nextCursor continues the immutable captured serialization without rereading a changed DOM; cursors are page-scoped, expire after 30 seconds, and become stale on navigation or close. Semantic scope, depth, boxes, character/byte bounds, omissions, and truncation are explicit; partial content is aria-yaml-fragment. Non-empty password-input values are redacted before content crosses MCP. Optional 30-second element refs are separate short-lived action conveniences.',
+        'Inspect a bounded accessibility-oriented snapshot of one explicitly addressed page, optionally scoped by a locator including a bounded semantic iframe chain. BrowserMesh rejects oversized DOM sources before native ARIA serialization. Use interactiveOnly to retain interactive nodes with ancestor context and maxChildren to limit every node after filtering. A nextCursor continues the immutable captured serialization without rereading a changed DOM; cursors are page-scoped, expire after 30 seconds, and become stale on navigation or close. Semantic scope, depth, boxes, character/byte bounds, omissions, and truncation are explicit; partial content is aria-yaml-fragment. Non-empty password-input values are redacted before content crosses MCP. Optional 30-second element refs are separate short-lived action conveniences.',
       inputSchema: snapshotInputSchema,
     },
     (input, extra) =>
@@ -796,7 +796,7 @@ export function createMcpServer(runtime: BrowserMeshRuntime): McpServer {
     {
       ...contractFor('browser_screenshot'),
       description:
-        'Capture an in-memory PNG screenshot of one explicitly addressed page, either as the viewport/full page or one semantic element optionally reached through a bounded iframe chain. BrowserMesh returns image content and does not write to a caller-controlled path or inspect another session.',
+        'Capture a bounded in-memory PNG screenshot of one explicitly addressed page, either as the viewport/full page or one semantic element optionally reached through a bounded iframe chain. Full-page and element capture use an immutable measured CSS-pixel clip plus encoded-byte validation. BrowserMesh returns image content and does not write to a caller-controlled path or inspect another session.',
       inputSchema: { ...targetSchema, capture: screenshotCaptureSchema },
     },
     async (input, extra) => {

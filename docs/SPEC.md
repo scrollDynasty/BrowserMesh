@@ -302,7 +302,9 @@ This includes MCP operations for:
 
 ### 6.5 Timeouts
 
-Potentially blocking browser operations have bounded timeouts.
+Potentially blocking browser operations have one absolute bounded timeout beginning when the
+runtime accepts the operation. Queue wait and every later adapter step consume that same budget;
+an adapter must never pass the original full timeout after part of the deadline has elapsed.
 
 Timeout behavior is:
 
@@ -711,7 +713,9 @@ Configuration is validated centrally.
 
 Visible text is truncated on Unicode code-point and UTF-8 boundaries and returns explicit original,
 returned, and applied-bound metadata. Screenshots are measured before capture and validated again
-from the returned PNG. Dimension, pixel, or encoded-byte overflow returns `LIMIT_EXCEEDED`; the
+from the returned PNG. Page and element capture use the immutable measured CSS-pixel clip, so DOM
+growth after preflight cannot expand native screenshot work. Dimension, pixel, or encoded-byte
+overflow returns `LIMIT_EXCEEDED`; the
 per-session queue remains usable afterward.
 
 MCP negotiation and tool discovery do not depend on a successful Chromium launch. A missing
@@ -1127,6 +1131,9 @@ snapshot. Interactive filtering retains matching nodes plus their minimum ancest
 an immutable bounded serialization, never reread the live DOM, expire after 30 seconds, retain at
 most four captures per page, and reject expired, evicted, cross-page/session, navigated, or closed
 state with `STALE_SNAPSHOT_CURSOR`. No undocumented browser-engine references are used.
+Before the native ARIA snapshot call, the adapter also performs a deadline-bound source preflight
+and rejects a scope over 20,000 DOM/text nodes or 2,000,000 source characters. This pre-capture
+budget is separate from response and retained-cursor limits.
 
 The element-reference slice follows ADR 0013. `browser_snapshot` may return at most 100
 adapter-generated interactive-element refs in a separate bounded metadata array. Refs expire after

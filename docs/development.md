@@ -13,6 +13,10 @@ The project targets:
 - the Playwright version pinned by the repository;
 - Chromium as the v0.1 browser engine.
 
+The production `playwright` dependency must be an exact `x.y.z` version, not a semver range. The
+same exact value is recorded in the lockfile and verified by release-contract tests so one
+BrowserMesh release always selects one Playwright/Chromium compatibility pair.
+
 Do not automatically migrate major dependency versions during unrelated implementation work.
 
 A major tooling/runtime migration should be handled as an explicit compatibility task with full verification.
