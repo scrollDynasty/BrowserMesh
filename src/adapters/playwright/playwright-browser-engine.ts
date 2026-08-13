@@ -1072,6 +1072,7 @@ export class PlaywrightBrowserEngine implements BrowserEnginePort {
       if (error instanceof BrowserMeshError) throw error;
       if (isCancellation(error)) throw error;
       const timedOut = error instanceof Error && error.name === 'TimeoutError';
+      if ('ref' in locator && !timedOut) throw staleElementReference(locator.ref);
       const ambiguous = isStrictModeViolation(error);
       const cause = errorMessage(error);
       const locatorDescription = describeLocator(locator);
