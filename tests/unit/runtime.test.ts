@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { FakeEngine, testRuntime } from '../support/fakes.js';
+import type { BrowserContextSettingsInput } from '../../src/domain/context-settings.js';
 
 describe('BrowserMeshRuntime', () => {
   it('registers popup handles as non-default managed pages and closes overflow popups', async () => {
@@ -63,6 +64,8 @@ describe('BrowserMeshRuntime', () => {
       colorScheme: 'dark',
       reducedMotion: 'reduce',
       userAgent: 'BrowserMesh test agent',
+      geolocation: { latitude: 41.3111, longitude: 69.2797, accuracy: 25 },
+      permissions: [{ permission: 'geolocation', origin: 'HTTPS://Example.COM:443/' }],
     } as const;
     const first = await runtime.createSession({ contextSettings: supplied });
     const second = await runtime.createSession({ contextSettings: { locale: 'fr-FR' } });
@@ -70,6 +73,7 @@ describe('BrowserMeshRuntime', () => {
       ...supplied,
       locale: 'en-US',
       timezoneId: 'UTC',
+      permissions: [{ permission: 'geolocation', origin: 'https://example.com' }],
     });
     expect(second.value.contextSettings).toEqual({ locale: 'fr-FR' });
     expect(Array.from(engine.contexts.values(), ({ settings }) => settings)).toEqual([
@@ -85,13 +89,41 @@ describe('BrowserMeshRuntime', () => {
 
   it('rejects unsafe context settings before creating browser resources', async () => {
     const { runtime, engine } = testRuntime();
-    for (const contextSettings of [
+    const invalidSettings: BrowserContextSettingsInput[] = [
       { viewport: { width: 0, height: 600 } },
       { deviceScaleFactor: Number.POSITIVE_INFINITY },
       { locale: 'not_a_locale' },
       { timezoneId: 'Mars/Olympus' },
       { userAgent: 'unsafe\nheader' },
-    ]) {
+      { geolocation: { latitude: 91, longitude: 0 } },
+      { geolocation: { latitude: 0, longitude: -181 } },
+      { geolocation: { latitude: 0, longitude: 0, accuracy: -1 } },
+      {
+        geolocation: { latitude: 0, longitude: 0 },
+        permissions: [{ permission: 'geolocation', origin: '*' }],
+      },
+      {
+        geolocation: { latitude: 0, longitude: 0 },
+        permissions: [{ permission: 'geolocation', origin: 'https://example.com/path' }],
+      },
+      {
+        geolocation: { latitude: 0, longitude: 0 },
+        permissions: [{ permission: 'geolocation', origin: 'https://user@example.com' }],
+      },
+      {
+        geolocation: { latitude: 0, longitude: 0 },
+        permissions: [{ permission: 'camera', origin: 'https://example.com' }],
+      },
+      {
+        geolocation: { latitude: 0, longitude: 0 },
+        permissions: [
+          { permission: 'geolocation', origin: 'https://example.com' },
+          { permission: 'geolocation', origin: 'HTTPS://EXAMPLE.COM:443/' },
+        ],
+      },
+      { permissions: [{ permission: 'geolocation', origin: 'https://example.com' }] },
+    ];
+    for (const contextSettings of invalidSettings) {
       await expect(runtime.createSession({ contextSettings })).rejects.toMatchObject({
         code: 'INVALID_ARGUMENT',
       });

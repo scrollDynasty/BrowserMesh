@@ -575,6 +575,13 @@ schema duplicates basic bounds for early feedback, while runtime validation rema
 for direct API callers. Saved storage state and context settings are orthogonal: restoring storage
 does not persist or override the newly requested context profile.
 
+ADR 0016 adds only an origin-scoped geolocation permission. The domain contract canonicalizes and
+validates explicit HTTP(S) origins and rejects every other permission before context creation. The
+Playwright adapter removes permission descriptors from context options, creates the isolated
+context with its validated geolocation, then grants `geolocation` per origin. A cancellation or
+grant failure closes the unregistered context. Context close is the permission revocation and
+cleanup boundary; there is no process-global permission registry.
+
 Typed hover, focus, check, uncheck, double-click, and scroll-into-view follow that boundary: MCP
 validates a semantic locator, runtime routes through the addressed session queue, and only the
 Playwright adapter resolves and acts on the concrete locator. Queued cancellation never reaches the
