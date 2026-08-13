@@ -738,7 +738,7 @@ export class PlaywrightBrowserEngine implements BrowserEnginePort {
           const box = await (
             await this.locate(page, screenshotLocator, control)
           ).boundingBox({
-            timeout: remainingMs(control.deadlineAt),
+            timeout: remainingOperationTime(control),
           });
           if (box === null)
             throw new BrowserMeshError('ELEMENT_NOT_FOUND', 'Screenshot element has no box');
