@@ -3,6 +3,7 @@ import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
 import { createMcpServer } from '../../src/adapters/mcp/server.js';
+import { BROWSERMESH_VERSION } from '../../src/infrastructure/generated/version.js';
 import { testRuntime } from '../support/fakes.js';
 
 describe('MCP adapter', () => {
@@ -12,6 +13,10 @@ describe('MCP adapter', () => {
     const client = new Client({ name: 'test-client', version: '1.0.0' });
     const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
     await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
+    expect(client.getServerVersion()).toEqual({
+      name: 'browsermesh',
+      version: BROWSERMESH_VERSION,
+    });
     const tools = await client.listTools();
     expect(tools.tools.map(({ name }) => name).sort()).toEqual(expectedToolNames);
     expect(tools.tools.every(({ description }) => (description?.length ?? 0) > 40)).toBe(true);

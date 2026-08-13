@@ -58,6 +58,9 @@ async function main(): Promise<void> {
   let transport: StdioClientTransport | undefined;
   let webServer: PackageTestServer | undefined;
   try {
+    const registryManifest = z
+      .object({ version: z.string().min(1) })
+      .parse(JSON.parse(await readFile(join(process.cwd(), 'server.json'), 'utf8')));
     const packOutput = await execFileAsync(
       process.execPath,
       [npmCli, 'pack', '--json', '--pack-destination', temporaryRoot],
@@ -107,9 +110,12 @@ async function main(): Promise<void> {
     );
 
     const installedRoot = join(consumerDirectory, 'node_modules', packageName);
-    installedManifestSchema.parse(
+    const installedManifest = installedManifestSchema.parse(
       JSON.parse(await readFile(join(installedRoot, 'package.json'), 'utf8')),
     );
+    if (installedManifest.version !== registryManifest.version) {
+      throw new Error('Installed package version does not match server.json');
+    }
     const binPath = join(
       consumerDirectory,
       'node_modules',
@@ -138,6 +144,10 @@ async function main(): Promise<void> {
     });
     client = new Client({ name: 'browsermesh-package-verifier', version: '1.0.0' });
     await client.connect(transport);
+    const serverInfo = client.getServerVersion();
+    if (serverInfo?.name !== 'browsermesh' || serverInfo.version !== installedManifest.version) {
+      throw new Error('Packaged MCP serverInfo does not match the installed package version');
+    }
     const tools = await client.listTools();
     if (!tools.tools.some(({ name }) => name === 'browser_session_create')) {
       throw new Error('Packaged MCP server did not expose browser_session_create');

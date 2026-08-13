@@ -36,14 +36,14 @@ pending and does not retroactively make the baseline incomplete.
 
 ## Professional MCP improvement program
 
-| Milestone                                              | Status                                                           | Contract |
-| ------------------------------------------------------ | ---------------------------------------------------------------- | -------- |
-| Version chain, headless config, runtime info, doctor   | Headless config complete; version/runtime info/doctor pending    | ADR 0007 |
-| Structured MCP output, annotations, cancellation       | Accepted; pending implementation                                 | ADR 0008 |
-| Passive waits and atomic action/wait                   | Accepted; pending implementation                                 | ADR 0009 |
-| Bounded redacted browser observability                 | Accepted; pending implementation                                 | ADR 0010 |
-| Bounded snapshots, context options, typed interactions | Accepted; pending implementation                                 | ADR 0011 |
-| Filesystem-backed artifacts                            | Design gate accepted; capability ADR and implementation deferred | ADR 0012 |
+| Milestone                                              | Status                                                                                         | Contract |
+| ------------------------------------------------------ | ---------------------------------------------------------------------------------------------- | -------- |
+| Version chain, headless config, runtime info, doctor   | Partial: immutable version chain and headless config complete; runtime info and doctor pending | ADR 0007 |
+| Structured MCP output, annotations, cancellation       | Accepted; pending implementation                                                               | ADR 0008 |
+| Passive waits and atomic action/wait                   | Accepted; pending implementation                                                               | ADR 0009 |
+| Bounded redacted browser observability                 | Accepted; pending implementation                                                               | ADR 0010 |
+| Bounded snapshots, context options, typed interactions | Accepted; pending implementation                                                               | ADR 0011 |
+| Filesystem-backed artifacts                            | Design gate accepted; capability ADR and implementation deferred                               | ADR 0012 |
 
 Remote HTTP/multi-client security and internal agent orchestration are not part of the accepted
 implementation program. The latter remains a separate external layer.
@@ -69,6 +69,14 @@ User → external AI client → MCP → BrowserMesh → isolated browser session
 ```
 
 ## Verification
+
+BM-VERSION-001 implementation evidence:
+
+- MCP `serverInfo.version` uses a generated immutable constant sourced from package metadata.
+- Package, generated module, `server.json`, release automation, source/in-memory and stdio
+  handshakes, and installed-tarball handshake are verified as one exact version chain.
+- Production runtime performs no working-directory discovery or package metadata reads for version
+  reporting.
 
 Baseline audit before accepting the improvement plan:
 
