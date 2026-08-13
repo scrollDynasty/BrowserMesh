@@ -53,6 +53,31 @@ export function createMcpServer(runtime: BrowserMeshRuntime): McpServer {
   const server = new McpServer({ name: 'browsermesh', version: BROWSERMESH_VERSION });
 
   server.registerTool(
+    'browser_runtime_info',
+    {
+      ...contractFor('browser_runtime_info'),
+      description:
+        'Report bounded, read-only BrowserMesh version, launch state, effective configuration, and session counts without launching Chromium. Use this to diagnose setup and capacity safely; it never returns paths, launch arguments, environment values, browser state, or raw errors.',
+    },
+    () => {
+      try {
+        const info = runtime.runtimeInfo();
+        return {
+          structuredContent: { ...info },
+          content: [
+            {
+              type: 'text',
+              text: `BrowserMesh ${info.serverVersion}; Chromium ${info.browserLaunchState}; ${String(info.activeSessions)} active and ${String(info.failedSessions)} failed sessions.`,
+            },
+          ],
+        };
+      } catch (error) {
+        return applicationErrorResult(error);
+      }
+    },
+  );
+
+  server.registerTool(
     'browser_session_create',
     {
       ...contractFor('browser_session_create'),

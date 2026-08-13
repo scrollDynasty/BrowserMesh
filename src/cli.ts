@@ -1,14 +1,51 @@
 #!/usr/bin/env node
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
+import { FileSystemDataDirectoryProbe } from './adapters/diagnostics/data-directory-probe.js';
 import { createMcpServer } from './adapters/mcp/server.js';
+import { PlaywrightBrowserEngine } from './adapters/playwright/playwright-browser-engine.js';
+import { runDoctor, type DoctorResult } from './application/doctor.js';
 import { createRuntime } from './create-runtime.js';
-import { loadConfig } from './infrastructure/config.js';
+import { loadConfig, type BrowserMeshConfig } from './infrastructure/config.js';
+import { BROWSERMESH_VERSION } from './infrastructure/generated/version.js';
 import { installChromium } from './install-browser.js';
 
-if (process.argv.slice(2).includes('--install-browser')) {
+const USAGE = 'Usage: browsermesh [--install-browser | --doctor --json]';
+const args = process.argv.slice(2);
+
+if (args.length === 0) {
+  await serveMcp(loadConfig());
+} else if (args.length === 1 && args[0] === '--install-browser') {
   await installChromium();
+} else if (args.length === 2 && args[0] === '--doctor' && args[1] === '--json') {
+  const result = await doctor(loadConfig());
+  process.stdout.write(`${JSON.stringify(result)}\n`);
+  if (result.status === 'failed') process.exitCode = 1;
 } else {
-  const runtime = createRuntime(loadConfig());
+  process.stderr.write(`${USAGE}\n`);
+  process.exitCode = 2;
+}
+
+async function doctor(config: BrowserMeshConfig): Promise<DoctorResult> {
+  const runtime = createRuntime(config);
+  const runtimeVersion = runtime.runtimeInfo().serverVersion;
+  await runtime.shutdown();
+  return runDoctor({
+    engine: new PlaywrightBrowserEngine({
+      headless: config.headless,
+      timeoutMs: config.defaultTimeoutMs,
+    }),
+    dataDirectory: new FileSystemDataDirectoryProbe(config.dataDirectory),
+    nodeVersion: process.versions.node,
+    minimumNodeMajor: 22,
+    packageVersion: BROWSERMESH_VERSION,
+    runtimeVersion,
+    operationTimeoutMs: config.defaultTimeoutMs,
+    overallTimeoutMs: Math.min(300_000, Math.max(15_000, config.defaultTimeoutMs * 3)),
+  });
+}
+
+async function serveMcp(config: BrowserMeshConfig): Promise<void> {
+  const runtime = createRuntime(config);
   const server = createMcpServer(runtime);
   let stopping = false;
 

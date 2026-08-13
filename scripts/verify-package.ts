@@ -32,6 +32,26 @@ const structuredResultSchema = z
     operationId: z.string().min(1),
   })
   .catchall(z.unknown());
+const doctorCheckIds = [
+  'node-version',
+  'version-consistency',
+  'data-directory-access',
+  'chromium-executable',
+  'browser-smoke',
+] as const;
+const doctorResultSchema = z.object({
+  schemaVersion: z.literal('1'),
+  status: z.literal('passed'),
+  checks: z.array(
+    z.object({
+      id: z.enum(doctorCheckIds),
+      status: z.literal('passed'),
+      code: z.string().min(1),
+      message: z.string().max(256),
+      remediation: z.null(),
+    }),
+  ),
+});
 const installedManifestSchema = z.object({
   name: z.literal(packageName),
   version: z.string().min(1),
@@ -124,6 +144,21 @@ async function main(): Promise<void> {
       cwd: consumerDirectory,
       maxBuffer: 10 * 1024 * 1024,
     });
+    const doctor = await execFileAsync(process.execPath, [installedCliPath, '--doctor', '--json'], {
+      cwd: consumerDirectory,
+      env: {
+        ...getDefaultEnvironment(),
+        BROWSERMESH_LOG_LEVEL: 'silent',
+        BROWSERMESH_HEADLESS: 'true',
+        BROWSERMESH_DATA_DIR: join(consumerDirectory, '.browsermesh-doctor'),
+      },
+      timeout: 45_000,
+      maxBuffer: 10 * 1024 * 1024,
+    });
+    const doctorResult = doctorResultSchema.parse(JSON.parse(doctor.stdout));
+    if (doctorResult.checks.map(({ id }) => id).join(',') !== doctorCheckIds.join(',')) {
+      throw new Error('Packaged doctor check IDs or ordering changed');
+    }
     transport = new StdioClientTransport({
       command: process.platform === 'win32' ? process.execPath : binPath,
       ...(process.platform === 'win32' ? { args: [installedCliPath] } : {}),
@@ -155,6 +190,35 @@ async function main(): Promise<void> {
     ) {
       throw new Error('Packaged MCP tool discovery omitted a title or object outputSchema');
     }
+    const runtimeInfo = z
+      .object({ structuredContent: z.unknown(), isError: z.boolean().optional() })
+      .parse(await client.callTool({ name: 'browser_runtime_info', arguments: {} }));
+    if (runtimeInfo.isError === true) throw new Error('Packaged runtime info returned an error');
+    const installedPlaywright = z
+      .object({ version: z.string().min(1) })
+      .parse(
+        JSON.parse(
+          await readFile(
+            join(consumerDirectory, 'node_modules', 'playwright', 'package.json'),
+            'utf8',
+          ),
+        ),
+      );
+    z.object({
+      serverVersion: z.literal(installedManifest.version),
+      nodeVersion: z.literal(process.versions.node),
+      playwrightVersion: z.literal(installedPlaywright.version),
+      browserProduct: z.literal('chromium'),
+      browserVersion: z.null(),
+      browserLaunchState: z.literal('not_started'),
+      headless: z.boolean(),
+      persistenceEnabled: z.boolean(),
+      defaultTimeoutMs: z.number().positive(),
+      maxSessions: z.number().positive(),
+      maxPagesPerSession: z.number().positive(),
+      activeSessions: z.literal(0),
+      failedSessions: z.literal(0),
+    }).parse(runtimeInfo.structuredContent);
     const created = await client.callTool({
       name: 'browser_session_create',
       arguments: { name: 'package-smoke' },
