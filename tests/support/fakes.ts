@@ -4,6 +4,7 @@ import type {
   BrowserEngineActionWaitEvent,
   BrowserPageHandle,
   BrowserObservation,
+  ScreenshotCapturePlan,
 } from '../../src/application/ports/browser-engine.js';
 import type { EventSinkPort, RuntimeEvent } from '../../src/application/ports/events.js';
 import type {
@@ -240,7 +241,7 @@ export class FakeEngine implements BrowserEnginePort {
   async visibleText(_page: BrowserPageHandle, locator: Locator): Promise<string> {
     return locator.value;
   }
-  async screenshotDimensions(): Promise<{ readonly width: number; readonly height: number }> {
+  async screenshotDimensions(): Promise<ScreenshotCapturePlan> {
     return { width: 1, height: 1 };
   }
   async screenshot(): Promise<Uint8Array> {

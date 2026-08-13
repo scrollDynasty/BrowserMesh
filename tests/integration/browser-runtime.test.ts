@@ -145,6 +145,24 @@ describe('real Chromium runtime', () => {
     expect((await runtime.getTitle(target)).value).toBe('Delay second');
   });
 
+  it('spends one absolute navigation deadline across queue wait and Playwright', async () => {
+    const target = await createTarget();
+    const blocking = runtime.navigate(
+      { ...target, timeoutMs: 1_000 },
+      `${web.baseUrl}/delay?ms=200&value=blocking-deadline`,
+    );
+    const expired = runtime.navigate(
+      { ...target, timeoutMs: 250 },
+      `${web.baseUrl}/delay?ms=100&value=must-time-out`,
+    );
+
+    await blocking;
+    await expect(expired).rejects.toMatchObject({ code: 'OPERATION_TIMEOUT' });
+    await runtime.navigate(target, `${web.baseUrl}/delay?ms=0&value=deadline-recovery`);
+    await new Promise<void>((resolve) => setTimeout(resolve, 150));
+    expect((await runtime.getTitle(target)).value).toBe('Delay deadline-recovery');
+  });
+
   it('restores cookies and localStorage from a logical stateId', async () => {
     const original = await createTarget();
     await runtime.navigate(original, `${web.baseUrl}/?value=restored`);

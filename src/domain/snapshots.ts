@@ -13,6 +13,8 @@ export const SNAPSHOT_LIMITS = {
   maxRefs: 100,
   maxChildren: 1_000,
   retainedChars: 1_000_000,
+  maxSourceNodes: 20_000,
+  maxSourceChars: 2_000_000,
   retainedSnapshotsPerPage: 4,
   cursorTtlMs: 30_000,
 } as const;

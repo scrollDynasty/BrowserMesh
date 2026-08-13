@@ -36,6 +36,7 @@ blocker, critical, or high-severity defect remaining in v0.1 scope.
 | Immutable bounded snapshot-tree pagination                            | Complete                                                                         | ADR 0015                              |
 | Origin-scoped geolocation permissions                                 | Complete                                                                         | ADR 0016                              |
 | Runtime-authoritative resource budgets                                | Complete                                                                         | ADR 0017                              |
+| Absolute deadlines, immutable capture plans, exact engine dependency  | Complete                                                                         | ADR 0018                              |
 | Stable public browser-failure classification and redacted context     | Complete; final hardening                                                        | SPEC §13, architecture error contract |
 
 Remote HTTP/multi-client security, filesystem-backed artifacts, and internal agent orchestration are
@@ -112,6 +113,13 @@ deferred scope. They are not missing parts of the accepted program.
   coverage, CodeQL/dependency review, and Linux/Windows installed-package smoke.
 
 ## Verification checkpoint
+
+- ADR 0018 final-audit hardening passes `npm run verify` with 28 test files and 175 tests
+  (90.44% statements, 80.75% branches, 95.85% functions, 92.67% lines), including real-Chromium
+  regressions for a partially consumed queue deadline, immutable screenshot capture after page
+  growth, pre-ARIA source rejection, surfaced element-ref cleanup failure, and exact Playwright
+  package/lock consistency. E2E, stress, and `BROWSERMESH_HEADLESS=true npm run verify:package`
+  also pass.
 
 - An independent clean detached worktree audit of `origin/master` at `5470967` used Node 22.22.3
   and npm 10.9.8. `npm ci` installed 240 packages with zero reported vulnerabilities. The exact

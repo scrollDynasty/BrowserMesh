@@ -615,6 +615,10 @@ Additional observability tests:
 
 ## 15. Definition of done for the improvement program
 
+The post-completion regression audit is closed by ADR 0018: all adapter steps consume one absolute
+deadline, screenshot capture uses an immutable measured clip, native ARIA capture has an independent
+source preflight, element-ref cleanup failures are surfaced, and Playwright is pinned exactly.
+
 The program is complete only when:
 
 - installed artifact and MCP runtime report the same exact version;
@@ -624,6 +628,9 @@ The program is complete only when:
 - console, page errors, and failed HTTP metadata are safely observable;
 - tool results use validated structured MCP output;
 - large snapshots and event streams are bounded and paginated;
+- queue wait and every adapter step consume one absolute operation deadline;
+- browser-side snapshot/screenshot work is preflight-bounded before native serialization;
+- the selected BrowserMesh release pins one exact Playwright dependency version;
 - session isolation remains intact under all new capabilities;
 - no new secret, arbitrary filesystem, or raw Playwright exposure is introduced;
 - all listeners, buffers, contexts, pages, processes, and artifacts are cleaned up;

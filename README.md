@@ -92,7 +92,7 @@ For tasks involving multiple users, accounts, roles, or authentication states, t
 Once the npm package is published, the expected MCP configuration will use the package executable directly.
 
 Install the Playwright-managed Chromium build once before starting BrowserMesh. This command uses
-the exact Playwright version bundled with the selected BrowserMesh package:
+the exact Playwright dependency pinned by the selected BrowserMesh package:
 
 ```sh
 npx -y multi-agent-browser-mcp --install-browser
@@ -331,6 +331,9 @@ ref snapshot. A non-null `nextCursor` continues the same immutable captured seri
 rereading a changed DOM. Cursors are scoped to the exact session/page, expire after 30 seconds, and
 become stale after navigation, page close, quota eviction, or shutdown. At most four paginated
 snapshots and 1,000,000 Unicode code points per captured snapshot are retained per page.
+Before native ARIA serialization, BrowserMesh also rejects a scope exceeding 20,000 DOM/text nodes
+or 2,000,000 source characters. This pre-capture budget limits browser-side work independently of
+the smaller per-response and retained-cursor bounds.
 
 ### Observability
 

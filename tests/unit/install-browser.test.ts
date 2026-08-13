@@ -5,7 +5,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { installChromium, type InstallerSpawn } from '../../src/install-browser.js';
 
 describe('Chromium installer command', () => {
-  it('uses the CLI belonging to the bundled Playwright package', async () => {
+  it('uses the CLI belonging to the exactly pinned Playwright dependency', async () => {
     const child = new EventEmitter();
     const spawnProcess = vi.fn<InstallerSpawn>(() => child);
     const packageJsonPath = join(process.cwd(), 'node_modules', 'playwright', 'package.json');
