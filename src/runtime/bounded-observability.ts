@@ -83,6 +83,7 @@ export class BoundedObservationStore {
     const gap = since > 0 && since < oldest - 1;
     const selected: ObservationEvent[] = [];
     let nextCursor: string | null = input.sinceEventId ?? null;
+    const responseBudget = Math.max(0, this.limits.maxResponseBytes - 512);
     for (const event of this.events) {
       if (event.sequence <= since || event.kind !== input.kind) continue;
       const view: ObservationEvent = {
@@ -94,13 +95,18 @@ export class BoundedObservationStore {
         ...(event.level === undefined ? {} : { level: event.level }),
         ...(input.includeText === true ? { text: event.text } : {}),
       };
-      const candidate = [...selected, view];
-      if (
-        Buffer.byteLength(JSON.stringify(candidate), 'utf8') >
-        Math.max(0, this.limits.maxResponseBytes - 512)
-      )
-        break;
-      selected.push(view);
+      let boundedView = view;
+      if (serializedBytes([...selected, boundedView]) > responseBudget) {
+        if (selected.length > 0) break;
+        const fitted = fitSingleEvent(boundedView, responseBudget);
+        if (fitted === null)
+          throw new BrowserMeshError(
+            'LIMIT_EXCEEDED',
+            'Observability event metadata exceeds the configured response byte limit',
+          );
+        boundedView = fitted;
+      }
+      selected.push(boundedView);
       nextCursor = event.eventId;
       if (selected.length >= requestedLimit) break;
     }
@@ -120,6 +126,36 @@ export class BoundedObservationStore {
       throw new BrowserMeshError('INVALID_ARGUMENT', 'sinceEventId is not a valid event cursor');
     return sequence;
   }
+}
+
+function fitSingleEvent(event: ObservationEvent, maximumBytes: number): ObservationEvent | null {
+  if (serializedBytes([event]) <= maximumBytes) return event;
+  if (event.text === undefined) return null;
+  const characters = Array.from(event.text);
+  let lower = 0;
+  let upper = characters.length;
+  let best: ObservationEvent | null = null;
+  while (lower <= upper) {
+    const length = Math.floor((lower + upper) / 2);
+    const text =
+      length === 0
+        ? ''
+        : length >= characters.length
+          ? event.text
+          : `${characters.slice(0, length - 1).join('')}…`;
+    const candidate = { ...event, text };
+    if (serializedBytes([candidate]) <= maximumBytes) {
+      best = candidate;
+      lower = length + 1;
+    } else {
+      upper = length - 1;
+    }
+  }
+  return best;
+}
+
+function serializedBytes(value: unknown): number {
+  return Buffer.byteLength(JSON.stringify(value), 'utf8');
 }
 
 function redactAndBound(value: string, maximum: number): string {

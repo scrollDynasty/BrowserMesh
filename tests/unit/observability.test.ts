@@ -80,6 +80,38 @@ describe('bounded browser observability', () => {
     await runtime.shutdown();
   });
 
+  it('truncates an oversized first event and advances its cursor without livelock', async () => {
+    const { runtime, engine } = testRuntime(undefined, {
+      observability: {
+        maxEventsPerPage: 2,
+        maxStringLength: 8_192,
+        maxPageSize: 2,
+        maxResponseBytes: 1_024,
+      },
+    });
+    const created = await runtime.createSession();
+    const handle = required(Array.from(engine.pages.values())[0]);
+    engine.emitObservation(handle, {
+      kind: 'console',
+      level: 'error',
+      text: `token=unsafe ${'x'.repeat(8_000)}`,
+    });
+
+    const first = await runtime.listConsole(created, { includeText: true });
+    expect(first.value.events).toHaveLength(1);
+    expect(first.value.nextCursor).toBe(first.value.events[0]?.eventId);
+    expect(first.value.events[0]?.text).not.toContain('unsafe');
+    expect(first.value.events[0]?.text?.endsWith('…')).toBe(true);
+    expect(Buffer.byteLength(JSON.stringify(first), 'utf8')).toBeLessThanOrEqual(1_024);
+    const after = await runtime.listConsole(created, {
+      includeText: true,
+      sinceEventId: required(first.value.nextCursor),
+    });
+    expect(after.value.events).toEqual([]);
+    expect(after.value.nextCursor).toBe(first.value.nextCursor);
+    await runtime.shutdown();
+  });
+
   it('separates page errors and detaches every listener on lifecycle cleanup', async () => {
     const { runtime, engine } = testRuntime();
     const first = await runtime.createSession();

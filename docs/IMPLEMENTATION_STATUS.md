@@ -125,7 +125,7 @@ Latest post-v0.1 slice verification:
   cursors, metadata-only defaults, explicit bounded/redacted text, overflow gap/drop accounting,
   and structured `browser_console_list` / `browser_page_errors_list` MCP tools. Network and failed
   request collectors remain pending as a focused follow-up slice.
-- Observability slice `npm run verify`: passed (21 files, 86 tests, coverage thresholds, lint,
+- Observability slice `npm run verify`: passed (21 files, 87 tests, coverage thresholds, lint,
   format, typecheck, and build). `BROWSERMESH_HEADLESS=true npm run verify:package`: passed,
   including installed-tarball MCP discovery and real-Chromium lifecycle smoke.
 

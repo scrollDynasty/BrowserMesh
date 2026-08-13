@@ -318,7 +318,9 @@ A completely unknown session ID still returns `SESSION_NOT_FOUND`.
 Both tools require an explicit `sessionId` and `pageId`. Reads are metadata-only by default; set
 `includeText=true` for bounded, best-effort-redacted evidence. Use `nextCursor` as the next
 non-destructive `sinceEventId` checkpoint. Always inspect `gap` and `droppedCount` before concluding
-that an event was absent. BrowserMesh never captures console argument objects or raw error stacks.
+that an event was absent. Text may be truncated further to satisfy the total response-byte limit;
+the event and its cursor are still returned so pagination cannot stall. BrowserMesh never captures
+console argument objects or raw error stacks.
 
 ### Interaction
 
