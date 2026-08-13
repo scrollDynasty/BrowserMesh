@@ -36,14 +36,14 @@ pending and does not retroactively make the baseline incomplete.
 
 ## Professional MCP improvement program
 
-| Milestone                                              | Status                                                                                                                                                                                                                                                                           | Contract |
-| ------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------- |
-| Version chain, headless config, runtime info, doctor   | Complete: exact version chain, validated config, non-launching runtime info, and bounded doctor                                                                                                                                                                                  | ADR 0007 |
-| Structured MCP output, annotations, cancellation       | Complete: structured output, annotations, end-to-end request signals, queue-safe cancellation                                                                                                                                                                                    | ADR 0008 |
-| Passive waits and atomic action/wait                   | Complete: passive conditions and click/press + navigation/response/popup/dialog composites with cancellation and owned cleanup                                                                                                                                                   | ADR 0009 |
-| Bounded redacted browser observability                 | Complete: console/page-error and correlated network/failed-request collectors                                                                                                                                                                                                    | ADR 0010 |
-| Bounded snapshots, context options, typed interactions | Partial: bounded scoped snapshots, safe context settings, hover/focus/check/double-click/scroll/scroll-into-view/drag-drop, viewport/full-page/element in-memory screenshots, popup, and dialog complete; tree filters, refs, and remaining lifecycle-heavy interactions pending | ADR 0011 |
-| Filesystem-backed artifacts                            | Design gate accepted; capability ADR and implementation deferred                                                                                                                                                                                                                 | ADR 0012 |
+| Milestone                                              | Status                                                                                                                                                                                                                                                                                      | Contract        |
+| ------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------- |
+| Version chain, headless config, runtime info, doctor   | Complete: exact version chain, validated config, non-launching runtime info, and bounded doctor                                                                                                                                                                                             | ADR 0007        |
+| Structured MCP output, annotations, cancellation       | Complete: structured output, annotations, end-to-end request signals, queue-safe cancellation                                                                                                                                                                                               | ADR 0008        |
+| Passive waits and atomic action/wait                   | Complete: passive conditions and click/press + navigation/response/popup/dialog composites with cancellation and owned cleanup                                                                                                                                                              | ADR 0009        |
+| Bounded redacted browser observability                 | Complete: console/page-error and correlated network/failed-request collectors                                                                                                                                                                                                               | ADR 0010        |
+| Bounded snapshots, context options, typed interactions | Partial: bounded scoped snapshots, safe context settings, short-lived refs, hover/focus/check/double-click/scroll/scroll-into-view/drag-drop, viewport/full-page/element in-memory screenshots, popup, and dialog complete; tree filters and remaining lifecycle-heavy interactions pending | ADRs 0011, 0013 |
+| Filesystem-backed artifacts                            | Design gate accepted; capability ADR and implementation deferred                                                                                                                                                                                                                            | ADR 0012        |
 
 Remote HTTP/multi-client security and internal agent orchestration are not part of the accepted
 implementation program. The latter remains a separate external layer.
@@ -145,13 +145,21 @@ Latest post-v0.1 slice verification:
 - ADR 0011 bounded snapshots now provide semantic scope, documented Playwright depth/box controls,
   runtime-owned Unicode/UTF-8 content caps, and explicit applied-bound/partial/truncation metadata.
   Partial output is labelled `aria-yaml-fragment`. Password redaction, per-session serialization,
-  cancellation, and cleanup remain intact. `interactiveOnly`, `maxChildren`, pagination/refs,
+  cancellation, and cleanup remain intact. `interactiveOnly`, `maxChildren`, pagination,
   context options, and typed interactions remain later slices.
 - Bounded-snapshot `npm run verify`: passed after merging context settings and typed interactions
   (23 files, 116 tests, coverage thresholds, lint,
   format, typecheck, and build). Targeted MCP contract and real-Chromium integration tests passed.
 - `BROWSERMESH_HEADLESS=true npm run verify:package`: passed, including the built tarball,
   clean-package MCP discovery, bounded scoped-snapshot contract, real-Chromium smoke, and shutdown.
+- ADR 0013 element refs are adapter-generated opaque values, bounded to 100 per page with a
+  30-second TTL and replacement cleanup. Real-Chromium coverage verifies typed actions,
+  cross-session/page rejection, DOM replacement, navigation/page-close invalidation, expiry, and
+  queue recovery; no Playwright locator or element handle crosses the engine port.
+- Element-ref `npm run verify`: passed after merging advanced actions and popup/dialog lifecycle
+  work (23 files, 125 tests, coverage thresholds, lint, formatting, typecheck, and build). E2E and
+  stress suites passed. Installed-package verification captures a ref and executes hover/click
+  through it against real Chromium.
 
 - ADR 0011 advanced-action slice adds bounded integer coordinate scroll, semantic source/target
   drag-and-drop, and viewport/full-page/element screenshot modes. Screenshots remain in-memory PNG

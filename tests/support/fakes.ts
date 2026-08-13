@@ -45,7 +45,11 @@ export class FakeEngine implements BrowserEnginePort {
   failNextWait = false;
   snapshotText = '- document';
   lastSnapshotOptions:
-    Pick<SnapshotOptions, 'scope' | 'maxDepth' | 'includeBoundingBoxes'> | undefined;
+    | Pick<
+        SnapshotOptions,
+        'scope' | 'maxDepth' | 'includeBoundingBoxes' | 'includeRefs' | 'maxRefs'
+      >
+    | undefined;
   readonly compositeOrder: string[] = [];
   compositeGate: Promise<void> | undefined;
   onCompositeStart: (() => void) | undefined;
@@ -225,10 +229,13 @@ export class FakeEngine implements BrowserEnginePort {
   async selectOption(): Promise<void> {}
   async snapshot(
     _page: BrowserPageHandle,
-    options: Pick<SnapshotOptions, 'scope' | 'maxDepth' | 'includeBoundingBoxes'>,
-  ): Promise<string> {
+    options: Pick<
+      SnapshotOptions,
+      'scope' | 'maxDepth' | 'includeBoundingBoxes' | 'includeRefs' | 'maxRefs'
+    >,
+  ): Promise<{ readonly snapshot: string; readonly refs: readonly [] }> {
     this.lastSnapshotOptions = options;
-    return this.snapshotText;
+    return { snapshot: this.snapshotText, refs: [] };
   }
   async visibleText(_page: BrowserPageHandle, locator: Locator): Promise<string> {
     return locator.value;

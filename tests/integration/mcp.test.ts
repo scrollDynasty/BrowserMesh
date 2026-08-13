@@ -62,6 +62,7 @@ describe('MCP adapter', () => {
       expect(clickTool?.description).toContain('exactly by default');
       expect(clickTool?.description).toContain('LOCATOR_AMBIGUOUS');
       expect(clickTool?.inputSchema).toHaveProperty('properties.locator');
+      expect(clickTool?.inputSchema).toHaveProperty('properties.ref');
       expect(toolPresentation.browser_hover).toEqual({
         title: 'Hover over page element',
         annotations: {
@@ -78,6 +79,9 @@ describe('MCP adapter', () => {
       expect(
         discovered.tools.find(({ name }) => name === 'browser_snapshot')?.description,
       ).toContain('password-input values are redacted');
+      expect(
+        discovered.tools.find(({ name }) => name === 'browser_snapshot')?.description,
+      ).toContain('30-second element refs');
       expect(toolPresentation.browser_wait.annotations).toMatchObject({
         readOnlyHint: true,
         openWorldHint: true,
@@ -211,6 +215,8 @@ describe('MCP adapter', () => {
         scope: { strategy: 'role', value: 'button', name: 'Submit', exact: true },
         maxDepth: 1,
         includeBoundingBoxes: true,
+        includeRefs: false,
+        maxRefs: 50,
       });
       await callSuccess(client, 'browser_visible_text', {
         ...target,
@@ -263,6 +269,13 @@ describe('MCP adapter', () => {
         ...target,
         locator: { strategy: 'role', value: 'button', name: 'Submit', exact: true },
       });
+      const missingElementTarget = requireCallResult(
+        await client.callTool({ name: 'browser_click', arguments: target }),
+      );
+      expect(missingElementTarget.isError).toBe(true);
+      expect(JSON.parse(readText(missingElementTarget))).toMatchObject({
+        error: { code: 'INVALID_ARGUMENT' },
+      });
       for (const name of [
         'browser_double_click',
         'browser_hover',
@@ -313,7 +326,7 @@ describe('MCP adapter', () => {
       });
       await callSuccess(client, 'browser_action_and_wait', {
         ...target,
-        action: { kind: 'click', locator: { strategy: 'role', value: 'button', name: 'Submit' } },
+        action: { kind: 'click', target: { strategy: 'role', value: 'button', name: 'Submit' } },
         wait: {
           kind: 'response',
           matcher: { kind: 'exact', value: 'https://example.test/result' },

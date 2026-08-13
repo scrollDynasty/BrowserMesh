@@ -91,7 +91,12 @@ export async function startTestWebServer(): Promise<TestWebServer> {
       return;
     }
     if (url.pathname === '/popup-destination') {
-      response.end(page('Popup destination', '<div data-testid="status">popup-ready</div>'));
+      response.end(
+        page(
+          'Popup destination',
+          '<div data-testid="status">popup-ready</div><button data-testid="popup-button">Popup button</button>',
+        ),
+      );
       return;
     }
     if (url.pathname === '/action-destination') {
@@ -176,6 +181,17 @@ export async function startTestWebServer(): Promise<TestWebServer> {
               if (scrollY > 1000) document.querySelector('[data-testid=status]').textContent='scrolled';
             });
           </script>`,
+        ),
+      );
+      return;
+    }
+    if (url.pathname === '/element-refs') {
+      response.end(
+        page(
+          'Element refs',
+          `<input aria-label="Ref input" />
+          <button data-testid="replace" onclick="this.outerHTML='<button data-testid=replace>Replacement</button>'">Replace me</button>
+          <div data-testid="status">ready</div>`,
         ),
       );
       return;

@@ -3,6 +3,8 @@ import type {
   ActionWaitCondition,
   BrowserAction,
   BrowserStorageState,
+  ElementReferenceView,
+  ElementTarget,
   Locator,
   SnapshotOptions,
   ScreenshotOptions,
@@ -65,15 +67,19 @@ export interface BrowserEnginePort {
   back(page: BrowserPageHandle, control: OperationControl): Promise<void>;
   forward(page: BrowserPageHandle, control: OperationControl): Promise<void>;
   reload(page: BrowserPageHandle, control: OperationControl): Promise<void>;
-  click(page: BrowserPageHandle, locator: Locator, control: OperationControl): Promise<void>;
-  doubleClick(page: BrowserPageHandle, locator: Locator, control: OperationControl): Promise<void>;
-  hover(page: BrowserPageHandle, locator: Locator, control: OperationControl): Promise<void>;
-  focus(page: BrowserPageHandle, locator: Locator, control: OperationControl): Promise<void>;
-  check(page: BrowserPageHandle, locator: Locator, control: OperationControl): Promise<void>;
-  uncheck(page: BrowserPageHandle, locator: Locator, control: OperationControl): Promise<void>;
+  click(page: BrowserPageHandle, target: ElementTarget, control: OperationControl): Promise<void>;
+  doubleClick(
+    page: BrowserPageHandle,
+    target: ElementTarget,
+    control: OperationControl,
+  ): Promise<void>;
+  hover(page: BrowserPageHandle, target: ElementTarget, control: OperationControl): Promise<void>;
+  focus(page: BrowserPageHandle, target: ElementTarget, control: OperationControl): Promise<void>;
+  check(page: BrowserPageHandle, target: ElementTarget, control: OperationControl): Promise<void>;
+  uncheck(page: BrowserPageHandle, target: ElementTarget, control: OperationControl): Promise<void>;
   scrollIntoView(
     page: BrowserPageHandle,
-    locator: Locator,
+    target: ElementTarget,
     control: OperationControl,
   ): Promise<void>;
   scroll(
@@ -90,27 +96,30 @@ export interface BrowserEnginePort {
   ): Promise<void>;
   fill(
     page: BrowserPageHandle,
-    locator: Locator,
+    target: ElementTarget,
     value: string,
     control: OperationControl,
   ): Promise<void>;
   press(
     page: BrowserPageHandle,
-    locator: Locator,
+    target: ElementTarget,
     key: string,
     control: OperationControl,
   ): Promise<void>;
   selectOption(
     page: BrowserPageHandle,
-    locator: Locator,
+    target: ElementTarget,
     value: string,
     control: OperationControl,
   ): Promise<void>;
   snapshot(
     page: BrowserPageHandle,
-    options: Pick<SnapshotOptions, 'scope' | 'maxDepth' | 'includeBoundingBoxes'>,
+    options: Pick<
+      SnapshotOptions,
+      'scope' | 'maxDepth' | 'includeBoundingBoxes' | 'includeRefs' | 'maxRefs'
+    >,
     control: OperationControl,
-  ): Promise<string>;
+  ): Promise<{ readonly snapshot: string; readonly refs: readonly ElementReferenceView[] }>;
   visibleText(
     page: BrowserPageHandle,
     locator: Locator,

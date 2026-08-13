@@ -3,12 +3,14 @@ import { z } from 'zod';
 import type {
   ActionWaitCondition,
   BrowserAction,
+  ElementTarget,
   Locator,
   SnapshotOptions,
   ScreenshotOptions,
   WaitCondition,
 } from '../../domain/models.js';
 import { SNAPSHOT_LIMITS } from '../../domain/snapshots.js';
+import { BrowserMeshError } from '../../domain/errors.js';
 import { BROWSERMESH_VERSION } from '../../infrastructure/generated/version.js';
 import type { BrowserMeshRuntime, OperationTarget } from '../../runtime/browsermesh-runtime.js';
 import { contextSettingsSchema, contractFor } from './contracts.js';
@@ -38,6 +40,9 @@ const locatorSchema = z.discriminatedUnion('strategy', [
     value: z.string().min(1),
   }),
 ]);
+const refSchema = z.string().regex(/^@e[a-f0-9]{32}$/u);
+const elementTargetSchema = z.union([locatorSchema, z.object({ ref: refSchema })]);
+const elementInputSchema = { locator: locatorSchema.optional(), ref: refSchema.optional() };
 const targetSchema = {
   sessionId: z.string().min(1),
   pageId: z.string().min(1),
@@ -70,9 +75,19 @@ const waitConditionSchema = z.discriminatedUnion('kind', [
     state: z.enum(['present', 'absent']),
   }),
 ]);
-const browserActionSchema = z.discriminatedUnion('kind', [
+const browserActionSchema = z.union([
+  z.object({ kind: z.literal('click'), target: elementTargetSchema }),
   z.object({ kind: z.literal('click'), locator: locatorSchema }),
-  z.object({ kind: z.literal('press'), locator: locatorSchema, key: z.string().min(1).max(64) }),
+  z.object({
+    kind: z.literal('press'),
+    target: elementTargetSchema,
+    key: z.string().min(1).max(64),
+  }),
+  z.object({
+    kind: z.literal('press'),
+    locator: locatorSchema,
+    key: z.string().min(1).max(64),
+  }),
 ]);
 const actionWaitSchema = z.discriminatedUnion('kind', [
   z.object({
@@ -116,7 +131,32 @@ const snapshotInputSchema = {
   includeBoundingBoxes: z.boolean().optional().default(false),
   maxChars: z.number().int().positive().max(SNAPSHOT_LIMITS.maxChars).optional(),
   maxBytes: z.number().int().positive().max(SNAPSHOT_LIMITS.maxBytes).optional(),
+  includeRefs: z.boolean().optional().default(false),
+  maxRefs: z.number().int().positive().max(SNAPSHOT_LIMITS.maxRefs).optional(),
 };
+
+function elementTarget(input: {
+  locator?: z.infer<typeof locatorSchema> | undefined;
+  ref?: string | undefined;
+}): ElementTarget {
+  if ((input.locator === undefined) === (input.ref === undefined))
+    throw new BrowserMeshError(
+      'INVALID_ARGUMENT',
+      'Provide exactly one of locator or ref for an element action',
+    );
+  if (input.locator === undefined) {
+    if (input.ref === undefined)
+      throw new BrowserMeshError('INVALID_ARGUMENT', 'Element ref is required');
+    return { ref: input.ref };
+  }
+  if (input.locator.strategy !== 'role') return input.locator;
+  return {
+    strategy: 'role',
+    value: input.locator.value,
+    ...(input.locator.name === undefined ? {} : { name: input.locator.name }),
+    exact: input.locator.exact,
+  };
+}
 
 function target(
   input: {
@@ -340,7 +380,7 @@ export function createMcpServer(runtime: BrowserMeshRuntime): McpServer {
     {
       ...contractFor('browser_snapshot'),
       description:
-        'Inspect a bounded accessibility-oriented snapshot of one explicitly addressed page, optionally scoped by a locator, depth-limited, and annotated with viewport bounding boxes. Non-empty password-input values are redacted before content crosses MCP. Results always report applied bounds and truncation; partial content is explicitly aria-yaml-fragment, not a parseable complete snapshot. Element refs and pagination are not provided.',
+        'Inspect a bounded accessibility-oriented snapshot of one explicitly addressed page, optionally scoped by a locator, depth-limited, and annotated with viewport bounding boxes. Non-empty password-input values are redacted before content crosses MCP. Set includeRefs for bounded 30-second element refs used by immediate follow-up actions; refs are page-scoped and stale after navigation or DOM replacement. Results always report applied bounds and truncation; partial content is explicitly aria-yaml-fragment.',
       inputSchema: snapshotInputSchema,
     },
     (input, extra) =>
@@ -351,6 +391,8 @@ export function createMcpServer(runtime: BrowserMeshRuntime): McpServer {
           includeBoundingBoxes: input.includeBoundingBoxes,
           ...(input.maxChars === undefined ? {} : { maxChars: input.maxChars }),
           ...(input.maxBytes === undefined ? {} : { maxBytes: input.maxBytes }),
+          includeRefs: input.includeRefs,
+          ...(input.maxRefs === undefined ? {} : { maxRefs: input.maxRefs }),
         };
         const captured = await runtime.snapshot(target(input, extra.signal), options);
         return {
@@ -467,11 +509,15 @@ export function createMcpServer(runtime: BrowserMeshRuntime): McpServer {
     {
       ...contractFor('browser_click'),
       description:
-        'Click a semantic or CSS locator on one explicitly addressed page. Role locator names match exactly by default for deterministic selection; pass exact=false only for intentional partial matching. An ambiguous locator returns LOCATOR_AMBIGUOUS without damaging the session. Prefer semantic locators and keep the IDs associated with the intended user/account session.',
-      inputSchema: { ...targetSchema, locator: locatorSchema },
+        'Click exactly one semantic/CSS locator or short-lived snapshot ref on one explicitly addressed page. Role locator names match exactly by default; ambiguous locators return LOCATOR_AMBIGUOUS and stale or cross-page refs return STALE_ELEMENT_REFERENCE. Prefer semantic locators for durable workflows.',
+      inputSchema: { ...targetSchema, ...elementInputSchema },
     },
     (input, extra) =>
-      pageCompleted(runtime.click(target(input, extra.signal), input.locator as Locator)),
+      pageCompleted(
+        Promise.resolve().then(() =>
+          runtime.click(target(input, extra.signal), elementTarget(input)),
+        ),
+      ),
   );
   server.registerTool(
     'browser_double_click',
@@ -479,10 +525,14 @@ export function createMcpServer(runtime: BrowserMeshRuntime): McpServer {
       ...contractFor('browser_double_click'),
       description:
         'Double-click a semantic or CSS locator on one explicitly addressed page. Use this only when the application assigns distinct double-click behavior; the action is serialized with all browser work in that session and an ambiguous locator returns LOCATOR_AMBIGUOUS.',
-      inputSchema: { ...targetSchema, locator: locatorSchema },
+      inputSchema: { ...targetSchema, ...elementInputSchema },
     },
     (input, extra) =>
-      pageCompleted(runtime.doubleClick(target(input, extra.signal), input.locator as Locator)),
+      pageCompleted(
+        Promise.resolve().then(() =>
+          runtime.doubleClick(target(input, extra.signal), elementTarget(input)),
+        ),
+      ),
   );
   server.registerTool(
     'browser_hover',
@@ -490,10 +540,14 @@ export function createMcpServer(runtime: BrowserMeshRuntime): McpServer {
       ...contractFor('browser_hover'),
       description:
         'Move the pointer over a semantic or CSS locator on one explicitly addressed page. Use this to reveal hover-driven controls or state before inspecting or interacting; BrowserMesh preserves same-session accepted order.',
-      inputSchema: { ...targetSchema, locator: locatorSchema },
+      inputSchema: { ...targetSchema, ...elementInputSchema },
     },
     (input, extra) =>
-      pageCompleted(runtime.hover(target(input, extra.signal), input.locator as Locator)),
+      pageCompleted(
+        Promise.resolve().then(() =>
+          runtime.hover(target(input, extra.signal), elementTarget(input)),
+        ),
+      ),
   );
   server.registerTool(
     'browser_focus',
@@ -501,10 +555,14 @@ export function createMcpServer(runtime: BrowserMeshRuntime): McpServer {
       ...contractFor('browser_focus'),
       description:
         'Focus a semantic or CSS locator on one explicitly addressed page without entering a value. Use this for focus-driven UI state or before a separate key action; the locator remains scoped to the supplied sessionId and pageId.',
-      inputSchema: { ...targetSchema, locator: locatorSchema },
+      inputSchema: { ...targetSchema, ...elementInputSchema },
     },
     (input, extra) =>
-      pageCompleted(runtime.focus(target(input, extra.signal), input.locator as Locator)),
+      pageCompleted(
+        Promise.resolve().then(() =>
+          runtime.focus(target(input, extra.signal), elementTarget(input)),
+        ),
+      ),
   );
   server.registerTool(
     'browser_check',
@@ -512,10 +570,14 @@ export function createMcpServer(runtime: BrowserMeshRuntime): McpServer {
       ...contractFor('browser_check'),
       description:
         'Ensure a checkbox or radio located semantically or by CSS is checked on one explicitly addressed page. The operation is idempotent, bounded by timeoutMs, and isolated to the supplied session.',
-      inputSchema: { ...targetSchema, locator: locatorSchema },
+      inputSchema: { ...targetSchema, ...elementInputSchema },
     },
     (input, extra) =>
-      pageCompleted(runtime.check(target(input, extra.signal), input.locator as Locator)),
+      pageCompleted(
+        Promise.resolve().then(() =>
+          runtime.check(target(input, extra.signal), elementTarget(input)),
+        ),
+      ),
   );
   server.registerTool(
     'browser_uncheck',
@@ -523,10 +585,14 @@ export function createMcpServer(runtime: BrowserMeshRuntime): McpServer {
       ...contractFor('browser_uncheck'),
       description:
         'Ensure a checkbox located semantically or by CSS is unchecked on one explicitly addressed page. The operation is idempotent, bounded by timeoutMs, and isolated to the supplied session.',
-      inputSchema: { ...targetSchema, locator: locatorSchema },
+      inputSchema: { ...targetSchema, ...elementInputSchema },
     },
     (input, extra) =>
-      pageCompleted(runtime.uncheck(target(input, extra.signal), input.locator as Locator)),
+      pageCompleted(
+        Promise.resolve().then(() =>
+          runtime.uncheck(target(input, extra.signal), elementTarget(input)),
+        ),
+      ),
   );
   server.registerTool(
     'browser_scroll_into_view',
@@ -534,10 +600,14 @@ export function createMcpServer(runtime: BrowserMeshRuntime): McpServer {
       ...contractFor('browser_scroll_into_view'),
       description:
         'Scroll one semantic or CSS locator into the viewport of an explicitly addressed page. Use this before inspection or interaction when an off-screen target must become visible; it never accepts arbitrary JavaScript or coordinates.',
-      inputSchema: { ...targetSchema, locator: locatorSchema },
+      inputSchema: { ...targetSchema, ...elementInputSchema },
     },
     (input, extra) =>
-      pageCompleted(runtime.scrollIntoView(target(input, extra.signal), input.locator as Locator)),
+      pageCompleted(
+        Promise.resolve().then(() =>
+          runtime.scrollIntoView(target(input, extra.signal), elementTarget(input)),
+        ),
+      ),
   );
   server.registerTool(
     'browser_scroll',
@@ -573,11 +643,13 @@ export function createMcpServer(runtime: BrowserMeshRuntime): McpServer {
       ...contractFor('browser_fill'),
       description:
         'Fill a form field located on one explicitly addressed page. The value is entered only in that session; use separate sessions for different identities.',
-      inputSchema: { ...targetSchema, locator: locatorSchema, value: z.string() },
+      inputSchema: { ...targetSchema, ...elementInputSchema, value: z.string() },
     },
     (input, extra) =>
       pageCompleted(
-        runtime.fill(target(input, extra.signal), input.locator as Locator, input.value),
+        Promise.resolve().then(() =>
+          runtime.fill(target(input, extra.signal), elementTarget(input), input.value),
+        ),
       ),
   );
   server.registerTool(
@@ -586,11 +658,13 @@ export function createMcpServer(runtime: BrowserMeshRuntime): McpServer {
       ...contractFor('browser_press'),
       description:
         'Press a key on a locator within one explicitly addressed page, preserving deterministic ordering with other operations in that session. A missing or unsuitable element returns OPERATION_TIMEOUT within timeoutMs (10 seconds by default) without closing MCP or browser sessions.',
-      inputSchema: { ...targetSchema, locator: locatorSchema, key: z.string().min(1).max(64) },
+      inputSchema: { ...targetSchema, ...elementInputSchema, key: z.string().min(1).max(64) },
     },
     (input, extra) =>
       pageCompleted(
-        runtime.press(target(input, extra.signal), input.locator as Locator, input.key),
+        Promise.resolve().then(() =>
+          runtime.press(target(input, extra.signal), elementTarget(input), input.key),
+        ),
       ),
   );
   server.registerTool(
@@ -599,11 +673,13 @@ export function createMcpServer(runtime: BrowserMeshRuntime): McpServer {
       ...contractFor('browser_select_option'),
       description:
         'Select an option on one explicitly addressed page using a semantic or CSS locator. A missing or unsuitable select returns OPERATION_TIMEOUT within timeoutMs (10 seconds by default), and the supplied session plus all other sessions remain usable.',
-      inputSchema: { ...targetSchema, locator: locatorSchema, value: z.string() },
+      inputSchema: { ...targetSchema, ...elementInputSchema, value: z.string() },
     },
     (input, extra) =>
       pageCompleted(
-        runtime.selectOption(target(input, extra.signal), input.locator as Locator, input.value),
+        Promise.resolve().then(() =>
+          runtime.selectOption(target(input, extra.signal), elementTarget(input), input.value),
+        ),
       ),
   );
   server.registerTool(

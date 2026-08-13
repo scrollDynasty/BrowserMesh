@@ -7,6 +7,8 @@ export const SNAPSHOT_LIMITS = {
   maxChars: 100_000,
   maxBytes: 131_072,
   maxDepth: 100,
+  defaultMaxRefs: 50,
+  maxRefs: 100,
 } as const;
 
 export interface NormalizedSnapshotOptions {
@@ -15,6 +17,8 @@ export interface NormalizedSnapshotOptions {
   readonly includeBoundingBoxes: boolean;
   readonly maxChars: number;
   readonly maxBytes: number;
+  readonly includeRefs: boolean;
+  readonly maxRefs: number;
 }
 
 export function normalizeSnapshotOptions(options: SnapshotOptions): NormalizedSnapshotOptions {
@@ -31,19 +35,32 @@ export function normalizeSnapshotOptions(options: SnapshotOptions): NormalizedSn
     1,
     SNAPSHOT_LIMITS.maxBytes,
   );
+  const includeRefs = options.includeRefs ?? false;
+  if (!includeRefs && options.maxRefs !== undefined)
+    throw new BrowserMeshError('INVALID_ARGUMENT', 'maxRefs requires includeRefs=true');
+  const maxRefs = bound(
+    'maxRefs',
+    options.maxRefs ?? SNAPSHOT_LIMITS.defaultMaxRefs,
+    1,
+    SNAPSHOT_LIMITS.maxRefs,
+  );
   return {
     scope: options.scope,
     maxDepth,
     includeBoundingBoxes: options.includeBoundingBoxes ?? false,
     maxChars,
     maxBytes,
+    includeRefs,
+    maxRefs,
   };
 }
 
 export function boundSnapshot(
-  snapshot: string,
+  captured: string | { readonly snapshot: string; readonly refs: SnapshotResult['refs'] },
   options: NormalizedSnapshotOptions,
 ): SnapshotResult {
+  const snapshot = typeof captured === 'string' ? captured : captured.snapshot;
+  const refs = typeof captured === 'string' ? [] : captured.refs;
   const codePoints = Array.from(snapshot);
   const originalChars = codePoints.length;
   const originalBytes = Buffer.byteLength(snapshot, 'utf8');
@@ -64,12 +81,15 @@ export function boundSnapshot(
     snapshot: truncated ? returned.join('') : snapshot,
     contentFormat: truncated ? 'aria-yaml-fragment' : 'aria-yaml',
     partial: truncated,
+    refs,
     appliedBounds: {
       scope: options.scope ?? null,
       maxDepth: options.maxDepth ?? null,
       includeBoundingBoxes: options.includeBoundingBoxes,
       maxChars: options.maxChars,
       maxBytes: options.maxBytes,
+      includeRefs: options.includeRefs,
+      maxRefs: options.maxRefs,
     },
     truncation: {
       truncated,

@@ -269,6 +269,22 @@ async function main(): Promise<void> {
     ) {
       throw new Error('Packaged MCP bounded snapshot contract did not match its applied limits');
     }
+    const elementRef = z
+      .object({ refs: z.array(z.object({ ref: z.string(), tag: z.string() })).length(1) })
+      .parse(
+        readStructuredResult(
+          await client.callTool({
+            name: 'browser_snapshot',
+            arguments: {
+              sessionId: createdIds.sessionId,
+              pageId: createdIds.pageId,
+              includeRefs: true,
+              maxRefs: 1,
+            },
+          }),
+        ),
+      ).refs[0]?.ref;
+    if (elementRef === undefined) throw new Error('Packaged MCP snapshot omitted element ref');
     const initialStatus = readStructuredResult(
       await client.callTool({
         name: 'browser_visible_text',
@@ -288,7 +304,7 @@ async function main(): Promise<void> {
         arguments: {
           sessionId: createdIds.sessionId,
           pageId: createdIds.pageId,
-          locator: { strategy: 'role', value: 'button', name: 'Run package action' },
+          ref: elementRef,
         },
       }),
     );
@@ -311,7 +327,7 @@ async function main(): Promise<void> {
         arguments: {
           sessionId: createdIds.sessionId,
           pageId: createdIds.pageId,
-          locator: { strategy: 'role', value: 'button', name: 'Run package action' },
+          ref: elementRef,
         },
       }),
     );

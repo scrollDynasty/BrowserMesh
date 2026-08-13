@@ -53,6 +53,8 @@ describe('bounded snapshots', () => {
     [{ maxBytes: 0 }, 'maxBytes'],
     [{ maxBytes: 131_073 }, 'maxBytes'],
     [{ maxChars: 1.5 }, 'maxChars'],
+    [{ includeRefs: true, maxRefs: 101 }, 'maxRefs'],
+    [{ maxRefs: 1 }, 'maxRefs'],
   ])('rejects invalid bounds %#', (options, name) => {
     expect(() => normalizeSnapshotOptions(options)).toThrow(
       expect.objectContaining<Partial<BrowserMeshError>>({ code: 'INVALID_ARGUMENT' }),

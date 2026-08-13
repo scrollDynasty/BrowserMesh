@@ -1097,6 +1097,14 @@ Truncation is Unicode-safe and byte-safe; partial content is an `aria-yaml-fragm
 snapshot. `interactiveOnly`, `maxChildren`, pagination/cursors, and element references remain later
 slices and must not be emulated with undocumented browser-engine references.
 
+The element-reference slice follows ADR 0013. `browser_snapshot` may return at most 100
+adapter-generated interactive-element refs in a separate bounded metadata array. Refs expire after
+30 seconds, are scoped to the addressed session/page, replace that page's prior snapshot refs, and
+are invalidated by main-frame navigation, page/context close, shutdown, disconnect, relevant DOM
+replacement, expiry, or quota eviction. Typed element actions accept exactly one semantic/CSS
+locator or opaque ref. Every invalid ref returns the recoverable `STALE_ELEMENT_REFERENCE` code;
+Playwright locators and handles never cross the engine port.
+
 Session creation may add validated viewport, device scale, locale, timezone, color scheme, reduced
 motion, user agent, and geolocation with explicit permissions. The normalized effective context is
 returned and tested for cross-session isolation.

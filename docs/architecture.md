@@ -584,6 +584,13 @@ Short-lived element references, if introduced, are runtime IDs resolving only in
 they are bounded and invalidated with page/document lifecycle. They are conveniences, not durable
 identity or exposed locator handles.
 
+ADR 0013 introduces that slice with an engine-independent `ElementTarget` value. The Playwright
+adapter alone owns short-lived `ElementHandle` entries; the port returns only opaque strings and
+bounded hints. Capture and use remain inside the owning session queue. Main-frame navigation and
+all page/context/browser teardown paths clear the page registry; resolution also verifies expiry
+and same-document connectivity before an action. Capture replaces prior refs atomically after a
+successful, non-cancelled enumeration and releases partial results on failure.
+
 Filesystem-backed artifacts are not part of this architecture yet. ADR 0012 establishes a design
 gate: a capability-specific follow-up ADR must define repository ports, quotas, retention,
 redaction, and cleanup before code or public tools are added.

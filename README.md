@@ -322,8 +322,12 @@ A completely unknown session ID still returns `SESSION_NOT_FOUND`.
 `maxDepth`, `includeBoundingBoxes`, `maxChars`, and `maxBytes`. Its structured result reports every
 applied bound plus character/UTF-8 byte counts. When either response cap is reached,
 `partial=true`, `truncation.truncated=true`, and `contentFormat=aria-yaml-fragment`; do not parse
-that fragment as a complete ARIA YAML document. Password values remain redacted. Element refs,
-snapshot cursors/pagination, `interactiveOnly`, and `maxChildren` are not yet public capabilities.
+that fragment as a complete ARIA YAML document. Password values remain redacted. Set
+`includeRefs=true` to receive at most `maxRefs` (default 50, maximum 100) opaque interactive-element
+refs for immediate follow-up actions. Refs expire after 30 seconds, are scoped to the exact
+session/page, and become stale after navigation, DOM replacement, page close, expiry, or a newer
+ref snapshot. Snapshot cursors/pagination, `interactiveOnly`, and `maxChildren` are not yet public
+capabilities.
 
 ### Observability
 
@@ -363,7 +367,7 @@ transport-level failures appear in `browser_failed_requests_list`.
 - `browser_press`
 - `browser_select_option`
 
-These typed operations use the same semantic locator contract as click/fill. They are explicitly
+These typed operations accept exactly one semantic/CSS locator or short-lived snapshot `ref`. They are explicitly
 addressed, bounded by `timeoutMs`, cancellation-aware, and serialized with all browser work in the
 owning session. `check` and `uncheck` ensure the requested state idempotently. `browser_scroll`
 accepts bounded integer pixel deltas (`deltaX` and `deltaY` from -1,000,000 through 1,000,000),
@@ -523,6 +527,11 @@ Accessibility snapshots redact non-empty values from `input[type="password"]` el
 snapshot content crosses the MCP boundary.
 
 BrowserMesh does not expose Playwright `Locator` objects through its public API.
+
+Element refs are conveniences for immediate snapshot-to-action workflows, not durable identity.
+Invalid, expired, cross-page, or detached refs return `STALE_ELEMENT_REFERENCE`; semantic locators
+remain preferred for durable tests. BrowserMesh does not use undocumented Playwright AI/ref
+selectors or expose adapter-owned element handles.
 
 ## Persistence and sensitive state
 
