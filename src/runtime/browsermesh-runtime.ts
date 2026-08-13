@@ -190,6 +190,7 @@ export class BrowserMeshRuntime {
               control,
               ...(storageState === undefined ? {} : { storageState }),
             });
+            throwIfCancelled(options.signal);
             if (entry.disconnected) {
               throw new BrowserMeshError(
                 'BROWSER_DISCONNECTED',
@@ -197,6 +198,7 @@ export class BrowserMeshRuntime {
               );
             }
             const page = await this.createManagedPage(entry, entry.context);
+            throwIfCancelled(options.signal);
             entry.defaultPageId = page.id;
             createdPageId = page.id;
             entry.status = 'ready';
@@ -223,7 +225,7 @@ export class BrowserMeshRuntime {
             this.rememberTerminalSession(entry);
             throw failure;
           }
-        }, options.signal);
+        });
       },
       (session) => ({
         sessionId: session.sessionId,

@@ -120,6 +120,17 @@ Known blockers: none.
 
 Latest post-v0.1 slice verification:
 
+- ADR 0008 cancellation is complete: every MCP handler forwards the request signal, the runtime
+  owns engine-independent signal/deadline metadata, queued cancellations never execute, and an
+  in-flight non-abortable action retains its session queue slot until it settles. Passive waits and
+  atomic event waiters detach owned abort listeners/timers and leave the queue usable.
+- Deterministic coverage includes queued cancellation, in-flight non-overtake, queue recovery,
+  cross-session independence, cancellable real-browser waits, in-memory MCP cancellation, and real
+  stdio cancellation.
+- Cancellation slice `npm run verify`: passed (21 files, 94 tests, coverage thresholds, lint,
+  format, typecheck, and build). `BROWSERMESH_HEADLESS=true npm run verify:package`: passed,
+  including packed-file inspection, clean tarball installation, MCP discovery, browser smoke, and
+  shutdown.
 - ADR 0010 console/page-error slice adds engine-neutral normalized Playwright subscriptions,
   runtime-owned bounded per-page stores and listener disposers, opaque page-scoped monotonic
   cursors, metadata-only defaults, explicit bounded/redacted text, overflow gap/drop accounting,
