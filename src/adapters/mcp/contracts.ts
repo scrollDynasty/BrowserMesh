@@ -31,6 +31,22 @@ export const contextSettingsSchema = z.object({
   colorScheme: z.enum(['light', 'dark', 'no-preference']).optional(),
   reducedMotion: z.enum(['reduce', 'no-preference']).optional(),
   userAgent: safeContextText(512).optional(),
+  geolocation: z
+    .object({
+      latitude: z.number().min(-90).max(90),
+      longitude: z.number().min(-180).max(180),
+      accuracy: z.number().min(0).max(100_000).optional(),
+    })
+    .optional(),
+  permissions: z
+    .array(
+      z.object({
+        permission: z.literal('geolocation'),
+        origin: safeContextText(2_000),
+      }),
+    )
+    .max(100)
+    .optional(),
 });
 
 export const sessionViewSchema = z.object({

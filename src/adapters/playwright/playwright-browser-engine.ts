@@ -163,11 +163,18 @@ export class PlaywrightBrowserEngine implements BrowserEnginePort {
     const browser = this.browser;
     if (browser === undefined)
       throw new BrowserMeshError('BROWSER_ERROR', 'Browser is unavailable');
+    let context: BrowserContext | undefined;
     try {
-      const context = await browser.newContext({
-        ...options.settings,
+      const { permissions, ...contextSettings } = options.settings;
+      context = await browser.newContext({
+        ...contextSettings,
         ...(options.storageState === undefined ? {} : { storageState: options.storageState }),
       });
+      for (const grant of permissions ?? []) {
+        throwIfCancelled(options.control.signal);
+        await context.grantPermissions(['geolocation'], { origin: grant.origin });
+      }
+      throwIfCancelled(options.control.signal);
       context.setDefaultTimeout(options.control.timeoutMs);
       context.setDefaultNavigationTimeout(options.control.timeoutMs);
       const handle: ContextHandle = { id: Symbol('context'), kind: 'context' };
@@ -175,6 +182,16 @@ export class PlaywrightBrowserEngine implements BrowserEnginePort {
       context.once('close', () => this.dropContext(handle.id));
       return handle;
     } catch (error) {
+      if (context !== undefined) {
+        try {
+          await context.close();
+        } catch (cleanupError) {
+          throw new BrowserMeshError('BROWSER_ERROR', 'Context creation and cleanup both failed', {
+            cause: new AggregateError([error, cleanupError]),
+          });
+        }
+      }
+      if (isCancellation(error) || error instanceof BrowserMeshError) throw error;
       throw new BrowserMeshError('BROWSER_ERROR', 'Failed to create browser context', {
         cause: error,
       });

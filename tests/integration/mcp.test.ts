@@ -121,10 +121,22 @@ describe('MCP adapter', () => {
 
       const created = await callSuccess(client, 'browser_session_create', {
         name: 'mcp',
-        contextSettings: { locale: 'EN-us', timezoneId: 'Etc/UTC' },
+        contextSettings: {
+          locale: 'EN-us',
+          timezoneId: 'Etc/UTC',
+          geolocation: { latitude: 41.3111, longitude: 69.2797 },
+          permissions: [{ permission: 'geolocation', origin: 'HTTPS://EXAMPLE.COM:443/' }],
+        },
       });
       expect(created.structuredContent).toMatchObject({
-        session: { contextSettings: { locale: 'en-US', timezoneId: 'UTC' } },
+        session: {
+          contextSettings: {
+            locale: 'en-US',
+            timezoneId: 'UTC',
+            geolocation: { latitude: 41.3111, longitude: 69.2797 },
+            permissions: [{ permission: 'geolocation', origin: 'https://example.com' }],
+          },
+        },
       });
       const target = z
         .object({ initialPage: z.object({ sessionId: z.string(), pageId: z.string() }) })
@@ -140,6 +152,23 @@ describe('MCP adapter', () => {
       );
       expect(badTimezone.isError).toBe(true);
       expect(publicErrorSchema.parse(JSON.parse(readText(badTimezone))).error).toMatchObject({
+        code: 'INVALID_ARGUMENT',
+        message: 'The request contains an invalid argument',
+      });
+
+      const broadPermission = requireCallResult(
+        await client.callTool({
+          name: 'browser_session_create',
+          arguments: {
+            contextSettings: {
+              geolocation: { latitude: 0, longitude: 0 },
+              permissions: [{ permission: 'geolocation', origin: '*' }],
+            },
+          },
+        }),
+      );
+      expect(broadPermission.isError).toBe(true);
+      expect(publicErrorSchema.parse(JSON.parse(readText(broadPermission))).error).toMatchObject({
         code: 'INVALID_ARGUMENT',
         message: 'The request contains an invalid argument',
       });

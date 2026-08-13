@@ -418,8 +418,9 @@ With `stateId`, it initializes the new context using a previously saved BrowserM
 `browser_session_create` also accepts an optional `contextSettings` object for an isolated viewport,
 device scale factor, locale, timezone, color scheme, reduced-motion preference, and user agent. The
 session result returns the normalized effective settings. Use separate sessions for different
-device/accessibility profiles. Geolocation and browser permissions are intentionally unavailable
-until their origin-scoping policy is specified.
+device/accessibility/permission profiles. Geolocation is optional and the only supported browser
+permission is an explicit grant to one absolute HTTP(S) origin. Wildcards and arbitrary permission
+names are rejected.
 
 ```text
 browser_session_create({
@@ -434,6 +435,23 @@ browser_session_create({
   }
 })
 ```
+
+Geolocation access must be scoped to the exact application origin:
+
+```text
+browser_session_create({
+  name: "local-map-test",
+  contextSettings: {
+    geolocation: { latitude: 41.3111, longitude: 69.2797, accuracy: 25 },
+    permissions: [
+      { permission: "geolocation", origin: "https://maps.example.test" }
+    ]
+  }
+})
+```
+
+The permission is isolated to that session context and is removed when the session closes. Saved
+storage state does not contain or restore BrowserMesh permission grants.
 
 Example conceptually:
 

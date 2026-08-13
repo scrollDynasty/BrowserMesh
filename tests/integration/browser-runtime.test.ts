@@ -1,5 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import type { Browser, BrowserContext } from 'playwright';
 import { PlaywrightBrowserEngine } from '../../src/adapters/playwright/playwright-browser-engine.js';
+import { createOperationControl } from '../../src/application/operation-control.js';
 import { BrowserMeshError, type BrowserMeshErrorCode } from '../../src/domain/errors.js';
 import type { BrowserMeshRuntime, OperationTarget } from '../../src/runtime/browsermesh-runtime.js';
 import { createRealRuntimeHarness, type RealRuntimeHarness } from '../support/real-runtime.js';
@@ -81,6 +83,34 @@ describe('real Chromium runtime', () => {
     expect(a.value.contextSettings).not.toEqual(b.value.contextSettings);
   });
 
+  it('isolates origin-scoped geolocation grants between concurrent sessions', async () => {
+    const allowed = await runtime.createSession({
+      contextSettings: {
+        geolocation: { latitude: 41.3111, longitude: 69.2797, accuracy: 25 },
+        permissions: [{ permission: 'geolocation', origin: web.baseUrl }],
+      },
+    });
+    const denied = await runtime.createSession({
+      contextSettings: { geolocation: { latitude: -33.8688, longitude: 151.2093 } },
+    });
+    await Promise.all([
+      runtime.navigate(allowed, `${web.baseUrl}/geolocation`),
+      runtime.navigate(denied, `${web.baseUrl}/geolocation`),
+    ]);
+    const locator = { strategy: 'testId', value: 'geolocation' } as const;
+    await runtime.wait(allowed, {
+      kind: 'text',
+      text: 'granted|41.3111|69.2797|25',
+      state: 'present',
+    });
+    expect((await runtime.visibleText(allowed, locator)).value).toBe('granted|41.3111|69.2797|25');
+    expect((await runtime.visibleText(denied, locator)).value).not.toContain('41.3111');
+    expect(allowed.value.contextSettings.permissions).toEqual([
+      { permission: 'geolocation', origin: web.baseUrl },
+    ]);
+    expect(denied.value.contextSettings.permissions).toBeUndefined();
+  });
+
   it('creates, lists, routes, and closes additional pages explicitly', async () => {
     const initial = await createTarget();
     const additional = await runtime.createPage(initial.sessionId);
@@ -122,7 +152,11 @@ describe('real Chromium runtime', () => {
     await runtime.closeSession(original.sessionId);
     const restored = await runtime.createSession({
       stateId: 'auth-state',
-      contextSettings: { locale: 'fr-FR' },
+      contextSettings: {
+        locale: 'fr-FR',
+        geolocation: { latitude: 41.3111, longitude: 69.2797 },
+        permissions: [{ permission: 'geolocation', origin: web.baseUrl }],
+      },
     });
     const target = { sessionId: restored.sessionId, pageId: restored.pageId };
     await runtime.navigate(target, web.baseUrl);
@@ -130,7 +164,17 @@ describe('real Chromium runtime', () => {
       'restored|identity=restored',
     );
     expect(restored.value.restoredFromStateId).toBe('auth-state');
-    expect(restored.value.contextSettings).toEqual({ locale: 'fr-FR' });
+    expect(restored.value.contextSettings).toEqual({
+      locale: 'fr-FR',
+      geolocation: { latitude: 41.3111, longitude: 69.2797 },
+      permissions: [{ permission: 'geolocation', origin: web.baseUrl }],
+    });
+    await runtime.navigate(target, `${web.baseUrl}/geolocation`);
+    await runtime.wait(target, {
+      kind: 'text',
+      text: 'granted|41.3111|69.2797|0',
+      state: 'present',
+    });
   });
 
   it('supports actions, inspection and capture', async () => {
@@ -975,6 +1019,54 @@ async function captureBrowserMeshError(
 }
 
 describe('real Chromium creation/shutdown synchronization', () => {
+  it('closes an unregistered context when cancellation races permission granting', async () => {
+    const engine = new PlaywrightBrowserEngine({ headless: true, timeoutMs: 5_000 });
+    await engine.start();
+    const browser = Reflect.get(engine, 'browser') as Browser;
+    const originalNewContext = browser.newContext.bind(browser);
+    let releaseGrant: (() => void) | undefined;
+    let grantStarted: (() => void) | undefined;
+    const grantGate = new Promise<void>((resolve) => {
+      releaseGrant = resolve;
+    });
+    const enteredGrant = new Promise<void>((resolve) => {
+      grantStarted = resolve;
+    });
+    Reflect.set(browser, 'newContext', async (...args: Parameters<Browser['newContext']>) => {
+      const context: BrowserContext = await originalNewContext(...args);
+      const originalGrant = context.grantPermissions.bind(context);
+      Reflect.set(
+        context,
+        'grantPermissions',
+        async (...grantArgs: Parameters<BrowserContext['grantPermissions']>) => {
+          grantStarted?.();
+          await grantGate;
+          return originalGrant(...grantArgs);
+        },
+      );
+      return context;
+    });
+    const cancellation = new AbortController();
+    try {
+      const creation = engine.createContext({
+        control: createOperationControl(5_000, cancellation.signal),
+        settings: {
+          geolocation: { latitude: 41.3111, longitude: 69.2797 },
+          permissions: [{ permission: 'geolocation', origin: 'https://example.com' }],
+        },
+      });
+      await enteredGrant;
+      cancellation.abort();
+      releaseGrant?.();
+      await expect(creation).rejects.toMatchObject({ name: 'AbortError' });
+      expect(browser.contexts()).toHaveLength(0);
+      expect(privateMapSize(engine, 'contexts')).toBe(0);
+    } finally {
+      releaseGrant?.();
+      await engine.stop();
+    }
+  });
+
   it('does not leak a context when shutdown begins during session initialization', async () => {
     let releaseCreation: (() => void) | undefined;
     const gate = new Promise<void>((resolve) => {
