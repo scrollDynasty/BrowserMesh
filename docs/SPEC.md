@@ -973,3 +973,104 @@ The project must pass:
 No internal Agent/message/ownership API may be present.
 
 No known blocker, critical, or high-severity defect that is fixable within the defined v0.1 scope may remain at completion.
+
+## 22. Accepted post-v0.1 improvement program
+
+The v0.1 acceptance gate above remains complete and unchanged. The following work is an additive,
+ordered improvement program; a pending item is not a retroactive v0.1 defect. Public behavior must
+be delivered in independently reviewable vertical slices and remain compatible unless a PR
+explicitly documents a breaking contract.
+
+### 22.1 Version, configuration, runtime info, and doctor
+
+- Generate one version constant from package metadata at build time. The package version, MCP
+  `serverInfo.version`, runtime info, packed-artifact test expectation, and `server.json` version
+  must match. Production runtime code must not discover the repository or read `package.json`.
+- Add centrally validated `BROWSERMESH_HEADLESS=true|false`, defaulting to `false` to preserve the
+  existing headed behavior, and pass the
+  effective value through an engine-independent launch configuration.
+- Add read-only `browser_runtime_info`. It must not launch Chromium. Its structured result contains
+  `serverVersion`, `nodeVersion`, resolved `playwrightVersion`, `browserProduct: "chromium"`,
+  `browserVersion: string | null`, `browserLaunchState`, `headless`, `persistenceEnabled`, effective
+  timeout/limits, and active/failed session counts. `browserVersion` is non-null only when reported
+  by a live browser. Paths, launch arguments, environment dumps, and raw errors are forbidden.
+- Add `browsermesh --doctor --json` with a schema-versioned, bounded per-check result, overall
+  deadline, safe remediation, deterministic cleanup, and non-zero failure exit. It checks supported
+  Node, version consistency, data-directory access, browser availability, and a bounded
+  launch/context/page/close smoke without exposing directory contents.
+
+### 22.2 MCP output and cancellation contract
+
+Every tool must advertise an `outputSchema` and return matching `structuredContent`. JSON-oriented
+successes also include concise compatibility text. Screenshot image content is retained with
+structured metadata. Error results use `isError: true`, a stable safe code (including
+`OPERATION_CANCELLED`), bounded message/details, and correlation metadata.
+
+Every tool has a human title and tested truthful `readOnlyHint`, `destructiveHint`,
+`idempotentHint`, and `openWorldHint`. These annotations are UX hints, never authorization.
+
+Long waits, doctor work, and future artifact work honor MCP cancellation through an
+engine-independent cancellation signal. Cancellation clears owned listeners and timers, stops
+supported work promptly, and leaves the per-session queue usable. Progress notifications are only
+allowed for genuinely multi-step operations with honest monotonic progress.
+
+### 22.3 Waits and atomic action/wait
+
+`browser_wait` requires explicit session/page IDs, a bounded timeout, and exactly one typed passive
+condition: URL exact/safe glob, `domcontentloaded`/`load`, locator
+visible/hidden/attached/detached/enabled/disabled, or bounded text present/absent. Arbitrary regular
+expressions and JavaScript are forbidden. It executes through the session queue and returns the
+normalized satisfied condition plus correlation metadata. Timeout returns `OPERATION_TIMEOUT`.
+
+A passive wait cannot depend on a later same-session queued action. `browser_action_and_wait`
+atomically registers one typed navigation/response/popup waiter, executes one typed click/press
+action, then awaits both under one shared deadline in one queue slot. All outcomes detach the
+waiter. No implementation may bypass the session queue to compose these operations.
+
+### 22.4 Bounded observability
+
+Add explicitly addressed console, page-error, network, and failed-request reads backed by bounded
+per-page ring buffers. Events use opaque monotonic IDs and stable cursor pagination with
+`nextCursor` and `droppedCount`; checkpoints are non-destructive cursors. Limits apply to events,
+individual strings, page size, and total serialized response bytes.
+
+URLs must remove credentials/fragments and redact sensitive query values. Headers, bodies,
+cookies, storage, console argument-object serialization, and raw stacks are excluded. Bounded,
+redacted console/error text is caller-requested evidence and must also support metadata-only reads.
+Listeners attach once and are detached on page/context close, failed creation, disconnect, and
+shutdown. Ownership checks prevent cross-page or cross-session evidence access.
+
+### 22.5 Snapshots, context, and typed interactions
+
+Snapshots add validated `interactiveOnly`, `maxDepth`, `maxChildren`, `maxChars`, semantic scope,
+optional bounding boxes, and explicit applied-bound/truncation metadata. Element references are a
+separate later slice: bounded, session/page scoped, invalidated on navigation/page close/DOM
+replacement, and failed with `STALE_ELEMENT_REFERENCE`; engine handles never cross a port.
+
+Session creation may add validated viewport, device scale, locale, timezone, color scheme, reduced
+motion, user agent, and geolocation with explicit permissions. The normalized effective context is
+returned and tested for cross-session isolation.
+
+Typed interactions may add hover/focus, check/uncheck, double-click, scroll/scroll-into-view,
+drag/drop, dialog handling, popup wait, iframe-scoped semantic targeting, and full-page/element
+screenshots. Arbitrary JavaScript, arbitrary paths, upload, and download are not implied.
+
+### 22.6 Artifacts-before-code and deferred scope
+
+No HAR, trace, video, download, upload, or filesystem-backed evidence implementation may begin
+before a reviewed follow-up ADR defines logical IDs, private runtime-owned storage, media policy,
+quotas, checksums, retention/expiry, cleanup, access, redaction, cancellation, and partial-file/crash
+semantics. Callers never choose local paths.
+
+Remote Streamable HTTP, authentication, multi-client leases, hosted operation, internal agents,
+mailboxes, task orchestration, arbitrary evaluation, and live-session reconstruction remain
+deferred. External run/scenario correlation is neutral metadata and never an identity or permission.
+
+### 22.7 Improvement-program verification
+
+Each slice must extend unit, MCP contract, stdio, real-Chromium, isolation, ordering, queue-recovery,
+cancellation, cleanup, and packaged-artifact tests as applicable. Bounds/redaction tests must prove
+overflow visibility, cursor stability, secret exclusion, response limits, and listener cleanup.
+The final program gate repeats full verification and packed installation on supported Node and CI
+platforms. An audit machine's stale installed BrowserMesh version is operator environment drift,
+not a source defect.

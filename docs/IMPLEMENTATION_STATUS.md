@@ -2,7 +2,9 @@
 
 Updated: 2026-08-13
 
-The current `docs/SPEC.md` defines implementation phases 0 through 9. Its testing requirements and acceptance criteria are the final completion gate (the previously referenced “Phase 10” work).
+The baseline `docs/SPEC.md` phases 0 through 9 and the v0.1 acceptance gate are complete. Section 22
+now defines an accepted post-v0.1 professional MCP improvement program; its implementation is
+pending and does not retroactively make the baseline incomplete.
 
 ## Phase evidence
 
@@ -32,6 +34,20 @@ The current `docs/SPEC.md` defines implementation phases 0 through 9. Its testin
   ordinary pushes and feature PRs cannot publish.
 - Contributor, conduct, security, and maintainer release/setup documentation is present in the repository root and `docs/releasing.md`.
 
+## Professional MCP improvement program
+
+| Milestone                                              | Status                                                           | Contract |
+| ------------------------------------------------------ | ---------------------------------------------------------------- | -------- |
+| Version chain, headless config, runtime info, doctor   | Accepted; pending implementation                                 | ADR 0007 |
+| Structured MCP output, annotations, cancellation       | Accepted; pending implementation                                 | ADR 0008 |
+| Passive waits and atomic action/wait                   | Accepted; pending implementation                                 | ADR 0009 |
+| Bounded redacted browser observability                 | Accepted; pending implementation                                 | ADR 0010 |
+| Bounded snapshots, context options, typed interactions | Accepted; pending implementation                                 | ADR 0011 |
+| Filesystem-backed artifacts                            | Design gate accepted; capability ADR and implementation deferred | ADR 0012 |
+
+Remote HTTP/multi-client security and internal agent orchestration are not part of the accepted
+implementation program. The latter remains a separate external layer.
+
 ## Acceptance evidence
 
 - Real-Chromium integration covers isolated cookies, localStorage, pages, URLs, password redaction, exact/ambiguous role locators, DOM reads, screenshots, page lifecycle, history, interactions, persistence, ordering, parallelism, timeout recovery, shutdown, disconnect, and cleanup.
@@ -53,6 +69,17 @@ User → external AI client → MCP → BrowserMesh → isolated browser session
 ```
 
 ## Verification
+
+Baseline audit before accepting the improvement plan:
+
+- The v0.1 source/package verification remained green.
+- `npm run format:check` reported only the new untracked
+  `docs/PROFESSIONAL_MCP_IMPROVEMENT_PLAN.md`; this was documentation handoff formatting, not a
+  product defect. Other baseline checks were green.
+- The audit environment's configured `0.1.2` executable was stale local installation state, not a
+  BrowserMesh project defect or blocker.
+
+Last completed v0.1 release verification:
 
 - `npm ci`: passed with 0 reported vulnerabilities.
 - `npm run verify`: passed after the clean install.
