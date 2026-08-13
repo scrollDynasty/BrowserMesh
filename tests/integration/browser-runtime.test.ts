@@ -197,7 +197,10 @@ describe('real Chromium runtime', () => {
       'clicked',
     );
     expect((await runtime.snapshot(target)).value.snapshot).toContain('Submit');
-    expect((await runtime.screenshot(target)).value.startsWith('iVBOR')).toBe(true);
+    const screenshot = await runtime.screenshot(target);
+    expect(screenshot.value.startsWith('iVBOR')).toBe(true);
+    expect(screenshot).toMatchObject({ width: 1280, height: 720 });
+    expect(screenshot.bytes).toBeGreaterThan(100);
   });
 
   it('performs typed semantic interactions and exposes their resulting page state', async () => {

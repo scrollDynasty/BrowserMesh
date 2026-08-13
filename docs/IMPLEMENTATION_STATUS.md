@@ -34,6 +34,7 @@ repository-wide adversarial audit is still required before release completion is
 | Engine-neutral nested iframe targeting                                | Complete                                                                         | ADR 0014                              |
 | Immutable bounded snapshot-tree pagination                            | Complete                                                                         | ADR 0015                              |
 | Origin-scoped geolocation permissions                                 | Complete                                                                         | ADR 0016                              |
+| Runtime-authoritative resource budgets                                | Complete                                                                         | ADR 0017                              |
 | Stable public browser-failure classification and redacted context     | Complete; final hardening                                                        | SPEC §13, architecture error contract |
 
 Remote HTTP/multi-client security, filesystem-backed artifacts, and internal agent orchestration are
@@ -79,6 +80,11 @@ deferred scope. They are not missing parts of the accepted program.
 - Typed actions cover hover, focus, check/uncheck, double-click, coordinate scroll,
   scroll-into-view, drag/drop, popup/dialog actions, iframe targeting, and viewport/full-page/element
   screenshots through the owning session queue.
+- Resource-budget tests cover bounded session labels/metadata, Unicode and UTF-8-safe visible-text
+  truncation, screenshot dimension preflight plus post-capture byte quotas, atomic saved-state
+  count/per-state/aggregate quotas, concurrent replacement preservation, bounded corrupt-file
+  reads, and queue recovery after rejection. Effective budgets are reported by
+  `browser_runtime_info`.
 - Error tests cover deterministic classification, a real refused-connection navigation, locator
   timeout/ambiguity/not-found reasons, invalid URL context, hostile getters/proxies, URL redaction,
   operation correlation, and post-failure session usability.

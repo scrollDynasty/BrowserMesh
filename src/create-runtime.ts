@@ -27,7 +27,10 @@ export function createRuntime(
       headless: config.headless,
       timeoutMs: config.defaultTimeoutMs,
     }),
-    stateRepository: new FileSystemStateRepository(config.dataDirectory),
+    stateRepository: new FileSystemStateRepository(
+      config.dataDirectory,
+      config.resources.persistence,
+    ),
     events: new StructuredLogger(config.logLevel),
     ids: uuidGenerator,
     defaultTimeoutMs: config.defaultTimeoutMs,
@@ -39,5 +42,6 @@ export function createRuntime(
     playwrightVersion: PLAYWRIGHT_VERSION,
     headless: config.headless,
     observability: config.observability,
+    resources: config.resources,
   });
 }

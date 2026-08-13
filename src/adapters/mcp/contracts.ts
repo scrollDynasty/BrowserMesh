@@ -254,6 +254,32 @@ export const outputSchemas = {
     defaultTimeoutMs: z.number().int().positive(),
     maxSessions: z.number().int().positive(),
     maxPagesPerSession: z.number().int().positive(),
+    resourceLimits: z.object({
+      session: z.object({
+        maxNameChars: z.number().int().positive(),
+        maxNameBytes: z.number().int().positive(),
+        maxMetadataEntries: z.number().int().positive(),
+        maxMetadataKeyChars: z.number().int().positive(),
+        maxMetadataKeyBytes: z.number().int().positive(),
+        maxMetadataValueChars: z.number().int().positive(),
+        maxMetadataValueBytes: z.number().int().positive(),
+        maxMetadataBytes: z.number().int().positive(),
+      }),
+      screenshot: z.object({
+        maxDimensionPixels: z.number().int().positive(),
+        maxPixels: z.number().int().positive(),
+        maxBytes: z.number().int().positive(),
+      }),
+      visibleText: z.object({
+        maxChars: z.number().int().positive(),
+        maxBytes: z.number().int().positive(),
+      }),
+      persistence: z.object({
+        maxStates: z.number().int().positive(),
+        maxStateBytes: z.number().int().positive(),
+        maxTotalBytes: z.number().int().positive(),
+      }),
+    }),
     activeSessions: z.number().int().nonnegative(),
     failedSessions: z.number().int().nonnegative(),
   }),
@@ -319,7 +345,19 @@ export const outputSchemas = {
       returnedBytes: z.number().int().nonnegative(),
     }),
   }),
-  browser_visible_text: z.object({ ...pageOperation, text: z.string() }),
+  browser_visible_text: z.object({
+    ...pageOperation,
+    text: z.string(),
+    truncation: z.object({
+      truncated: z.boolean(),
+      originalChars: z.number().int().nonnegative(),
+      originalBytes: z.number().int().nonnegative(),
+      returnedChars: z.number().int().nonnegative(),
+      returnedBytes: z.number().int().nonnegative(),
+      maxChars: z.number().int().positive(),
+      maxBytes: z.number().int().positive(),
+    }),
+  }),
   browser_console_list: z.object(observationList),
   browser_page_errors_list: z.object(observationList),
   browser_network_list: z.object(observationList),
@@ -339,6 +377,9 @@ export const outputSchemas = {
   browser_screenshot: z.object({
     ...pageOperation,
     mimeType: z.literal('image/png'),
+    width: z.number().int().positive(),
+    height: z.number().int().positive(),
+    bytes: z.number().int().positive(),
   }),
   browser_wait: z.object({ ...pageOperation, condition: waitConditionSchema }),
   browser_action_and_wait: z.object({

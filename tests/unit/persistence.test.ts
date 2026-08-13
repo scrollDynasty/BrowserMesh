@@ -58,4 +58,56 @@ describe('FileSystemStateRepository', () => {
       await rm(directory, { recursive: true, force: true });
     }
   });
+
+  it('enforces count, per-state, and aggregate quotas atomically and recovers after failure', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'browsermesh-'));
+    try {
+      const repository = new FileSystemStateRepository(directory, {
+        maxStates: 2,
+        maxStateBytes: 300,
+        maxTotalBytes: 600,
+      });
+      const state = (value: string) => ({
+        cookies: [],
+        origins: [{ origin: 'https://example.test', localStorage: [{ name: 'value', value }] }],
+      });
+      const first = await Promise.allSettled([
+        repository.save('one', state('a'.repeat(100))),
+        repository.save('two', state('b'.repeat(100))),
+        repository.save('three', state('c'.repeat(100))),
+      ]);
+      expect(first.filter(({ status }) => status === 'fulfilled')).toHaveLength(2);
+      expect(first.filter(({ status }) => status === 'rejected')).toMatchObject([
+        { reason: { code: 'LIMIT_EXCEEDED' } },
+      ]);
+      await expect(repository.save('one', state('x'.repeat(1_000)))).rejects.toMatchObject({
+        code: 'LIMIT_EXCEEDED',
+      });
+      expect((await repository.load('one')).origins[0]?.localStorage[0]?.value).toBe(
+        'a'.repeat(100),
+      );
+      await repository.remove('two');
+      await expect(repository.save('three', state('ok'))).resolves.toMatchObject({
+        stateId: 'three',
+      });
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
+  it('bounds an existing file before reading or parsing it', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'browsermesh-'));
+    try {
+      const repository = new FileSystemStateRepository(directory, {
+        maxStates: 10,
+        maxStateBytes: 64,
+        maxTotalBytes: 1_024,
+      });
+      await repository.save('small', { cookies: [], origins: [] });
+      await writeFile(join(directory, 'states', 'small.json'), 'x'.repeat(65), 'utf8');
+      await expect(repository.load('small')).rejects.toMatchObject({ code: 'LIMIT_EXCEEDED' });
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
 });

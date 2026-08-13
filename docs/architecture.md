@@ -433,6 +433,8 @@ The filesystem adapter:
 - writes through a temporary file;
 - atomically replaces the destination where supported;
 - uses private directory/file permissions where supported.
+- serializes all state mutations while enforcing count, per-state, and aggregate byte quotas;
+- checks an opened state's size and bounds the read before parsing.
 
 Saved browser state may contain credentials.
 
@@ -467,6 +469,17 @@ Screenshots are returned as MCP image content.
 BrowserMesh does not allow the caller to specify an arbitrary local output path.
 
 This avoids arbitrary filesystem overwrite behavior in v0.1.
+
+The runtime owns screenshot budgets. The browser adapter reports CSS-pixel dimensions before capture;
+the runtime rejects oversized work, then validates actual PNG dimensions and encoded bytes after
+capture. Both checks remain inside the addressed session queue. Visible-text reads use the same queue
+and are truncated at safe Unicode/UTF-8 boundaries with explicit result metadata.
+
+## Neutral label boundaries
+
+Session names and metadata are validated in the runtime before IDs or browser resources are allocated.
+The bounded immutable copy rejects control characters and dangerous object keys, so direct runtime
+callers receive the same protection as MCP callers and session list/get responses remain bounded.
 
 ## Logging and stdio
 

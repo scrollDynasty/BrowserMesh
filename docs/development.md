@@ -71,6 +71,12 @@ available. Use `BROWSERMESH_HEADLESS=false` under Xvfb when verifying the defaul
 behavior. The default is `false`, and only the exact strings `true` and `false` are valid. Browser
 startup remains lazy until the first session is created.
 
+Resource-budget changes must be tested at the runtime boundary as well as MCP. In particular, verify
+session labels are rejected before browser allocation, UTF-8 truncation does not split a code point,
+screenshot preflight and post-capture failures leave the queue usable, and concurrent saved-state
+mutations cannot race count or aggregate quotas. The supported environment variables and defaults
+are listed in the README; `browser_runtime_info` exposes their effective non-sensitive values.
+
 Use the repository lockfile.
 
 Do not delete/regenerate it casually as part of unrelated work.

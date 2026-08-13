@@ -95,6 +95,12 @@ Sessions may have:
 - an optional human-readable `name`;
 - optional string metadata.
 
+Names and metadata are bounded by the runtime before it allocates a session ID or browser resource.
+Names are limited to 128 Unicode code points/512 UTF-8 bytes. Metadata is limited to 32 entries,
+64 code points/256 bytes per key, 512 code points/2048 bytes per value, and 8192 aggregate key/value
+bytes. Control characters and dangerous object keys are rejected. MCP mirrors these stable limits,
+but the runtime is authoritative for non-MCP callers.
+
 An external client may use metadata such as:
 
 ```text
@@ -410,6 +416,11 @@ The initial implementation uses a filesystem repository beneath the configured B
 
 Writes should use safe temporary-file + atomic-replace semantics where supported.
 
+The filesystem repository enforces centrally configured saved-state count, per-state byte, and
+aggregate-byte quotas (defaults: 100, 1048576, and 16777216). Quota check and replacement are one
+serialized repository mutation across all state IDs. A rejected replacement leaves the prior state
+intact. Loading checks the opened file size and uses a bounded read before parsing.
+
 Saved state may contain sensitive authentication material.
 
 The runtime must not log serialized state.
@@ -670,6 +681,7 @@ BrowserMesh v0.1 security rules:
 - state names cannot traverse directories;
 - `.browsermesh/` is Git-ignored and documented as sensitive;
 - screenshots are returned in memory;
+- browser-derived visible text and screenshots are runtime-bounded;
 - arbitrary shell execution is not exposed;
 - arbitrary local filesystem reading is not exposed;
 - navigation is limited to allowed absolute HTTP(S) URLs.
@@ -687,12 +699,20 @@ v0.1 configuration includes:
 - maximum active sessions;
 - maximum pages per session;
 - persistence enabled/disabled.
+- screenshot dimension/pixel/encoded-byte limits;
+- visible-text character/UTF-8-byte limits;
+- saved-state count/per-state/aggregate-byte limits.
 
 The accepted observability extension also centrally validates hard maximums for retained events per
 page, exposed string characters, read page size, and serialized response bytes. Defaults are 200,
 2048, 100, and 65536 respectively; environment names match the README configuration table.
 
 Configuration is validated centrally.
+
+Visible text is truncated on Unicode code-point and UTF-8 boundaries and returns explicit original,
+returned, and applied-bound metadata. Screenshots are measured before capture and validated again
+from the returned PNG. Dimension, pixel, or encoded-byte overflow returns `LIMIT_EXCEEDED`; the
+per-session queue remains usable afterward.
 
 MCP negotiation and tool discovery do not depend on a successful Chromium launch. A missing
 Playwright browser binary is reported by `browser_session_create` as an actionable `BROWSER_ERROR`.

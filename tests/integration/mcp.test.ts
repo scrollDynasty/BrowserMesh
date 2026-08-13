@@ -10,6 +10,7 @@ import {
 import { applicationErrorResult } from '../../src/adapters/mcp/results.js';
 import { createMcpServer } from '../../src/adapters/mcp/server.js';
 import { BrowserMeshError } from '../../src/domain/errors.js';
+import { DEFAULT_RESOURCE_LIMITS } from '../../src/domain/resource-limits.js';
 import { BROWSERMESH_VERSION } from '../../src/infrastructure/generated/version.js';
 import { FakeEngine, testRuntime } from '../support/fakes.js';
 
@@ -401,6 +402,7 @@ describe('MCP adapter', () => {
       });
       const screenshot = await callSuccess(client, 'browser_screenshot', target);
       expect(screenshot.content.some((block) => block.type === 'image')).toBe(true);
+      expect(screenshot.structuredContent).toMatchObject({ width: 1, height: 1, bytes: 24 });
       await callSuccess(client, 'browser_screenshot', {
         ...target,
         capture: { kind: 'element', locator: { strategy: 'testId', value: 'control' } },
@@ -586,6 +588,44 @@ describe('MCP adapter', () => {
       expect(readText(failed)).toContain('INTERNAL_ERROR');
       expect(readText(failed)).not.toContain('private-path');
       expect(readText(failed)).not.toContain('Users');
+    } finally {
+      await client.close();
+      await server.close();
+      await runtime.shutdown();
+    }
+  });
+
+  it('mirrors label bounds and reports runtime-owned visible-text truncation', async () => {
+    const { runtime } = testRuntime(new FakeEngine(), {
+      resources: {
+        ...DEFAULT_RESOURCE_LIMITS,
+        visibleText: { maxChars: 10, maxBytes: 5 },
+      },
+    });
+    const server = createMcpServer(runtime);
+    const client = new Client({ name: 'resource-test', version: '1.0.0' });
+    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+    await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
+    try {
+      const invalid = requireCallResult(
+        await client.callTool({
+          name: 'browser_session_create',
+          arguments: { metadata: { constructor: 'unsafe' } },
+        }),
+      );
+      expect(invalid.isError).toBe(true);
+      const created = await callSuccess(client, 'browser_session_create', {});
+      const target = z
+        .object({ initialPage: z.object({ sessionId: z.string(), pageId: z.string() }) })
+        .parse(created.structuredContent).initialPage;
+      const text = await callSuccess(client, 'browser_visible_text', {
+        ...target,
+        locator: { strategy: 'text', value: 'a😀b' },
+      });
+      expect(text.structuredContent).toMatchObject({
+        text: 'a😀',
+        truncation: { truncated: true, originalBytes: 6, returnedBytes: 5 },
+      });
     } finally {
       await client.close();
       await server.close();
