@@ -27,20 +27,30 @@ const packSchema = z.array(
     files: z.array(z.object({ path: z.string() })),
   }),
 );
-const mcpEnvelopeSchema = z.object({
-  ok: z.literal(true),
-  value: z.object({
+const structuredResultSchema = z
+  .object({
     operationId: z.string().min(1),
-    sessionId: z.string().min(1),
-    pageId: z.string().min(1),
-    value: z.unknown(),
-  }),
-});
-const mcpValueSchema = z.object({ ok: z.literal(true), value: z.unknown() });
+  })
+  .catchall(z.unknown());
+const doctorCheckIds = [
+  'node-version',
+  'version-consistency',
+  'data-directory-access',
+  'chromium-executable',
+  'browser-smoke',
+] as const;
 const doctorResultSchema = z.object({
   schemaVersion: z.literal('1'),
   status: z.literal('passed'),
-  checks: z.array(z.object({ id: z.string(), status: z.literal('passed') })).length(5),
+  checks: z.array(
+    z.object({
+      id: z.enum(doctorCheckIds),
+      status: z.literal('passed'),
+      code: z.string().min(1),
+      message: z.string().max(256),
+      remediation: z.null(),
+    }),
+  ),
 });
 const installedManifestSchema = z.object({
   name: z.literal(packageName),
@@ -145,7 +155,10 @@ async function main(): Promise<void> {
       timeout: 45_000,
       maxBuffer: 10 * 1024 * 1024,
     });
-    doctorResultSchema.parse(JSON.parse(doctor.stdout));
+    const doctorResult = doctorResultSchema.parse(JSON.parse(doctor.stdout));
+    if (doctorResult.checks.map(({ id }) => id).join(',') !== doctorCheckIds.join(',')) {
+      throw new Error('Packaged doctor check IDs or ordering changed');
+    }
     transport = new StdioClientTransport({
       command: process.platform === 'win32' ? process.execPath : binPath,
       ...(process.platform === 'win32' ? { args: [installedCliPath] } : {}),
@@ -170,9 +183,17 @@ async function main(): Promise<void> {
     if (!tools.tools.some(({ name }) => name === 'browser_session_create')) {
       throw new Error('Packaged MCP server did not expose browser_session_create');
     }
-    const runtimeInfo = readSuccessfulValue(
-      await client.callTool({ name: 'browser_runtime_info', arguments: {} }),
-    );
+    if (
+      tools.tools.some(
+        ({ title, outputSchema }) => title === undefined || outputSchema?.type !== 'object',
+      )
+    ) {
+      throw new Error('Packaged MCP tool discovery omitted a title or object outputSchema');
+    }
+    const runtimeInfo = z
+      .object({ structuredContent: z.unknown(), isError: z.boolean().optional() })
+      .parse(await client.callTool({ name: 'browser_runtime_info', arguments: {} }));
+    if (runtimeInfo.isError === true) throw new Error('Packaged runtime info returned an error');
     const installedPlaywright = z
       .object({ version: z.string().min(1) })
       .parse(
@@ -197,14 +218,16 @@ async function main(): Promise<void> {
       maxPagesPerSession: z.number().positive(),
       activeSessions: z.literal(0),
       failedSessions: z.literal(0),
-    }).parse(runtimeInfo);
+    }).parse(runtimeInfo.structuredContent);
     const created = await client.callTool({
       name: 'browser_session_create',
       arguments: { name: 'package-smoke' },
     });
-    const createdIds = readSuccessfulTextResult(created);
+    const createdIds = z
+      .object({ initialPage: z.object({ sessionId: z.string(), pageId: z.string() }) })
+      .parse(readStructuredResult(created)).initialPage;
     webServer = await startPackageTestServer();
-    readSuccessfulTextResult(
+    readStructuredResult(
       await client.callTool({
         name: 'browser_navigate',
         arguments: {
@@ -214,7 +237,7 @@ async function main(): Promise<void> {
         },
       }),
     );
-    const initialStatus = readSuccessfulTextResult(
+    const initialStatus = readStructuredResult(
       await client.callTool({
         name: 'browser_visible_text',
         arguments: {
@@ -224,10 +247,10 @@ async function main(): Promise<void> {
         },
       }),
     );
-    if (initialStatus.value !== 'ready') {
+    if (initialStatus.text !== 'ready') {
       throw new Error('Packaged MCP browser did not read the expected DOM state');
     }
-    readSuccessfulTextResult(
+    readStructuredResult(
       await client.callTool({
         name: 'browser_click',
         arguments: {
@@ -237,7 +260,7 @@ async function main(): Promise<void> {
         },
       }),
     );
-    const updatedStatus = readSuccessfulTextResult(
+    const updatedStatus = readStructuredResult(
       await client.callTool({
         name: 'browser_visible_text',
         arguments: {
@@ -247,16 +270,16 @@ async function main(): Promise<void> {
         },
       }),
     );
-    if (updatedStatus.value !== 'clicked') {
+    if (updatedStatus.text !== 'clicked') {
       throw new Error('Packaged MCP browser action did not update the DOM');
     }
-    const url = readSuccessfulTextResult(
+    const url = readStructuredResult(
       await client.callTool({
         name: 'browser_get_url',
         arguments: { sessionId: createdIds.sessionId, pageId: createdIds.pageId },
       }),
     );
-    if (url.value !== webServer.url) {
+    if (url.url !== webServer.url) {
       throw new Error('Packaged MCP browser URL did not match the test server');
     }
     const closed = await client.callTool({
@@ -322,22 +345,12 @@ async function assertInstalledBin(binPath: string, installedCliPath: string): Pr
   await access(binPath, constants.X_OK);
 }
 
-function readSuccessfulTextResult(result: unknown): z.infer<typeof mcpEnvelopeSchema>['value'] {
+function readStructuredResult(result: unknown): z.infer<typeof structuredResultSchema> {
   const parsed = z
-    .object({ content: z.array(z.object({ type: z.string(), text: z.string().optional() })) })
+    .object({ structuredContent: z.unknown(), isError: z.boolean().optional() })
     .parse(result);
-  const text = parsed.content.find((block) => block.type === 'text')?.text;
-  if (text === undefined) throw new Error('MCP result did not contain text content');
-  return mcpEnvelopeSchema.parse(JSON.parse(text)).value;
-}
-
-function readSuccessfulValue(result: unknown): unknown {
-  const parsed = z
-    .object({ content: z.array(z.object({ type: z.string(), text: z.string().optional() })) })
-    .parse(result);
-  const text = parsed.content.find((block) => block.type === 'text')?.text;
-  if (text === undefined) throw new Error('MCP result did not contain compatibility JSON text');
-  return mcpValueSchema.parse(JSON.parse(text)).value;
+  if (parsed.isError === true) throw new Error('Packaged MCP tool returned an application error');
+  return structuredResultSchema.parse(parsed.structuredContent);
 }
 
 await main();

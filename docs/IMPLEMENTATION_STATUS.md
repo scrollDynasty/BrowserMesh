@@ -36,14 +36,14 @@ pending and does not retroactively make the baseline incomplete.
 
 ## Professional MCP improvement program
 
-| Milestone                                              | Status                                                                                                                      | Contract |
-| ------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------- | -------- |
-| Version chain, headless config, runtime info, doctor   | Complete: immutable exact version chain, validated launch config, safe non-launching runtime info, and bounded doctor smoke | ADR 0007 |
-| Structured MCP output, annotations, cancellation       | Accepted; pending implementation                                                                                            | ADR 0008 |
-| Passive waits and atomic action/wait                   | Accepted; pending implementation                                                                                            | ADR 0009 |
-| Bounded redacted browser observability                 | Accepted; pending implementation                                                                                            | ADR 0010 |
-| Bounded snapshots, context options, typed interactions | Accepted; pending implementation                                                                                            | ADR 0011 |
-| Filesystem-backed artifacts                            | Design gate accepted; capability ADR and implementation deferred                                                            | ADR 0012 |
+| Milestone                                              | Status                                                                                               | Contract |
+| ------------------------------------------------------ | ---------------------------------------------------------------------------------------------------- | -------- |
+| Version chain, headless config, runtime info, doctor   | Complete: exact version chain, validated config, non-launching runtime info, and bounded doctor      | ADR 0007 |
+| Structured MCP output, annotations, cancellation       | Partial: structured output and annotations complete; cancellation awaits cancellable long operations | ADR 0008 |
+| Passive waits and atomic action/wait                   | Accepted; pending implementation                                                                     | ADR 0009 |
+| Bounded redacted browser observability                 | Accepted; pending implementation                                                                     | ADR 0010 |
+| Bounded snapshots, context options, typed interactions | Accepted; pending implementation                                                                     | ADR 0011 |
+| Filesystem-backed artifacts                            | Design gate accepted; capability ADR and implementation deferred                                     | ADR 0012 |
 
 Remote HTTP/multi-client security and internal agent orchestration are not part of the accepted
 implementation program. The latter remains a separate external layer.
@@ -53,6 +53,10 @@ implementation program. The latter remains a separate external layer.
 - Real-Chromium integration covers isolated cookies, localStorage, pages, URLs, password redaction, exact/ambiguous role locators, DOM reads, screenshots, page lifecycle, history, interactions, persistence, ordering, parallelism, timeout recovery, shutdown, disconnect, and cleanup.
 - Unit tests cover lifecycle/limits, terminal-record bounds, operation correlation, queue recovery, navigation policy, persistence naming/atomic concurrency, configuration, structured logging, and architecture dependency rules.
 - MCP tests cover the exact public tool set, descriptions, schema rejection, safe structured errors, successful calls, explicit routing, subprocess stdio negotiation, and exit.
+- All 24 current MCP tools publish object-root output schemas, direct structured success fields,
+  human titles, and exact reviewed risk annotations. Contract tests execute every success schema;
+  stdio/package tests verify installed discovery. Application errors are bounded JSON-only results
+  with typed runtime `operationId` correlation, while SDK input-validation errors remain distinct.
 - The deterministic 50-session stress test verifies runtime routing and cleanup, while a separate
   eight-context real-Chromium stress test verifies bounded adapter isolation and resource release.
 - `scripts/verify-package.ts` tests the generated npm tarball rather than source-tree execution and
@@ -101,6 +105,15 @@ Last completed v0.1 release verification:
 - Release configuration JSON and all repository YAML files parsed successfully.
 - Official `mcp-publisher` v1.8.1 validation of `server.json`: passed.
 - `git diff --check`: passed.
+- `browser_runtime_info` reports exact generated BrowserMesh/resolved Playwright versions, Node
+  version, nullable live Chromium version, launch state, effective safe configuration, and bounded
+  session counts without launching Chromium. Its result follows ADR 0008 with direct structured
+  fields, an object output schema, concise compatibility text, and reviewed read-only annotations.
+- `browsermesh --doctor --json` provides schema version `1`, stable required check IDs, safe
+  remediation, non-zero failure exits, data-directory create/read/write probing without listing,
+  executable availability, and a real bounded launch/context/page/cleanup smoke.
+- Unit, in-memory MCP, real stdio, real Chromium doctor, and installed-tarball doctor/runtime-info
+  verification cover the completed ADR 0007 slice.
 
 Known blockers: none.
 
@@ -114,14 +127,13 @@ Latest post-v0.1 slice verification:
 - `npm run verify`: passed (17 files, 63 tests, coverage thresholds, build).
 - `BROWSERMESH_HEADLESS=true npm run verify:package`: passed, including installed-tarball MCP and
   Chromium smoke.
-- `browser_runtime_info` reports exact generated BrowserMesh/resolved Playwright versions, Node
-  version, nullable live Chromium version, launch state, effective safe configuration, and bounded
-  session counts without launching Chromium.
-- `browsermesh --doctor --json` provides schema version `1`, stable required check IDs, safe
-  remediation, non-zero failure exits, data-directory create/read/write probing without listing,
-  executable availability, and a real bounded launch/context/page/cleanup smoke.
-- Unit, in-memory MCP, real stdio, real Chromium doctor, and installed-tarball doctor/runtime-info
-  verification cover ADR 0007. Full verification results for this slice are recorded in its PR.
+- ADR 0008 structured-output slice: all 24 current tools now expose direct structured results,
+  object-root output schemas, titles, and reviewed annotations; application errors retain bounded
+  safe JSON and accepted-operation correlation without exposing causes.
+- `npm run verify`: passed (17 files, 65 tests, coverage thresholds, lint, format, typecheck, build).
+- `BROWSERMESH_HEADLESS=true npm run verify:package`: passed, including clean tarball installation,
+  installed discovery metadata, MCP navigation/interaction, and Chromium lifecycle smoke.
+- `git diff --check`: passed.
 
 ## Intentional v0.1 non-scope
 

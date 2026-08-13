@@ -390,6 +390,20 @@ The goal is that a user can say:
 
 without having to manually instruct the AI to call `browser_session_create` twice.
 
+Every discovered tool also publishes a human-readable title, an object-root `outputSchema`, and
+reviewed MCP risk hints (`readOnlyHint`, `destructiveHint`, `idempotentHint`, and `openWorldHint`).
+These hints improve client UX only; BrowserMesh never treats them as authorization.
+
+Successful calls return schema-validated `structuredContent` with direct semantic fields. For
+example, `browser_session_create` exposes `operationId`, `session`, and `initialPage` directly,
+without a nested `value.value` envelope. A concise JSON text block remains for text-only clients.
+Screenshots retain their in-memory MCP image block and add structured PNG/correlation metadata.
+
+Application failures use `isError: true` and a bounded JSON error containing a stable code, safe
+message, optional sanitized details, and `operationId` correlation when the runtime accepted the
+operation. Raw causes, stacks, cycles, non-JSON values, and secret-bearing detail fields never cross
+the MCP boundary. SDK input-schema failures remain distinguishable as MCP input-validation errors.
+
 ## Locators
 
 Browser actions prefer semantic locator strategies.

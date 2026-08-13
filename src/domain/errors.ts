@@ -23,17 +23,34 @@ export type BrowserMeshErrorCode = (typeof errorCodes)[number];
 export class BrowserMeshError extends Error {
   readonly code: BrowserMeshErrorCode;
   readonly details: Readonly<Record<string, unknown>> | undefined;
+  readonly operationId: string | undefined;
 
   constructor(
     code: BrowserMeshErrorCode,
     message: string,
-    options: { cause?: unknown; details?: Readonly<Record<string, unknown>> } = {},
+    options: {
+      cause?: unknown;
+      details?: Readonly<Record<string, unknown>>;
+      operationId?: string;
+    } = {},
   ) {
     super(message, options.cause === undefined ? undefined : { cause: options.cause });
     this.name = 'BrowserMeshError';
     this.code = code;
     this.details = options.details;
+    this.operationId = options.operationId;
   }
+}
+
+/** Attach runtime correlation without mutating or exposing an error's raw cause. */
+export function correlateBrowserMeshError(error: unknown, operationId: string): BrowserMeshError {
+  const mapped = asBrowserMeshError(error);
+  if (mapped.operationId !== undefined) return mapped;
+  return new BrowserMeshError(mapped.code, mapped.message, {
+    cause: mapped,
+    ...(mapped.details === undefined ? {} : { details: mapped.details }),
+    operationId,
+  });
 }
 
 export function asBrowserMeshError(error: unknown): BrowserMeshError {
