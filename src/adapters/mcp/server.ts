@@ -3,6 +3,7 @@ import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { z } from 'zod';
 import { asBrowserMeshError } from '../../domain/errors.js';
 import type { Locator } from '../../domain/models.js';
+import { BROWSERMESH_VERSION } from '../../infrastructure/generated/version.js';
 import type { BrowserMeshRuntime, OperationTarget } from '../../runtime/browsermesh-runtime.js';
 
 const role = z.enum([
@@ -70,7 +71,7 @@ async function result(action: () => unknown): Promise<CallToolResult> {
 }
 
 export function createMcpServer(runtime: BrowserMeshRuntime): McpServer {
-  const server = new McpServer({ name: 'browsermesh', version: '0.1.0' });
+  const server = new McpServer({ name: 'browsermesh', version: BROWSERMESH_VERSION });
 
   server.registerTool(
     'browser_session_create',

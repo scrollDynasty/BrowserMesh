@@ -11,3 +11,4 @@ export { createMcpServer } from './adapters/mcp/server.js';
 export { createRuntime } from './create-runtime.js';
 export { loadConfig } from './infrastructure/config.js';
 export type { BrowserMeshConfig } from './infrastructure/config.js';
+export { BROWSERMESH_VERSION } from './infrastructure/generated/version.js';

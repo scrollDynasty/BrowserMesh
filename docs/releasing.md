@@ -123,9 +123,12 @@ npx -y "multi-agent-browser-mcp@$PACKAGE_VERSION"
 
 The npm package declares the official Registry identity
 `io.github.scrollDynasty/browsermesh` through `mcpName`. `server.json` is the Registry manifest;
-release-please keeps both of its version fields synchronized with `package.json`. After npm Trusted
-Publishing succeeds, the same tag workflow authenticates to the MCP Registry with GitHub OIDC and
-publishes the manifest. No long-lived MCP Registry token is stored in GitHub.
+release-please keeps both of its version fields and the generated runtime version module
+synchronized with `package.json`. Verification rejects drift before release, and installed-package
+verification requires the MCP `serverInfo.version` handshake to equal the installed manifest and
+Registry manifest versions. After npm Trusted Publishing succeeds, the same tag workflow
+authenticates to the MCP Registry with GitHub OIDC and publishes the manifest. No long-lived MCP
+Registry token is stored in GitHub.
 
 Future prerelease cycles must be introduced deliberately in a reviewed configuration PR. Do not
 create a prerelease merely by editing an npm dist-tag.

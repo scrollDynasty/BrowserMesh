@@ -17,6 +17,18 @@ Do not automatically migrate major dependency versions during unrelated implemen
 
 A major tooling/runtime migration should be handled as an explicit compatibility task with full verification.
 
+### Generated server version
+
+`src/infrastructure/generated/version.ts` is generated from `package.json`; production code must
+not locate or read package metadata at runtime. Run `npm run generate:version` after intentionally
+changing the package version. `npm run check:version` fails when the committed generated value is
+stale, and it runs automatically before typechecking. Build and pack lifecycles regenerate the
+module so clean source builds and installed artifacts contain the same immutable version.
+
+Release Please updates the generated module together with `package.json` and both version fields in
+`server.json`. Contract tests verify that chain and MCP handshake tests assert the exact
+`serverInfo.version` in source, stdio, and installed-tarball execution.
+
 Playwright creates one non-persistent Chromium `BrowserContext` per BrowserMesh session.
 
 MCP v0.1 uses local stdio transport.
