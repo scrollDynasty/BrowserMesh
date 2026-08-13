@@ -4,6 +4,38 @@ All notable changes to BrowserMesh are documented in this file.
 
 This project follows [Semantic Versioning](https://semver.org/). Release entries are maintained by [release-please](https://github.com/googleapis/release-please) from Conventional Commit pull-request titles.
 
+## [0.1.4](https://github.com/scrollDynasty/multi-agent-browser-mcp/compare/v0.1.3...v0.1.4) (2026-08-13)
+
+
+### Features
+
+* add advanced typed browser actions ([#31](https://github.com/scrollDynasty/multi-agent-browser-mcp/issues/31)) ([981f3a6](https://github.com/scrollDynasty/multi-agent-browser-mcp/commit/981f3a631d35594e4b845c80c17ca659008d0980))
+* add atomic popup and dialog actions ([#32](https://github.com/scrollDynasty/multi-agent-browser-mcp/issues/32)) ([5396656](https://github.com/scrollDynasty/multi-agent-browser-mcp/commit/539665687e552a2c8c9fe182a038327adb211dae))
+* add bounded accessibility snapshots ([#30](https://github.com/scrollDynasty/multi-agent-browser-mcp/issues/30)) ([c2a556a](https://github.com/scrollDynasty/multi-agent-browser-mcp/commit/c2a556abdf892682e5c7a4583fdf67b80119a01f))
+* add bounded console and page error observability ([#25](https://github.com/scrollDynasty/multi-agent-browser-mcp/issues/25)) ([21288eb](https://github.com/scrollDynasty/multi-agent-browser-mcp/commit/21288eb429a17bf70f310d3a05256f4fcfbe2015))
+* add bounded element references ([#33](https://github.com/scrollDynasty/multi-agent-browser-mcp/issues/33)) ([3dc98e0](https://github.com/scrollDynasty/multi-agent-browser-mcp/commit/3dc98e05d69e89c2b3a50f6d9f455a2c9a893884))
+* add bounded network observability ([#27](https://github.com/scrollDynasty/multi-agent-browser-mcp/issues/27)) ([11392db](https://github.com/scrollDynasty/multi-agent-browser-mcp/commit/11392db0472a68d5d5daa8ed759f48aed914a573))
+* add deterministic browser waits ([#22](https://github.com/scrollDynasty/multi-agent-browser-mcp/issues/22)) ([8885ecc](https://github.com/scrollDynasty/multi-agent-browser-mcp/commit/8885ecca3569dc2d91e38cd3f2fc70106c3df8c7))
+* add explicit headless browser configuration ([#20](https://github.com/scrollDynasty/multi-agent-browser-mcp/issues/20)) ([1ac9291](https://github.com/scrollDynasty/multi-agent-browser-mcp/commit/1ac9291e4ac200b33461ba7244bddcd131c878dd))
+* add immutable snapshot tree pagination ([697684b](https://github.com/scrollDynasty/multi-agent-browser-mcp/commit/697684b21c6eacb727bf97cbf2bdec5b4dc34141))
+* add isolated browser context settings ([#29](https://github.com/scrollDynasty/multi-agent-browser-mcp/issues/29)) ([ea01f8c](https://github.com/scrollDynasty/multi-agent-browser-mcp/commit/ea01f8c8bc0458075de763e0d198ad5608f3c610))
+* add origin-scoped geolocation permissions ([#34](https://github.com/scrollDynasty/multi-agent-browser-mcp/issues/34)) ([8038bb7](https://github.com/scrollDynasty/multi-agent-browser-mcp/commit/8038bb78513ab13070a8ebc7fff5daaf42f9c3bd))
+* add runtime diagnostics and doctor ([#23](https://github.com/scrollDynasty/multi-agent-browser-mcp/issues/23)) ([7f75b96](https://github.com/scrollDynasty/multi-agent-browser-mcp/commit/7f75b9698a93c33bb665b2ad187aadbfb357e2f4))
+* add safe iframe targeting ([fd3b92b](https://github.com/scrollDynasty/multi-agent-browser-mcp/commit/fd3b92b987598ecf6b8fca57a5d16edde632d645))
+* add typed browser interactions ([#28](https://github.com/scrollDynasty/multi-agent-browser-mcp/issues/28)) ([5ba408a](https://github.com/scrollDynasty/multi-agent-browser-mcp/commit/5ba408ad3c4ea465d6ab5b0883faef24e4630904))
+* complete MCP cancellation semantics ([#26](https://github.com/scrollDynasty/multi-agent-browser-mcp/issues/26)) ([4094117](https://github.com/scrollDynasty/multi-agent-browser-mcp/commit/4094117b45101501f8160857bf446ad46ad0b910))
+* enforce runtime resource budgets ([57e6ed8](https://github.com/scrollDynasty/multi-agent-browser-mcp/commit/57e6ed81df122b6900c74a2a1a480d96f80183e0))
+* **mcp:** add native structured tool results ([#24](https://github.com/scrollDynasty/multi-agent-browser-mcp/issues/24)) ([f787c09](https://github.com/scrollDynasty/multi-agent-browser-mcp/commit/f787c098594671394c0c1d0da3784f197ff46fbe))
+
+
+### Bug Fixes
+
+* enforce absolute deadlines and capture bounds ([#41](https://github.com/scrollDynasty/multi-agent-browser-mcp/issues/41)) ([b9e0b07](https://github.com/scrollDynasty/multi-agent-browser-mcp/commit/b9e0b07dce7bcb50469eb758722a961ecc300024))
+* harden browser lifecycle concurrency ([f19afd3](https://github.com/scrollDynasty/multi-agent-browser-mcp/commit/f19afd389d29f778a946afadd1ec808f04b6b8b7))
+* harden public browser error diagnostics ([5470967](https://github.com/scrollDynasty/multi-agent-browser-mcp/commit/54709670962e1a6ef1ede6230fd1dfb536f28bb0))
+* **mcp:** unify runtime version provenance ([#19](https://github.com/scrollDynasty/multi-agent-browser-mcp/issues/19)) ([3d25e48](https://github.com/scrollDynasty/multi-agent-browser-mcp/commit/3d25e48f376002ec1632a2e3a8cfa1319880893a))
+* sanitize fatal CLI diagnostics ([bc113b1](https://github.com/scrollDynasty/multi-agent-browser-mcp/commit/bc113b1e591bdb3d039b5c256b63904ee6567a9a))
+
 ## [0.1.3](https://github.com/scrollDynasty/multi-agent-browser-mcp/compare/v0.1.2...v0.1.3) (2026-08-13)
 
 
