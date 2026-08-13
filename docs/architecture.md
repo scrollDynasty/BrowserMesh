@@ -538,9 +538,16 @@ queue slot. Engine ports expose typed conditions/actions and cancellation; they 
 Playwright waiters. A composite registers its event waiter before its action and has one deadline
 and cleanup owner.
 
-The first composite adapter supports navigation and response events. Popup waiting is deliberately
-deferred: it must be designed as an atomic runtime page-registration operation that enforces the
-page limit and either returns a managed BrowserMesh `pageId` or closes the popup on every failure.
+The composite adapter supports navigation, response, popup, and dialog events. Popup handling
+transfers the engine's opaque popup handle to the runtime inside the same queued operation. The
+runtime attaches observability, generates a new `pageId`, marks it non-default, and returns its
+`PageView`; if registration or the per-session page limit fails, it closes the popup before
+returning the typed error. No Playwright `Page` crosses the port into a public result.
+
+Dialogs are ephemeral and blocking, so there is no later inspect API. The adapter installs the
+dialog listener before the typed click/press, verifies the expected dialog type, accepts or
+dismisses it under the shared deadline, and returns only bounded message/default-value metadata.
+Unexpected dialogs are dismissed before the operation fails, preventing a blocked page and queue.
 
 Observability listeners are implemented in the Playwright adapter, but their safe normalized event
 models, bounded stores, cursors, ownership, and lifecycle are controlled by runtime/application

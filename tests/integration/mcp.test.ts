@@ -86,6 +86,9 @@ describe('MCP adapter', () => {
         readOnlyHint: false,
         openWorldHint: true,
       });
+      const compositeTool = discovered.tools.find(({ name }) => name === 'browser_action_and_wait');
+      expect(compositeTool?.description).toContain('Popup pages receive a new BrowserMesh pageId');
+      expect(compositeTool?.description).toContain('Dialogs must be handled atomically');
       const runtimeInfoTool = discovered.tools.find(({ name }) => name === 'browser_runtime_info');
       expect(runtimeInfoTool?.title).toBe('Inspect BrowserMesh runtime');
       expect(runtimeInfoTool?.annotations).toEqual({
@@ -314,6 +317,32 @@ describe('MCP adapter', () => {
         wait: {
           kind: 'response',
           matcher: { kind: 'exact', value: 'https://example.test/result' },
+        },
+      });
+      const popupResult = await callSuccess(client, 'browser_action_and_wait', {
+        ...target,
+        action: { kind: 'click', locator: { strategy: 'testId', value: 'popup' } },
+        wait: { kind: 'popup' },
+      });
+      expect(popupResult.structuredContent).toMatchObject({
+        event: { kind: 'popup', page: { sessionId: target.sessionId, isDefault: false } },
+      });
+      const dialogResult = await callSuccess(client, 'browser_action_and_wait', {
+        ...target,
+        action: { kind: 'click', locator: { strategy: 'testId', value: 'prompt' } },
+        wait: {
+          kind: 'dialog',
+          dialogType: 'prompt',
+          action: 'accept',
+          promptText: 'answer',
+        },
+      });
+      expect(dialogResult.structuredContent).toMatchObject({
+        event: {
+          kind: 'dialog',
+          dialogType: 'prompt',
+          action: 'accept',
+          message: 'Fake dialog',
         },
       });
       engine.failNextWait = true;

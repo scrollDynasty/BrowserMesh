@@ -487,6 +487,83 @@ describe('real Chromium runtime', () => {
     });
   });
 
+  it('atomically manages popup pages and dialogs without leaking ownership', async () => {
+    const target = await createTarget();
+    const other = await createTarget();
+    await runtime.navigate(target, `${web.baseUrl}/popup-dialog-actions`);
+
+    const popup = await runtime.actionAndWait(
+      target,
+      { kind: 'click', locator: { strategy: 'testId', value: 'popup' } },
+      { kind: 'popup' },
+    );
+    expect(popup.value.event.kind).toBe('popup');
+    if (popup.value.event.kind !== 'popup') throw new Error('Expected popup event');
+    expect(popup.value.event.page).toMatchObject({
+      sessionId: target.sessionId,
+      isDefault: false,
+    });
+    await expect(
+      runtime.getTitle({ sessionId: other.sessionId, pageId: popup.value.event.page.pageId }),
+    ).rejects.toMatchObject({ code: 'PAGE_NOT_FOUND' });
+    await expect(
+      runtime.getTitle({ sessionId: target.sessionId, pageId: popup.value.event.page.pageId }),
+    ).resolves.toMatchObject({ value: 'Popup destination' });
+
+    const prompt = await runtime.actionAndWait(
+      target,
+      { kind: 'click', locator: { strategy: 'testId', value: 'prompt' } },
+      { kind: 'dialog', dialogType: 'prompt', action: 'accept', promptText: 'typed answer' },
+    );
+    expect(prompt.value.event).toMatchObject({
+      kind: 'dialog',
+      dialogType: 'prompt',
+      action: 'accept',
+      message: 'Prompt message',
+      defaultValue: 'seed',
+    });
+    await expect(
+      runtime.visibleText(target, { strategy: 'testId', value: 'status' }),
+    ).resolves.toMatchObject({ value: 'typed answer' });
+
+    const confirm = await runtime.actionAndWait(
+      target,
+      { kind: 'click', locator: { strategy: 'testId', value: 'confirm' } },
+      { kind: 'dialog', dialogType: 'confirm', action: 'dismiss' },
+    );
+    expect(confirm.value.event).toMatchObject({ kind: 'dialog', action: 'dismiss' });
+    await expect(
+      runtime.actionAndWait(
+        target,
+        { kind: 'click', locator: { strategy: 'testId', value: 'alert' } },
+        { kind: 'dialog', dialogType: 'confirm', action: 'dismiss' },
+      ),
+    ).rejects.toMatchObject({ code: 'BROWSER_ERROR' });
+    await expect(
+      runtime.visibleText(target, { strategy: 'testId', value: 'status' }),
+    ).resolves.toMatchObject({ value: 'handled' });
+    await expect(runtime.getTitle(target)).resolves.toMatchObject({
+      value: 'Popup and dialog actions',
+    });
+  });
+
+  it('closes a real overflow popup and recovers the same-session queue', async () => {
+    const target = await createTarget();
+    await runtime.navigate(target, `${web.baseUrl}/popup-dialog-actions`);
+    for (let index = 1; index < 10; index += 1) await runtime.createPage(target.sessionId);
+    await expect(
+      runtime.actionAndWait(
+        target,
+        { kind: 'click', locator: { strategy: 'testId', value: 'popup' } },
+        { kind: 'popup' },
+      ),
+    ).rejects.toMatchObject({ code: 'LIMIT_EXCEEDED' });
+    expect((await runtime.listPages(target.sessionId)).value).toHaveLength(10);
+    await expect(runtime.getTitle(target)).resolves.toMatchObject({
+      value: 'Popup and dialog actions',
+    });
+  });
+
   it('keeps waits ordered per session, parallel across sessions, and usable after timeout', async () => {
     const a = await createTarget();
     const b = await createTarget();

@@ -1042,14 +1042,19 @@ expressions and JavaScript are forbidden. It executes through the session queue 
 normalized satisfied condition plus correlation metadata. Timeout returns `OPERATION_TIMEOUT`.
 
 A passive wait cannot depend on a later same-session queued action. `browser_action_and_wait`
-atomically registers one typed navigation/response/popup waiter, executes one typed click/press
+atomically registers one typed navigation/response/popup/dialog waiter, executes one typed click/press
 action, then awaits both under one shared deadline in one queue slot. All outcomes detach the
 waiter. No implementation may bypass the session queue to compose these operations.
 
-The initial composite implementation covers navigation and response events. Popup support remains
-deferred until popup creation can atomically enforce the session page limit, register the engine
-page in the runtime page registry, and return a BrowserMesh `pageId` without leaking an unmanaged
-page on failure. Passive text matching is a case-sensitive substring check against a bounded
+Popup support atomically registers the new engine page in the same session, assigns a runtime
+`pageId`, attaches page-owned lifecycle/observability, returns `isDefault=false`, and closes the
+popup before returning `LIMIT_EXCEEDED` or a registration failure. Public callers never receive a
+Playwright `Page`. Dialog support requires the caller to specify the expected alert, beforeunload,
+confirm, or prompt type and an accept/dismiss action; optional prompt text is bounded and is valid
+only when accepting a prompt. Dialog message/default-value metadata is bounded to 2,000 Unicode
+code points. An unexpected dialog type is dismissed before a typed failure is returned. Dialogs
+cannot be inspected later because they block the page and have event-scoped lifetime. Passive text
+matching is a case-sensitive substring check against a bounded
 1,000,000-character rendered body-text observation; `absent` means the substring is not present in
 that bounded observation.
 
@@ -1106,7 +1111,7 @@ origin policy.
 
 Typed hover, focus, check, uncheck, double-click, and scroll-into-view are explicit page operations.
 They use semantic locators, bounded timeouts, request cancellation, and the owning session queue.
-Page-coordinate scroll, drag/drop, dialog handling, popup wait, iframe-scoped semantic targeting,
+Page-coordinate scroll, drag/drop, iframe-scoped semantic targeting,
 and full-page/element screenshots remain later slices. Arbitrary JavaScript, arbitrary paths,
 upload, and download are not implied.
 

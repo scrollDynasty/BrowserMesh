@@ -1,6 +1,7 @@
 import type {
   BrowserContextHandle,
   BrowserEnginePort,
+  BrowserEngineActionWaitEvent,
   BrowserPageHandle,
 } from '../application/ports/browser-engine.js';
 import type { EventSinkPort } from '../application/ports/events.js';
@@ -51,6 +52,7 @@ interface PageEntry {
   readonly handle: BrowserPageHandle;
   readonly observations: BoundedObservationStore;
   readonly stopObserving: () => void;
+  readonly stopCloseTracking: () => void;
 }
 
 interface SessionEntry {
@@ -354,11 +356,7 @@ export class BrowserMeshRuntime {
           async (entry) => {
             const page = this.getPageEntry(entry, pageId);
             await this.options.engine.closePage(page.handle);
-            page.stopObserving();
-            entry.pages.delete(pageId);
-            if (entry.defaultPageId === pageId)
-              entry.defaultPageId = entry.pages.keys().next().value;
-            this.emit('page.closed', { sessionId, pageId });
+            this.dropManagedPage(entry, pageId);
             return null;
           },
           options.signal,
@@ -618,17 +616,48 @@ export class BrowserMeshRuntime {
     return this.pageOperation(target, async (page, control) => {
       const normalizedAction = normalizeAction(action);
       const normalizedWait = normalizeActionWait(wait);
+      const engineEvent = await this.options.engine.actionAndWait(
+        page,
+        normalizedAction,
+        normalizedWait,
+        control,
+      );
+      const event = await this.registerActionWaitEvent(target.sessionId, engineEvent);
       return {
         action: normalizedAction,
         wait: normalizedWait,
-        event: await this.options.engine.actionAndWait(
-          page,
-          normalizedAction,
-          normalizedWait,
-          control,
-        ),
+        event,
       };
     });
+  }
+
+  private async registerActionWaitEvent(
+    sessionId: string,
+    event: BrowserEngineActionWaitEvent,
+  ): Promise<ActionAndWaitResult['event']> {
+    if (event.kind !== 'popup') return event;
+    const entry = this.readySession(sessionId);
+    if (entry.pages.size >= this.options.maxPagesPerSession) {
+      await this.options.engine.closePage(event.page);
+      throw new BrowserMeshError(
+        'LIMIT_EXCEEDED',
+        `Maximum of ${String(this.options.maxPagesPerSession)} pages per session reached; overflow popup was closed`,
+      );
+    }
+    try {
+      const managed = this.addPage(entry, event.page);
+      this.emit('page.created', { sessionId, pageId: managed.id });
+      return { kind: 'popup', page: this.pageView(entry, managed) };
+    } catch (error) {
+      try {
+        await this.options.engine.closePage(event.page);
+      } catch (cleanupError) {
+        throw new BrowserMeshError('BROWSER_ERROR', 'Popup registration and cleanup both failed', {
+          cause: new AggregateError([error, cleanupError]),
+        });
+      }
+      throw error;
+    }
   }
 
   saveSessionState(
@@ -889,12 +918,11 @@ export class BrowserMeshRuntime {
       observability,
       this.options.ids.next('cursor'),
     );
-    const page: PageEntry = {
-      id: pageId,
-      createdAt: this.timestamp(),
-      handle,
-      observations,
-      stopObserving: this.options.engine.observePage(
+    const stopCloseTracking = this.options.engine.onPageClosed(handle, () => {
+      this.dropManagedPage(entry, pageId);
+    });
+    try {
+      const stopObserving = this.options.engine.observePage(
         handle,
         {
           maxInFlightRequests: Math.max(32, observability.maxEventsPerPage * 2),
@@ -908,10 +936,21 @@ export class BrowserMeshRuntime {
             pageId,
           });
         },
-      ),
-    };
-    entry.pages.set(page.id, page);
-    return page;
+      );
+      const page: PageEntry = {
+        id: pageId,
+        createdAt: this.timestamp(),
+        handle,
+        observations,
+        stopObserving,
+        stopCloseTracking,
+      };
+      entry.pages.set(page.id, page);
+      return page;
+    } catch (error) {
+      stopCloseTracking();
+      throw error;
+    }
   }
 
   private async createManagedPage(
@@ -1064,8 +1103,21 @@ export class BrowserMeshRuntime {
   }
 
   private disposePages(entry: SessionEntry): void {
-    for (const page of entry.pages.values()) page.stopObserving();
+    for (const page of entry.pages.values()) {
+      page.stopCloseTracking();
+      page.stopObserving();
+    }
     entry.pages.clear();
+  }
+
+  private dropManagedPage(entry: SessionEntry, pageId: string): void {
+    const page = entry.pages.get(pageId);
+    if (page === undefined) return;
+    page.stopCloseTracking();
+    page.stopObserving();
+    entry.pages.delete(pageId);
+    if (entry.defaultPageId === pageId) entry.defaultPageId = entry.pages.keys().next().value;
+    this.emit('page.closed', { sessionId: entry.id, pageId });
   }
 
   private emit(
@@ -1136,6 +1188,27 @@ function normalizeActionWait(wait: ActionWaitCondition): ActionWaitCondition {
       ...(wait.matcher === undefined ? {} : { matcher: normalizeMatcher(wait.matcher) }),
       loadState: wait.loadState ?? 'load',
     };
+  if (wait.kind === 'popup') return { kind: 'popup' };
+  if (wait.kind === 'dialog') {
+    if (wait.promptText !== undefined) {
+      if (wait.action !== 'accept' || wait.dialogType !== 'prompt')
+        throw new BrowserMeshError(
+          'INVALID_ARGUMENT',
+          'promptText is allowed only when accepting a prompt dialog',
+        );
+      if (wait.promptText.length > 2_000 || hasControlCharacters(wait.promptText))
+        throw new BrowserMeshError(
+          'INVALID_ARGUMENT',
+          'promptText must contain at most 2000 characters without control characters',
+        );
+    }
+    return {
+      kind: 'dialog',
+      dialogType: wait.dialogType,
+      action: wait.action,
+      ...(wait.promptText === undefined ? {} : { promptText: wait.promptText }),
+    };
+  }
   if (wait.method !== undefined && !/^[A-Z]{1,16}$/u.test(wait.method))
     throw new BrowserMeshError(
       'INVALID_ARGUMENT',

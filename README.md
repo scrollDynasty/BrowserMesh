@@ -382,12 +382,14 @@ the page body's rendered `innerText`; `absent` means that substring is not prese
 observation. Caller regular expressions, JavaScript predicates, arbitrary sleeps, and
 `networkidle` are not supported.
 
-Do not queue a passive wait before the same-session action expected to satisfy it. For an action
-that triggers navigation or an HTTP response, `browser_action_and_wait` registers the typed waiter
-first and then performs one click or key press under one shared deadline. Returned response URLs
-remove credentials and fragments and redact common sensitive query values. Popup waiting remains
-deferred until popup pages can be atomically assigned a BrowserMesh `pageId` while enforcing the
-per-session page limit.
+Do not queue a passive wait before the same-session action expected to satisfy it.
+`browser_action_and_wait` registers a typed navigation, HTTP response, popup, or dialog waiter first
+and then performs one click or key press under one shared deadline. Returned response URLs remove
+credentials and fragments and redact common sensitive query values. A popup is assigned a new
+managed `pageId` in the same session with `isDefault=false`; overflow popups are closed before
+`LIMIT_EXCEEDED` is returned. Dialogs are handled atomically with an expected type and accept/dismiss
+choice because a blocking dialog cannot be safely inspected later. Prompt input and returned dialog
+metadata are bounded.
 
 ### Capture
 
