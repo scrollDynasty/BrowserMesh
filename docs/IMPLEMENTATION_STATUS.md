@@ -2,70 +2,131 @@
 
 Updated: 2026-08-13
 
-The baseline `docs/SPEC.md` phases 0 through 9 and the v0.1 acceptance gate are complete. Section 22
-now defines an accepted post-v0.1 professional MCP improvement program; its implementation is
-pending and does not retroactively make the baseline incomplete.
+BrowserMesh v0.1 and the accepted professional MCP improvement program are implemented. A final
+repository-wide adversarial audit is still required before release completion is declared.
 
-## Phase evidence
+## Baseline phases
 
-| Phase                        | Status   | Implementation and verification evidence                                                                                                                                                  |
-| ---------------------------- | -------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 0 — Foundation               | Complete | Strict TypeScript, ESLint, Prettier, Vitest, centralized validated config, structured stderr logging, documentation, package scripts, architecture boundary tests.                        |
-| 1 — Browser engine           | Complete | Engine port and Playwright Chromium adapter implement lazy start/stop, actionable missing-browser errors, password snapshot redaction, context/page cleanup, and disconnect notification. |
-| 2 — Multi-session core       | Complete | Explicit session registry/lifecycle, BrowserContext-per-session isolation, deterministic initial page, limits, bounded terminal records, idempotent close, cleanup.                       |
-| 3 — Pages                    | Complete | Explicit `pageId`, create/list/close, default marker, per-session limit, cross-session rejection, real-Chromium lifecycle coverage.                                                       |
-| 4 — Browser operations       | Complete | HTTP(S) navigation/history/reload, URL/title, deterministic exact role locators, ambiguity errors, redacted snapshots, visible text, interactions, and in-memory PNG screenshots.         |
-| 5 — Concurrency              | Complete | Independent serial queue per session, cross-session parallelism, required page-address result types, operation IDs, bounded timeouts, failure recovery, close/shutdown draining.          |
-| 6 — MCP                      | Complete | Stdio server, schemas, safe success/error mapping, complete discovery descriptions, exact v0.1 tool-set contract test, real subprocess routing/validation/clean-exit test.                |
-| 7 — Persistence              | Complete | Logical `stateId`, safe names, save/list/remove/restore, private application path, atomic replacement, same-state write serialization, failure recovery, no state contents in logs.       |
-| 8 — External-client workflow | Complete | A real MCP `Client` coordinates isolated buyer and seller sessions in the deterministic local workflow e2e; BrowserMesh creates no internal agents.                                       |
-| 9 — Release readiness        | Complete | Node 22/24 real-browser CI, Windows package smoke, coverage gates, npm tarball install, manifest/public import/bin validation, and packaged MCP browser workflow.                         |
+| Phase                        | Status   | Evidence                                                                                                                                              |
+| ---------------------------- | -------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 0 — Foundation               | Complete | Strict TypeScript, ESLint, Prettier, Vitest, validated config, structured stderr logging, architecture tests, and package scripts.                    |
+| 1 — Browser engine           | Complete | Engine port and isolated Chromium adapter with lazy lifecycle, actionable startup failure, password redaction, cleanup, and disconnect notification.  |
+| 2 — Multi-session core       | Complete | Explicit lifecycle, one non-persistent context per ready session, deterministic initial page, quotas, idempotent close, and bounded terminal records. |
+| 3 — Pages                    | Complete | Explicit `pageId`, create/list/close, default-page marker, quotas, ownership checks, and real-browser lifecycle coverage.                             |
+| 4 — Browser operations       | Complete | HTTP(S) navigation/history, reads, semantic locators, snapshots, interactions, and in-memory PNG screenshots.                                         |
+| 5 — Concurrency              | Complete | Independent session queues, cross-session parallelism, operation IDs, deadlines, cancellation, failure recovery, and close/shutdown draining.         |
+| 6 — MCP                      | Complete | Stdio server, exact schemas, structured results, safe errors, discovery metadata, cancellation, subprocess routing, and clean exit.                   |
+| 7 — Persistence              | Complete | Logical state IDs, private storage, atomic save/list/remove/restore, same-state serialization, and safe failure recovery.                             |
+| 8 — External-client workflow | Complete | A real MCP client coordinates isolated workflows; BrowserMesh contains no internal agent runtime.                                                     |
+| 9 — Release readiness        | Complete | Node 22/24 and Windows CI, coverage gates, tarball install, public import/bin/manifest checks, and packaged browser smoke.                            |
 
-## Contribution and release automation
+## Professional MCP improvement milestones
 
-- Pull requests use templates, Conventional Commit title validation, a stable aggregate branch-protection check, and CodeQL advanced analysis.
-- CI separates static, Node 22/24 real-Chromium integration/e2e, deterministic and real-browser
-  stress, coverage, dependency review, and Linux/Windows installed-package smoke jobs.
-- Dependabot covers npm and pinned GitHub Actions dependencies; vulnerability alerts and automated
-  security updates are enabled in the repository.
-- Release Please prepares reviewed version/changelog PRs from merged contributor changes.
-- A protected `vX.Y.Z` tag runs the complete verification gates, publishes with npm Trusted
-  Publishing, and updates the official MCP Registry; both publications use GitHub OIDC, while
-  ordinary pushes and feature PRs cannot publish.
-- Contributor, conduct, security, and maintainer release/setup documentation is present in the repository root and `docs/releasing.md`.
+| Milestone                                                             | Status                                                                           | Contract                              |
+| --------------------------------------------------------------------- | -------------------------------------------------------------------------------- | ------------------------------------- |
+| Exact version chain, explicit headless mode, runtime info, doctor     | Complete                                                                         | ADR 0007                              |
+| Structured MCP output, annotations, request cancellation              | Complete                                                                         | ADR 0008                              |
+| Passive waits and waiter-first atomic action/wait                     | Complete                                                                         | ADR 0009                              |
+| Bounded console, page-error, network, and failed-request observations | Complete                                                                         | ADR 0010                              |
+| Bounded snapshots and typed browser interactions                      | Complete                                                                         | ADR 0011                              |
+| Artifact security/design gate                                         | Accepted; implementation intentionally deferred and not a completion requirement | ADR 0012                              |
+| Short-lived page-scoped element references                            | Complete                                                                         | ADR 0013                              |
+| Engine-neutral nested iframe targeting                                | Complete                                                                         | ADR 0014                              |
+| Immutable bounded snapshot-tree pagination                            | Complete                                                                         | ADR 0015                              |
+| Origin-scoped geolocation permissions                                 | Complete                                                                         | ADR 0016                              |
+| Runtime-authoritative resource budgets                                | Complete                                                                         | ADR 0017                              |
+| Stable public browser-failure classification and redacted context     | Complete; final hardening                                                        | SPEC §13, architecture error contract |
 
-## Professional MCP improvement program
+Remote HTTP/multi-client security, filesystem-backed artifacts, and internal agent orchestration are
+deferred scope. They are not missing parts of the accepted program.
 
-| Milestone                                              | Status                                                                                                                                                                                                                                                                                                                                                                                                         | Contract                          |
-| ------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------- |
-| Version chain, headless config, runtime info, doctor   | Complete: exact version chain, validated config, non-launching runtime info, and bounded doctor                                                                                                                                                                                                                                                                                                                | ADR 0007                          |
-| Structured MCP output, annotations, cancellation       | Complete: structured output, annotations, end-to-end request signals, queue-safe cancellation                                                                                                                                                                                                                                                                                                                  | ADR 0008                          |
-| Passive waits and atomic action/wait                   | Complete: passive conditions and click/press + navigation/response/popup/dialog composites with cancellation and owned cleanup                                                                                                                                                                                                                                                                                 | ADR 0009                          |
-| Bounded redacted browser observability                 | Complete: console/page-error and correlated network/failed-request collectors                                                                                                                                                                                                                                                                                                                                  | ADR 0010                          |
-| Bounded snapshots, context options, typed interactions | Partial: bounded iframe-scoped snapshots, interactive tree controls, immutable cursor pagination, safe context settings including origin-scoped geolocation, short-lived refs, hover/focus/check/double-click/scroll/scroll-into-view/drag-drop, viewport/full-page/element in-memory screenshots, popup/dialog, and iframe-scoped semantic targeting complete; remaining lifecycle-heavy interactions pending | ADRs 0011, 0013, 0014, 0015, 0016 |
-| Filesystem-backed artifacts                            | Design gate accepted; capability ADR and implementation deferred                                                                                                                                                                                                                                                                                                                                               | ADR 0012                          |
+## Current public contract
 
-Remote HTTP/multi-client security and internal agent orchestration are not part of the accepted
-implementation program. The latter remains a separate external layer.
+- Every tool declared by `outputSchemas` is registered and discovered. The MCP contract test derives
+  the exact expected tool set from that registry instead of maintaining a stale numeric count.
+- Successful calls return direct `structuredContent` validated by an object-root output schema plus
+  compatibility text; screenshots additionally return in-memory image content.
+- Every public tool has a human title and reviewed read-only, destructive, idempotent, and
+  open-world annotations.
+- Application failures return bounded JSON with a stable error code and accepted-operation
+  `operationId`. Browser failures additionally expose only the supported `reason` enum
+  (`timeout`, `dns`, `connection`, `tls`, `invalid_url`, `locator_ambiguous`,
+  `element_not_found`, or `other`) and allowlisted bounded context.
+- Public URL context is limited to HTTP(S) origin and path; credentials, query strings, and
+  fragments are removed. Locator context is limited to an allowlisted strategy and bounded
+  value/name/exact fields. Raw Playwright messages, stacks, causes, tokens, and form values are not
+  returned.
+- Detail sanitization treats getters and proxies as hostile and protects every allowlisted read
+  independently, so one throwing field cannot reveal data or suppress other safe fields.
 
-## Acceptance evidence
+## Capability evidence
 
-- Real-Chromium integration covers isolated cookies, localStorage, pages, URLs, password redaction, exact/ambiguous role locators, DOM reads, screenshots, page lifecycle, history, interactions, persistence, ordering, parallelism, timeout recovery, shutdown, disconnect, and cleanup.
-- Real-Chromium wait coverage includes URL/load/locator/text success, timeout and queue recovery, same-session ordering, cross-session independence, waiter-first navigation/response/popup/dialog composites, overflow-popup closure, cross-session popup rejection, unexpected-dialog dismissal, and redacted response URLs.
-- Unit tests cover lifecycle/limits, terminal-record bounds, operation correlation, queue recovery, navigation policy, persistence naming/atomic concurrency, configuration, structured logging, and architecture dependency rules.
-- MCP tests cover the exact public tool set, descriptions, schema rejection, safe structured errors, successful calls, explicit routing, subprocess stdio negotiation, and exit.
-- All 26 current MCP tools publish object-root output schemas, direct structured success fields,
-  human titles, and exact reviewed risk annotations. Contract tests execute every success schema;
-  stdio/package tests verify installed discovery. Application errors are bounded JSON-only results
-  with typed runtime `operationId` correlation, while SDK input-validation errors remain distinct.
-- The deterministic 50-session stress test verifies runtime routing and cleanup, while a separate
-  eight-context real-Chromium stress test verifies bounded adapter isolation and resource release.
-- `scripts/verify-package.ts` tests the generated npm tarball rather than source-tree execution and
-  performs stdio MCP navigation, DOM inspection, and interaction through the installed executable.
+- Real Chromium tests cover cookie/storage/page/DOM isolation, cross-session page rejection,
+  navigation and history, password redaction, exact and ambiguous locators, typed interactions,
+  screenshots, persistence ordering, shutdown/disconnect, and cleanup.
+- Wait tests cover URL/load/locator/text conditions, waiter-first navigation/response/popup/dialog
+  composites, timeouts, cancellation, same-session ordering, cross-session parallelism, cleanup,
+  and queue recovery.
+- Observation tests cover bounded per-page stores, cursor pagination, overflow accounting,
+  redaction, request correlation, ownership isolation, cancellation, and listener cleanup.
+- Snapshot tests cover semantic/iframe scope, depth, boxes, Unicode/byte bounds, honest partial
+  metadata, `interactiveOnly`, per-node child limits, immutable cursor pagination, cursor TTL/quota,
+  and snapshot cleanup.
+- Element-reference tests cover page/session ownership, TTL/quota, DOM replacement, navigation,
+  page close, popup lifecycle, stale rejection, and queue recovery.
+- Context tests cover viewport, scale, locale, timezone, color/reduced-motion, user agent, finite
+  geolocation, canonical origin permission grants, concurrent isolation, cancellation cleanup, and
+  restored-state separation.
+- Typed actions cover hover, focus, check/uncheck, double-click, coordinate scroll,
+  scroll-into-view, drag/drop, popup/dialog actions, iframe targeting, and viewport/full-page/element
+  screenshots through the owning session queue.
+- Resource-budget tests cover bounded session labels/metadata, Unicode and UTF-8-safe visible-text
+  truncation, screenshot dimension preflight plus post-capture byte quotas, atomic saved-state
+  count/per-state/aggregate quotas, concurrent replacement preservation, bounded corrupt-file
+  reads, and queue recovery after rejection. Effective budgets are reported by
+  `browser_runtime_info`.
+- Error tests cover deterministic classification, a real refused-connection navigation, locator
+  timeout/ambiguity/not-found reasons, invalid URL context, hostile getters/proxies, URL redaction,
+  operation correlation, and post-failure session usability.
 
-## Responsibility boundary
+## Operability and distribution evidence
 
-BrowserMesh v0.1 contains no internal AI Agent entities, registries, ownership abstraction, mailboxes, messaging, handoff protocol, or LLM orchestration. Session names and string metadata are neutral workflow labels only.
+- MCP `serverInfo.version`, generated source, package metadata, `server.json`, source/stdio
+  handshakes, and installed-tarball handshake form one exact build-time version chain.
+- `browser_runtime_info` is non-launching and reports exact BrowserMesh/Playwright versions, Node,
+  nullable live Chromium version, launch state, effective safe configuration, and bounded session
+  counts.
+- `browsermesh --doctor --json` has a versioned schema, stable checks, safe remediation, non-zero
+  failure exits, private data-directory access probing, executable detection, and bounded real
+  browser/context/page/cleanup smoke.
+- `BROWSERMESH_HEADLESS` is strictly `true|false`, defaults to `false`, and is deliberately selected
+  by CI/package verification.
+- `scripts/verify-package.ts` builds and inspects an npm tarball, installs it in a clean temporary
+  project, verifies public import/bin and MCP discovery/version, then performs a real installed
+  navigation, DOM interaction, and shutdown smoke. It never publishes.
+- CI includes static checks, Node 22/24 real-browser integration/e2e, deterministic and real stress,
+  coverage, CodeQL/dependency review, and Linux/Windows installed-package smoke.
+
+## Verification checkpoint
+
+- Combined final error-contract/resource-budget/lifecycle hardening `npm run verify`: passed with 26
+  test files and 161 tests, coverage thresholds, strict typecheck, lint, formatting, and production
+  build.
+- `BROWSERMESH_HEADLESS=true npm run verify:package`: passed with build/tarball inspection, clean
+  temporary installation, public import/bin, MCP version/discovery, real Chromium navigation,
+  interaction, and cleanup smoke.
+- Targeted classifier/runtime/MCP/real-Chromium verification: 78 tests passed. `git diff --check`
+  passed.
+- Final lifecycle integration preserves stop-during-start cleanup, operation deadline accounting
+  from queue acceptance, stale-ref mapping after engine failures, close/shutdown draining, and
+  snapshot-cursor immutability while retaining stable public failure reasons.
+
+The parent integration task must still run the final adversarial audit and its full
+fresh-environment matrix before marking release completion.
+
+Known blockers: none.
+
+## Responsibility boundary and intentional non-scope
 
 The runtime boundary remains:
 
@@ -73,171 +134,15 @@ The runtime boundary remains:
 User → external AI client → MCP → BrowserMesh → isolated browser sessions
 ```
 
-## Verification
+BrowserMesh v0.1 contains no internal AI agent identities, registries, ownership, mailboxes,
+messaging, handoff protocol, LLM calls, or reasoning loops. Session names and metadata are neutral
+workflow labels only.
 
-BM-VERSION-001 implementation evidence:
+Intentional v0.1 non-scope:
 
-- MCP `serverInfo.version` uses a generated immutable constant sourced from package metadata.
-- Package, generated module, `server.json`, release automation, source/in-memory and stdio
-  handshakes, and installed-tarball handshake are verified as one exact version chain.
-- Production runtime performs no working-directory discovery or package metadata reads for version
-  reporting.
-
-Baseline audit before accepting the improvement plan:
-
-- The v0.1 source/package verification remained green.
-- `npm run format:check` reported only the new untracked
-  `docs/PROFESSIONAL_MCP_IMPROVEMENT_PLAN.md`; this was documentation handoff formatting, not a
-  product defect. Other baseline checks were green.
-- The audit environment's configured `0.1.2` executable was stale local installation state, not a
-  BrowserMesh project defect or blocker.
-
-Last completed v0.1 release verification:
-
-- `npm ci`: passed with 0 reported vulnerabilities.
-- `npm run verify`: passed after the clean install.
-  - TypeScript typecheck: passed.
-  - ESLint: passed.
-  - Prettier check: passed.
-  - Vitest: 16 test files and 61 tests passed.
-  - V8 coverage thresholds: statements 90%, branches 75%, functions 95%, lines 90%.
-  - Production build: passed.
-- `npm run verify:package`: passed after the clean install, including installed tarball MCP/Chromium smoke.
-- Release configuration JSON and all repository YAML files parsed successfully.
-- Official `mcp-publisher` v1.8.1 validation of `server.json`: passed.
-- `git diff --check`: passed.
-- ADR 0017 resource-hardening slice: runtime-authoritative bounded session labels, Unicode/UTF-8-safe
-  visible-text results, preflight plus post-capture PNG quotas, and atomic saved-state count/per-state/
-  aggregate quotas are implemented. MCP schemas mirror stable label limits and structured reads report
-  explicit truncation/image metadata; effective budgets are available through `browser_runtime_info`.
-- Regression coverage includes pre-resource rejection, dangerous/control metadata, multibyte text,
-  screenshot dimension/byte failures with queue recovery, concurrent persistence quota races,
-  replacement preservation, and bounded corrupted/oversized file reads.
-- `browser_runtime_info` reports exact generated BrowserMesh/resolved Playwright versions, Node
-  version, nullable live Chromium version, launch state, effective safe configuration, and bounded
-  session counts without launching Chromium. Its result follows ADR 0008 with direct structured
-  fields, an object output schema, concise compatibility text, and reviewed read-only annotations.
-- `browsermesh --doctor --json` provides schema version `1`, stable required check IDs, safe
-  remediation, non-zero failure exits, data-directory create/read/write probing without listing,
-  executable availability, and a real bounded launch/context/page/cleanup smoke.
-- Unit, in-memory MCP, real stdio, real Chromium doctor, and installed-tarball doctor/runtime-info
-  verification cover the completed ADR 0007 slice.
-
-Known blockers: none.
-
-- ADR 0014 adds engine-neutral main-document or one-through-five-step iframe scopes to every
-  semantic locator consumer. Each iframe step has exact ambiguity semantics and is re-resolved
-  within the owning session queue; no frame handle crosses the engine port. Real-Chromium coverage
-  includes nested same-origin/cross-origin traversal, actions, waits, visible text, scoped
-  snapshots/refs, element screenshots, ambiguity recovery, and stale refs after descendant
-  navigation/detach.
-- Iframe-targeting `npm run verify`: passed after merging origin-scoped geolocation (23 files, 130
-  tests, coverage thresholds, lint, formatting, typecheck, and build).
-  `BROWSERMESH_HEADLESS=true npm run verify:package`: passed, including packed-file inspection,
-  clean tarball installation, MCP discovery, real Chromium lifecycle smoke, and shutdown.
-
-Latest post-v0.1 slice verification:
-
-- ADR 0011 context settings add engine-independent validated viewport, scale, locale, timezone,
-  color scheme, reduced motion, and user-agent values. Normalized settings are immutable in the
-  runtime, returned through session/MCP views, compatible with restored storage state, and isolated
-  across concurrent real Chromium contexts. Invalid locale/timezone and unsafe control characters
-  are rejected before context creation.
-- ADR 0016 adds finite bounded geolocation and at most 100 explicit canonical HTTP(S)-origin grants.
-  Only `geolocation` is allowlisted; wildcards, paths, credentials, duplicate origins, and broad or
-  unconfigured permissions fail before browser resource creation. Real-Chromium tests prove
-  concurrent session permission/position isolation; failed or cancelled creation closes its
-  unregistered context, and restored storage state never restores grants.
-- Context-settings slice `npm run verify`: passed (22 files, 101 tests, coverage thresholds, lint,
-  format, typecheck, and build). `BROWSERMESH_HEADLESS=true npm run verify:package`: passed,
-  including packed-file inspection, clean tarball installation, MCP discovery, browser smoke, and
-  shutdown.
-
-- ADR 0011 typed-interaction slice adds explicit semantic hover, focus, check, uncheck,
-  double-click, and scroll-into-view tools through the engine port and owning session queue.
-  Cancellation, non-overtake, cross-session page rejection, bounded timeout recovery, real DOM
-  state, MCP discovery/contracts, stdio discovery, and installed-package execution are covered.
-  Coordinate scroll, drag/drop, dialogs, popups, iframe targeting, and element screenshots remain
-  separate lifecycle slices.
-- Typed-interaction `npm run verify`: passed (22 files, 102 tests, coverage thresholds, lint,
-  format, typecheck, and build). E2E and deterministic/real stress suites passed.
-  `BROWSERMESH_HEADLESS=true npm run verify:package`: passed, including packed-file inspection,
-  clean tarball installation, MCP discovery, typed hover execution, Chromium lifecycle, and
-  shutdown. `git diff --check`: passed.
-- ADR 0011 bounded snapshots now provide semantic scope, documented Playwright depth/box controls,
-  runtime-owned Unicode/UTF-8 content caps, and explicit applied-bound/partial/truncation metadata.
-  Partial output is labelled `aria-yaml-fragment`. Password redaction, per-session serialization,
-  cancellation, and cleanup remain intact. ADR 0015 adds engine-neutral `interactiveOnly`,
-  per-node `maxChildren`, and bounded immutable cursor pagination with explicit lifecycle cleanup.
-- Snapshot-tree `npm run verify`: passed with 23 files and 131 tests, coverage thresholds, lint,
-  formatting, typecheck, and build. `BROWSERMESH_HEADLESS=true npm run verify:package`: passed with
-  clean tarball installation, MCP discovery, Chromium lifecycle smoke, and cleanup.
-- Bounded-snapshot `npm run verify`: passed after merging context settings and typed interactions
-  (23 files, 116 tests, coverage thresholds, lint,
-  format, typecheck, and build). Targeted MCP contract and real-Chromium integration tests passed.
-- `BROWSERMESH_HEADLESS=true npm run verify:package`: passed, including the built tarball,
-  clean-package MCP discovery, bounded scoped-snapshot contract, real-Chromium smoke, and shutdown.
-- ADR 0013 element refs are adapter-generated opaque values, bounded to 100 per page with a
-  30-second TTL and replacement cleanup. Real-Chromium coverage verifies typed actions,
-  cross-session/page rejection, DOM replacement, navigation/page-close invalidation, expiry, and
-  queue recovery; no Playwright locator or element handle crosses the engine port.
-- Element-ref `npm run verify`: passed after merging advanced actions and popup/dialog lifecycle
-  work (23 files, 125 tests, coverage thresholds, lint, formatting, typecheck, and build). E2E and
-  stress suites passed. Installed-package verification captures a ref and executes hover/click
-  through it against real Chromium.
-
-- ADR 0011 advanced-action slice adds bounded integer coordinate scroll, semantic source/target
-  drag-and-drop, and viewport/full-page/element screenshot modes. Screenshots remain in-memory PNG
-  MCP content and no arbitrary JavaScript or filesystem path is exposed. All actions pass through
-  the owning session queue with request cancellation and typed MCP output. Iframe scoping remains
-  deferred until a follow-up contract defines engine-neutral frame identity, ambiguity, and stale
-  frame semantics; dialog and popup lifecycle slices remain separate.
-- Advanced-action `npm run verify`: passed after rebasing onto bounded snapshots (23 files, 116
-  tests, coverage thresholds, lint, formatting, typecheck, and build).
-  `BROWSERMESH_HEADLESS=true npm run verify:package`: passed, including clean tarball installation,
-  MCP discovery, real Chromium lifecycle smoke, and cleanup.
-
-- ADR 0008 cancellation is complete: every asynchronous MCP handler forwards the request signal, the runtime
-  owns engine-independent signal/deadline metadata, queued cancellations never execute, and an
-  in-flight non-abortable action retains its session queue slot until it settles. Passive waits and
-  atomic event waiters detach owned abort listeners/timers and leave the queue usable.
-- Deterministic coverage includes queued cancellation, in-flight non-overtake, queue recovery,
-  cross-session independence, cancellable real-browser waits, in-memory MCP cancellation, and real
-  stdio cancellation.
-- Cancellation slice `npm run verify`: passed (21 files, 94 tests, coverage thresholds, lint,
-  format, typecheck, and build). `BROWSERMESH_HEADLESS=true npm run verify:package`: passed,
-  including packed-file inspection, clean tarball installation, MCP discovery, browser smoke, and
-  shutdown.
-- ADR 0010 adds engine-neutral normalized Playwright subscriptions,
-  runtime-owned bounded per-page stores and listener disposers, opaque page-scoped monotonic
-  cursors, metadata-only defaults, explicit bounded/redacted text, overflow gap/drop accounting,
-  and structured console, page-error, network, and failed-request MCP tools. Network metadata uses
-  bounded in-flight correlation, safe URL/query redaction, explicit protocol/source policy, and
-  never captures headers, bodies, cookies, or storage.
-- Combined cancellation/observability `npm run verify`: passed (22 files, 98 tests, coverage
-  thresholds, lint,
-  format, typecheck, and build). `BROWSERMESH_HEADLESS=true npm run verify:package`: passed,
-  including installed-tarball MCP discovery and real-Chromium lifecycle smoke.
-
-- `BROWSERMESH_HEADLESS` is centrally validated as exact `true|false`, defaults to the compatible
-  headed mode, and reaches Playwright through an engine-independent launch-options seam.
-- Chromium launch uses the configured bounded default timeout; lazy startup is unchanged.
-- Unit propagation/invalid-value tests and real headless stdio integration evidence are present;
-  CI and package verification select headed-under-Xvfb or headless mode explicitly.
-- `npm run verify`: passed (17 files, 63 tests, coverage thresholds, build).
-- `BROWSERMESH_HEADLESS=true npm run verify:package`: passed, including installed-tarball MCP and
-  Chromium smoke.
-- ADR 0008 structured-output slice: all 26 current tools now expose direct structured results,
-  object-root output schemas, titles, and reviewed annotations; application errors retain bounded
-  safe JSON and accepted-operation correlation without exposing causes.
-- `npm run verify`: passed (17 files, 65 tests, coverage thresholds, lint, format, typecheck, build).
-- `BROWSERMESH_HEADLESS=true npm run verify:package`: passed, including clean tarball installation,
-  installed discovery metadata, MCP navigation/interaction, and Chromium lifecycle smoke.
-- `git diff --check`: passed.
-
-## Intentional v0.1 non-scope
-
-- Remote HTTP and hosted cloud infrastructure.
-- Distributed workers, databases, brokers, Docker/Kubernetes runtime requirements.
-- Dashboard, downloads, arbitrary shell/filesystem access, Firefox/WebKit parity.
-- Live-session crash reconstruction after Chromium disconnect.
+- remote HTTP/hosted service and multi-client authorization or leases;
+- internal orchestration, distributed workers, databases, brokers, Docker/Kubernetes requirements,
+  dashboard, billing, or cloud infrastructure;
+- arbitrary shell/filesystem access, controlled artifact storage, uploads/downloads, HAR/trace/video,
+  Firefox/WebKit parity, or arbitrary page JavaScript evaluation;
+- silent reconstruction of existing live sessions after Chromium disconnect.

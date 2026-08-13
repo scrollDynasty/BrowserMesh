@@ -461,6 +461,11 @@ describe('BrowserMeshRuntime', () => {
     const target = { sessionId: created.sessionId, pageId: created.pageId };
     await expect(runtime.navigate(target, 'file:///private.txt')).rejects.toMatchObject({
       code: 'INVALID_ARGUMENT',
+      details: { reason: 'invalid_url', url: 'file:///private.txt' },
+    });
+    await expect(runtime.navigate(target, 'not a URL')).rejects.toMatchObject({
+      code: 'INVALID_ARGUMENT',
+      details: { reason: 'invalid_url', url: 'not a URL' },
     });
     const rejectedEvents = events.slice(-2);
     expect(rejectedEvents.map(({ type }) => type)).toEqual([

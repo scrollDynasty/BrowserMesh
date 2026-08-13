@@ -431,10 +431,15 @@ export class BrowserMeshRuntime {
       try {
         parsed = new URL(url);
       } catch (error) {
-        throw new BrowserMeshError('INVALID_ARGUMENT', 'URL must be absolute', { cause: error });
+        throw new BrowserMeshError('INVALID_ARGUMENT', 'URL must be absolute', {
+          cause: error,
+          details: { reason: 'invalid_url', url },
+        });
       }
       if (!['http:', 'https:'].includes(parsed.protocol)) {
-        throw new BrowserMeshError('INVALID_ARGUMENT', 'Only http and https URLs are allowed');
+        throw new BrowserMeshError('INVALID_ARGUMENT', 'Only http and https URLs are allowed', {
+          details: { reason: 'invalid_url', url },
+        });
       }
       pageEntry.snapshots.clear();
       await this.options.engine.navigate(page, parsed.href, control);

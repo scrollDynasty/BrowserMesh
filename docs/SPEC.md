@@ -568,10 +568,16 @@ Public error categories include:
 
 The implementation may refine the list through ADR/API contracts when necessary, but public codes must remain stable and safe.
 
-Raw Playwright stack traces are not public MCP contracts. Browser and element failures expose a
-bounded cause summary and safe operation context (for example URL, locator strategy/value,
+Raw Playwright stack traces and messages are not public MCP contracts. Browser and element failures
+expose a stable reason and safe operation context (for example URL, locator strategy/value,
 operation, and timeout) so callers can distinguish connection, DNS, timeout, and locator failures.
 A rejected operation must not disconnect MCP, destroy the runtime, or invalidate unrelated sessions.
+
+The public `details.reason` value is one of `timeout`, `dns`, `connection`, `tls`, `invalid_url`,
+`locator_ambiguous`, `element_not_found`, or `other`. Public HTTP(S) URL context contains only
+origin and path; credentials, query, and fragment are removed. Locator context is bounded and
+allowlisted. Sanitization must tolerate hostile getters/proxies without exposing raw causes or
+discarding independently readable safe fields.
 
 ## 14. Architecture
 

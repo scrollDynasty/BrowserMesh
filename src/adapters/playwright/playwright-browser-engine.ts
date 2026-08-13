@@ -48,6 +48,7 @@ import {
   redactAndBoundObservationText,
   sanitizeObservationUrl,
 } from '../../domain/observability.js';
+import { classifyBrowserFailure } from './error-classification.js';
 
 interface ContextHandle extends BrowserContextHandle {
   readonly kind: 'context';
@@ -128,11 +129,12 @@ export class PlaywrightBrowserEngine implements BrowserEnginePort {
       } catch (error) {
         this.launchState = 'failed';
         const cause = errorMessage(error);
+        const reason = classifyBrowserFailure(error);
         const remediation = 'Run: npx -y multi-agent-browser-mcp --install-browser';
         throw new BrowserMeshError(
           'BROWSER_ERROR',
           `Failed to launch Chromium: ${cause}. ${remediation}`,
-          { cause: error, details: { cause, remediation } },
+          { cause: error, details: { cause, reason, remediation } },
         );
       } finally {
         this.startPromise = undefined;
@@ -1107,13 +1109,14 @@ export class PlaywrightBrowserEngine implements BrowserEnginePort {
       return await action();
     } catch (error) {
       if (error instanceof BrowserMeshError) throw error;
-      const timedOut = error instanceof Error && error.name === 'TimeoutError';
+      const reason = classifyBrowserFailure(error);
+      const timedOut = reason === 'timeout';
       if (isCancellation(error)) throw error;
       const cause = errorMessage(error);
       throw new BrowserMeshError(
         timedOut ? 'OPERATION_TIMEOUT' : code,
         `${timedOut ? `Operation exceeded ${String(timeoutMs)}ms` : message}: ${cause}`,
-        { cause: error, details: { ...details, timeoutMs, cause } },
+        { cause: error, details: { ...details, timeoutMs, reason, cause } },
       );
     }
   }
@@ -1129,9 +1132,11 @@ export class PlaywrightBrowserEngine implements BrowserEnginePort {
     } catch (error) {
       if (error instanceof BrowserMeshError) throw error;
       if (isCancellation(error)) throw error;
-      const timedOut = error instanceof Error && error.name === 'TimeoutError';
+      const classified = classifyBrowserFailure(error, 'element_not_found');
+      const timedOut = classified === 'timeout';
       if ('ref' in locator && !timedOut) throw staleElementReference(locator.ref);
-      const ambiguous = isStrictModeViolation(error);
+      const ambiguous = classified === 'locator_ambiguous';
+      const reason = timedOut ? 'timeout' : ambiguous ? 'locator_ambiguous' : 'element_not_found';
       const cause = errorMessage(error);
       const locatorDescription = describeLocator(locator);
       throw new BrowserMeshError(
@@ -1139,7 +1144,7 @@ export class PlaywrightBrowserEngine implements BrowserEnginePort {
         `${timedOut ? `Element operation exceeded ${String(timeoutMs)}ms` : ambiguous ? 'Locator matched multiple elements' : `Unable to ${operation}`} for ${locatorDescription}: ${cause}`,
         {
           cause: error,
-          details: { operation, locator, timeoutMs, cause },
+          details: { operation, locator, timeoutMs, reason, cause },
         },
       );
     }
@@ -1208,13 +1213,13 @@ function cancellableDelay(delayMs: number, signal?: AbortSignal): Promise<void> 
 
 function operationTimeout(timeoutMs: number): BrowserMeshError {
   return new BrowserMeshError('OPERATION_TIMEOUT', `Operation exceeded ${String(timeoutMs)}ms`, {
-    details: { timeoutMs },
+    details: { timeoutMs, reason: 'timeout' },
   });
 }
 
 function ambiguousLocator(locator: Locator): BrowserMeshError {
   return new BrowserMeshError('LOCATOR_AMBIGUOUS', 'Locator matched multiple elements', {
-    details: { locator },
+    details: { locator, reason: 'locator_ambiguous' },
   });
 }
 
@@ -1222,7 +1227,7 @@ function ambiguousFrameLocator(locator: LocatorSelector, frameIndex: number): Br
   return new BrowserMeshError(
     'LOCATOR_AMBIGUOUS',
     `Iframe selector at chain step ${String(frameIndex)} matched multiple elements`,
-    { details: { locator, frameIndex } },
+    { details: { locator, frameIndex, reason: 'locator_ambiguous' } },
   );
 }
 
@@ -1463,10 +1468,6 @@ function redactSecretValues(snapshot: string, secrets: readonly string[]): strin
 async function readPasswordValues(root: Page | FrameLocator): Promise<readonly string[]> {
   const passwordInputs = await root.locator('input[type="password"]').all();
   return Promise.all(passwordInputs.map((passwordInput) => passwordInput.inputValue()));
-}
-
-function isStrictModeViolation(error: unknown): boolean {
-  return errorMessage(error).toLowerCase().includes('strict mode violation');
 }
 
 function errorMessage(error: unknown): string {
