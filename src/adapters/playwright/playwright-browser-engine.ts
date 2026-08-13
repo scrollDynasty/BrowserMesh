@@ -15,6 +15,7 @@ import type {
   BrowserEngineDiagnostics,
   BrowserEnginePort,
   BrowserPageHandle,
+  BrowserObservation,
 } from '../../application/ports/browser-engine.js';
 import { BrowserMeshError } from '../../domain/errors.js';
 import type {
@@ -176,6 +177,31 @@ export class PlaywrightBrowserEngine implements BrowserEnginePort {
     if (page === undefined) return;
     await this.wrapBrowserAction(() => page.close(), 'Failed to close browser page');
     this.pages.delete(handle.id);
+  }
+
+  observePage(
+    handle: BrowserPageHandle,
+    listener: (event: BrowserObservation) => void,
+  ): () => void {
+    const page = this.getPage(handle);
+    const onConsole = (message: import('playwright').ConsoleMessage): void => {
+      listener({ kind: 'console', level: message.type(), text: message.text() });
+    };
+    const onPageError = (error: Error): void => {
+      listener({ kind: 'page_error', text: error.message });
+    };
+    let active = true;
+    const dispose = (): void => {
+      if (!active) return;
+      active = false;
+      page.off('console', onConsole);
+      page.off('pageerror', onPageError);
+      page.off('close', dispose);
+    };
+    page.on('console', onConsole);
+    page.on('pageerror', onPageError);
+    page.once('close', dispose);
+    return dispose;
   }
 
   url(handle: BrowserPageHandle): string {

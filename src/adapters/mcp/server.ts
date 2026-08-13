@@ -80,6 +80,13 @@ const actionWaitSchema = z.discriminatedUnion('kind', [
   }),
 ]);
 
+const observationInputSchema = {
+  ...targetSchema,
+  sinceEventId: z.string().min(1).max(128).optional(),
+  limit: z.number().int().positive().max(200).optional(),
+  includeText: z.boolean().optional().default(false),
+};
+
 function target(input: {
   sessionId: string;
   pageId: string;
@@ -311,6 +318,52 @@ export function createMcpServer(runtime: BrowserMeshRuntime): McpServer {
       inputSchema: { ...targetSchema, locator: locatorSchema },
     },
     (input) => pageValue(runtime.visibleText(target(input), input.locator as Locator), 'text'),
+  );
+  server.registerTool(
+    'browser_console_list',
+    {
+      ...contractFor('browser_console_list'),
+      description:
+        'List bounded console events captured for one explicitly addressed page. Results are metadata-only unless includeText=true; text is best-effort redacted and bounded, console argument objects are never serialized. Use sinceEventId for a non-destructive checkpoint and inspect gap/droppedCount before treating the evidence as complete.',
+      inputSchema: observationInputSchema,
+    },
+    (input) =>
+      structuredResult(async () => {
+        const listed = await runtime.listConsole(target(input), {
+          ...(input.sinceEventId === undefined ? {} : { sinceEventId: input.sinceEventId }),
+          ...(input.limit === undefined ? {} : { limit: input.limit }),
+          includeText: input.includeText,
+        });
+        return {
+          operationId: listed.operationId,
+          sessionId: listed.sessionId,
+          pageId: listed.pageId,
+          ...listed.value,
+        };
+      }),
+  );
+  server.registerTool(
+    'browser_page_errors_list',
+    {
+      ...contractFor('browser_page_errors_list'),
+      description:
+        'List bounded uncaught page errors for one explicitly addressed page. Results omit messages unless includeText=true; exposed messages are best-effort redacted and bounded and raw stacks are never captured. Cursor, gap, and droppedCount make overflow explicit.',
+      inputSchema: observationInputSchema,
+    },
+    (input) =>
+      structuredResult(async () => {
+        const listed = await runtime.listPageErrors(target(input), {
+          ...(input.sinceEventId === undefined ? {} : { sinceEventId: input.sinceEventId }),
+          ...(input.limit === undefined ? {} : { limit: input.limit }),
+          includeText: input.includeText,
+        });
+        return {
+          operationId: listed.operationId,
+          sessionId: listed.sessionId,
+          pageId: listed.pageId,
+          ...listed.value,
+        };
+      }),
   );
   server.registerTool(
     'browser_click',

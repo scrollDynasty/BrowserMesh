@@ -2,6 +2,7 @@ import type {
   BrowserContextHandle,
   BrowserEnginePort,
   BrowserPageHandle,
+  BrowserObservation,
 } from '../../src/application/ports/browser-engine.js';
 import type { EventSinkPort, RuntimeEvent } from '../../src/application/ports/events.js';
 import type {
@@ -39,6 +40,7 @@ export class FakeEngine implements BrowserEnginePort {
   delayMs = 5;
   started = false;
   failNextNavigation = false;
+  failNextObserve = false;
   navigationGate: Promise<void> | undefined;
   onNavigationStart: (() => void) | undefined;
   waitGate: Promise<void> | undefined;
@@ -47,6 +49,18 @@ export class FakeEngine implements BrowserEnginePort {
   compositeGate: Promise<void> | undefined;
   onCompositeStart: (() => void) | undefined;
   private readonly disconnectedListeners = new Set<() => void>();
+  private readonly observers = new Map<symbol, Set<(event: BrowserObservation) => void>>();
+
+  get observerCount(): number {
+    return Array.from(this.observers.values()).reduce(
+      (count, listeners) => count + listeners.size,
+      0,
+    );
+  }
+
+  emitObservation(handle: BrowserPageHandle, event: BrowserObservation): void {
+    for (const listener of this.observers.get(handle.id) ?? []) listener(event);
+  }
 
   diagnostics(): { launchState: 'not_started' | 'ready'; browserVersion: string | null } {
     return {
@@ -118,6 +132,22 @@ export class FakeEngine implements BrowserEnginePort {
     page.closed = true;
     this.pages.delete(handle.id);
     this.contexts.get(page.contextId)?.pages.delete(page.id);
+  }
+  observePage(
+    handle: BrowserPageHandle,
+    listener: (event: BrowserObservation) => void,
+  ): () => void {
+    if (this.failNextObserve) {
+      this.failNextObserve = false;
+      throw new Error('simulated observer attachment failure');
+    }
+    const listeners = this.observers.get(handle.id) ?? new Set();
+    listeners.add(listener);
+    this.observers.set(handle.id, listeners);
+    return () => {
+      listeners.delete(listener);
+      if (listeners.size === 0) this.observers.delete(handle.id);
+    };
   }
   url(handle: BrowserPageHandle): string {
     return this.page(handle).currentUrl;
@@ -250,7 +280,11 @@ export function testRuntime(
   overrides: Partial<
     Pick<
       RuntimeOptions,
-      'defaultTimeoutMs' | 'maxSessions' | 'maxPagesPerSession' | 'persistenceEnabled'
+      | 'defaultTimeoutMs'
+      | 'maxSessions'
+      | 'maxPagesPerSession'
+      | 'persistenceEnabled'
+      | 'observability'
     >
   > = {},
 ): {

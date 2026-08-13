@@ -109,6 +109,23 @@ describe('real Chromium runtime', () => {
     expect((await runtime.screenshot(target)).value.startsWith('iVBOR')).toBe(true);
   });
 
+  it('collects bounded redacted console and page-error evidence from real Chromium', async () => {
+    const target = await createTarget();
+    await runtime.navigate(target, `${web.baseUrl}/observability`);
+
+    const metadata = (await runtime.listConsole(target, {})).value;
+    expect(metadata.events.some((event) => event.level === 'warning')).toBe(true);
+    expect(metadata.events.every((event) => event.text === undefined)).toBe(true);
+    const consoleEvents = (await runtime.listConsole(target, { includeText: true })).value;
+    expect(consoleEvents.events.some((event) => event.text?.includes('token=[REDACTED]'))).toBe(
+      true,
+    );
+    const pageErrors = (await runtime.listPageErrors(target, { includeText: true })).value;
+    expect(pageErrors.events).toHaveLength(1);
+    expect(pageErrors.events[0]?.text).toContain('password=[REDACTED]');
+    expect(pageErrors.events[0]?.text).not.toContain('at ');
+  });
+
   it('redacts password input values from accessibility snapshots', async () => {
     const target = await createTarget();
     const secretPrefix = 'BrowserMesh-"quoted"-\\secret';

@@ -38,5 +38,6 @@ export function createRuntime(
     nodeVersion: process.versions.node,
     playwrightVersion: PLAYWRIGHT_VERSION,
     headless: config.headless,
+    observability: config.observability,
   });
 }

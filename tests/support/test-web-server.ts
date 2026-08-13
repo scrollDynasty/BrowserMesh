@@ -141,6 +141,15 @@ export async function startTestWebServer(): Promise<TestWebServer> {
       );
       return;
     }
+    if (url.pathname === '/observability') {
+      response.end(
+        page(
+          'Observability',
+          '<script>console.warn("token=browser-secret warning"); throw new Error("password=page-secret exploded")</script>',
+        ),
+      );
+      return;
+    }
     if (url.pathname === '/exact') {
       response.end(page('Exact', '<div data-testid="status">exact</div>'));
       return;

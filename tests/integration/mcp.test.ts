@@ -147,6 +147,8 @@ describe('MCP adapter', () => {
         ...target,
         locator: { strategy: 'testId', value: 'status' },
       });
+      await callSuccess(client, 'browser_console_list', { ...target, includeText: false });
+      await callSuccess(client, 'browser_page_errors_list', { ...target, includeText: false });
       await callSuccess(client, 'browser_click', {
         ...target,
         locator: { strategy: 'role', value: 'button', name: 'Submit', exact: true },
