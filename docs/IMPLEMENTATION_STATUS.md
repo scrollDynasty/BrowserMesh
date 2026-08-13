@@ -156,6 +156,10 @@ Latest post-v0.1 slice verification:
   30-second TTL and replacement cleanup. Real-Chromium coverage verifies typed actions,
   cross-session/page rejection, DOM replacement, navigation/page-close invalidation, expiry, and
   queue recovery; no Playwright locator or element handle crosses the engine port.
+- Element-ref `npm run verify`: passed after merging advanced actions and popup/dialog lifecycle
+  work (23 files, 125 tests, coverage thresholds, lint, formatting, typecheck, and build). E2E and
+  stress suites passed. Installed-package verification captures a ref and executes hover/click
+  through it against real Chromium.
 
 - ADR 0011 advanced-action slice adds bounded integer coordinate scroll, semantic source/target
   drag-and-drop, and viewport/full-page/element screenshot modes. Screenshots remain in-memory PNG
