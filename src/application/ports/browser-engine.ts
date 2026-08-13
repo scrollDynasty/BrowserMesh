@@ -1,4 +1,5 @@
 import type { BrowserStorageState, Locator } from '../../domain/models.js';
+import type { OperationControl } from '../operation-control.js';
 
 export interface BrowserPageHandle {
   readonly id: symbol;
@@ -27,7 +28,7 @@ export interface BrowserEnginePort {
   start(): Promise<void>;
   stop(): Promise<void>;
   createContext(options: {
-    readonly timeoutMs: number;
+    readonly control: OperationControl;
     readonly storageState?: BrowserStorageState;
   }): Promise<BrowserContextHandle>;
   closeContext(context: BrowserContextHandle): Promise<void>;
@@ -35,22 +36,36 @@ export interface BrowserEnginePort {
   listPages(context: BrowserContextHandle): readonly BrowserPageHandle[];
   closePage(page: BrowserPageHandle): Promise<void>;
   url(page: BrowserPageHandle): string;
-  title(page: BrowserPageHandle, timeoutMs: number): Promise<string>;
-  navigate(page: BrowserPageHandle, url: string, timeoutMs: number): Promise<void>;
-  back(page: BrowserPageHandle, timeoutMs: number): Promise<void>;
-  forward(page: BrowserPageHandle, timeoutMs: number): Promise<void>;
-  reload(page: BrowserPageHandle, timeoutMs: number): Promise<void>;
-  click(page: BrowserPageHandle, locator: Locator, timeoutMs: number): Promise<void>;
-  fill(page: BrowserPageHandle, locator: Locator, value: string, timeoutMs: number): Promise<void>;
-  press(page: BrowserPageHandle, locator: Locator, key: string, timeoutMs: number): Promise<void>;
+  title(page: BrowserPageHandle, control: OperationControl): Promise<string>;
+  navigate(page: BrowserPageHandle, url: string, control: OperationControl): Promise<void>;
+  back(page: BrowserPageHandle, control: OperationControl): Promise<void>;
+  forward(page: BrowserPageHandle, control: OperationControl): Promise<void>;
+  reload(page: BrowserPageHandle, control: OperationControl): Promise<void>;
+  click(page: BrowserPageHandle, locator: Locator, control: OperationControl): Promise<void>;
+  fill(
+    page: BrowserPageHandle,
+    locator: Locator,
+    value: string,
+    control: OperationControl,
+  ): Promise<void>;
+  press(
+    page: BrowserPageHandle,
+    locator: Locator,
+    key: string,
+    control: OperationControl,
+  ): Promise<void>;
   selectOption(
     page: BrowserPageHandle,
     locator: Locator,
     value: string,
-    timeoutMs: number,
+    control: OperationControl,
   ): Promise<void>;
-  snapshot(page: BrowserPageHandle, timeoutMs: number): Promise<string>;
-  visibleText(page: BrowserPageHandle, locator: Locator, timeoutMs: number): Promise<string>;
-  screenshot(page: BrowserPageHandle, timeoutMs: number): Promise<Uint8Array>;
+  snapshot(page: BrowserPageHandle, control: OperationControl): Promise<string>;
+  visibleText(
+    page: BrowserPageHandle,
+    locator: Locator,
+    control: OperationControl,
+  ): Promise<string>;
+  screenshot(page: BrowserPageHandle, control: OperationControl): Promise<Uint8Array>;
   storageState(context: BrowserContextHandle): Promise<BrowserStorageState>;
 }

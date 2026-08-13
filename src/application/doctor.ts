@@ -4,6 +4,7 @@ import type {
   BrowserPageHandle,
 } from './ports/browser-engine.js';
 import type { DataDirectoryProbePort } from './ports/data-directory.js';
+import { createOperationControl } from './operation-control.js';
 
 export const DOCTOR_SCHEMA_VERSION = '1' as const;
 export const doctorCheckIds = [
@@ -122,7 +123,7 @@ async function runSmokeCheck(options: DoctorOptions, remainingMs: number): Promi
   try {
     await options.engine.start();
     context = await options.engine.createContext({
-      timeoutMs: Math.min(options.operationTimeoutMs, remainingMs),
+      control: createOperationControl(Math.min(options.operationTimeoutMs, remainingMs)),
     });
     page = await options.engine.createPage(context);
   } catch (error) {

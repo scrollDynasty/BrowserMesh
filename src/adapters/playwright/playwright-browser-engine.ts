@@ -14,6 +14,7 @@ import type {
   BrowserEnginePort,
   BrowserPageHandle,
 } from '../../application/ports/browser-engine.js';
+import { throwIfCancelled, type OperationControl } from '../../application/operation-control.js';
 import { BrowserMeshError } from '../../domain/errors.js';
 import type { BrowserStorageState, Locator } from '../../domain/models.js';
 
@@ -109,9 +110,10 @@ export class PlaywrightBrowserEngine implements BrowserEnginePort {
   }
 
   async createContext(options: {
-    readonly timeoutMs: number;
+    readonly control: OperationControl;
     readonly storageState?: BrowserStorageState;
   }): Promise<BrowserContextHandle> {
+    throwIfCancelled(options.control.signal);
     await this.start();
     const browser = this.browser;
     if (browser === undefined)
@@ -120,8 +122,8 @@ export class PlaywrightBrowserEngine implements BrowserEnginePort {
       const context = await browser.newContext(
         options.storageState === undefined ? {} : { storageState: options.storageState },
       );
-      context.setDefaultTimeout(options.timeoutMs);
-      context.setDefaultNavigationTimeout(options.timeoutMs);
+      context.setDefaultTimeout(options.control.timeoutMs);
+      context.setDefaultNavigationTimeout(options.control.timeoutMs);
       const handle: ContextHandle = { id: Symbol('context'), kind: 'context' };
       this.contexts.set(handle.id, context);
       context.once('close', () => this.dropContext(handle.id));
@@ -172,70 +174,80 @@ export class PlaywrightBrowserEngine implements BrowserEnginePort {
     return this.getPage(handle).url();
   }
 
-  async title(handle: BrowserPageHandle, timeoutMs: number): Promise<string> {
+  async title(handle: BrowserPageHandle, control: OperationControl): Promise<string> {
+    throwIfCancelled(control.signal);
     return this.wrapAction(
       () => this.getPage(handle).title(),
       'BROWSER_ERROR',
       'Failed to get page title',
-      timeoutMs,
+      control.timeoutMs,
     );
   }
 
-  async navigate(handle: BrowserPageHandle, url: string, timeoutMs: number): Promise<void> {
+  async navigate(handle: BrowserPageHandle, url: string, control: OperationControl): Promise<void> {
+    throwIfCancelled(control.signal);
     await this.wrapAction(
       () =>
         this.getPage(handle)
-          .goto(url, { timeout: timeoutMs })
+          .goto(url, { timeout: control.timeoutMs })
           .then(() => undefined),
       'NAVIGATION_FAILED',
       `Navigation failed for ${url}`,
-      timeoutMs,
+      control.timeoutMs,
       { url },
     );
   }
 
-  async back(handle: BrowserPageHandle, timeoutMs: number): Promise<void> {
+  async back(handle: BrowserPageHandle, control: OperationControl): Promise<void> {
+    throwIfCancelled(control.signal);
     await this.wrapAction(
       () =>
         this.getPage(handle)
-          .goBack({ timeout: timeoutMs })
+          .goBack({ timeout: control.timeoutMs })
           .then(() => undefined),
       'NAVIGATION_FAILED',
       'Back navigation failed',
-      timeoutMs,
+      control.timeoutMs,
     );
   }
 
-  async forward(handle: BrowserPageHandle, timeoutMs: number): Promise<void> {
+  async forward(handle: BrowserPageHandle, control: OperationControl): Promise<void> {
+    throwIfCancelled(control.signal);
     await this.wrapAction(
       () =>
         this.getPage(handle)
-          .goForward({ timeout: timeoutMs })
+          .goForward({ timeout: control.timeoutMs })
           .then(() => undefined),
       'NAVIGATION_FAILED',
       'Forward navigation failed',
-      timeoutMs,
+      control.timeoutMs,
     );
   }
 
-  async reload(handle: BrowserPageHandle, timeoutMs: number): Promise<void> {
+  async reload(handle: BrowserPageHandle, control: OperationControl): Promise<void> {
+    throwIfCancelled(control.signal);
     await this.wrapAction(
       () =>
         this.getPage(handle)
-          .reload({ timeout: timeoutMs })
+          .reload({ timeout: control.timeoutMs })
           .then(() => undefined),
       'NAVIGATION_FAILED',
       'Reload failed',
-      timeoutMs,
+      control.timeoutMs,
     );
   }
 
-  async click(handle: BrowserPageHandle, locator: Locator, timeoutMs: number): Promise<void> {
+  async click(
+    handle: BrowserPageHandle,
+    locator: Locator,
+    control: OperationControl,
+  ): Promise<void> {
+    throwIfCancelled(control.signal);
     await this.wrapElement(
-      () => this.locate(this.getPage(handle), locator).click({ timeout: timeoutMs }),
+      () => this.locate(this.getPage(handle), locator).click({ timeout: control.timeoutMs }),
       'click',
       locator,
-      timeoutMs,
+      control.timeoutMs,
     );
   }
 
@@ -243,13 +255,14 @@ export class PlaywrightBrowserEngine implements BrowserEnginePort {
     handle: BrowserPageHandle,
     locator: Locator,
     value: string,
-    timeoutMs: number,
+    control: OperationControl,
   ): Promise<void> {
+    throwIfCancelled(control.signal);
     await this.wrapElement(
-      () => this.locate(this.getPage(handle), locator).fill(value, { timeout: timeoutMs }),
+      () => this.locate(this.getPage(handle), locator).fill(value, { timeout: control.timeoutMs }),
       'fill',
       locator,
-      timeoutMs,
+      control.timeoutMs,
     );
   }
 
@@ -257,13 +270,14 @@ export class PlaywrightBrowserEngine implements BrowserEnginePort {
     handle: BrowserPageHandle,
     locator: Locator,
     key: string,
-    timeoutMs: number,
+    control: OperationControl,
   ): Promise<void> {
+    throwIfCancelled(control.signal);
     await this.wrapElement(
-      () => this.locate(this.getPage(handle), locator).press(key, { timeout: timeoutMs }),
+      () => this.locate(this.getPage(handle), locator).press(key, { timeout: control.timeoutMs }),
       'press',
       locator,
-      timeoutMs,
+      control.timeoutMs,
     );
   }
 
@@ -271,20 +285,22 @@ export class PlaywrightBrowserEngine implements BrowserEnginePort {
     handle: BrowserPageHandle,
     locator: Locator,
     value: string,
-    timeoutMs: number,
+    control: OperationControl,
   ): Promise<void> {
+    throwIfCancelled(control.signal);
     await this.wrapElement(
       () =>
         this.locate(this.getPage(handle), locator)
-          .selectOption(value, { timeout: timeoutMs })
+          .selectOption(value, { timeout: control.timeoutMs })
           .then(() => undefined),
       'select option',
       locator,
-      timeoutMs,
+      control.timeoutMs,
     );
   }
 
-  async snapshot(handle: BrowserPageHandle, timeoutMs: number): Promise<string> {
+  async snapshot(handle: BrowserPageHandle, control: OperationControl): Promise<string> {
+    throwIfCancelled(control.signal);
     return this.wrapAction(
       async () => {
         const page = this.getPage(handle);
@@ -293,36 +309,38 @@ export class PlaywrightBrowserEngine implements BrowserEnginePort {
           strategy: 'css',
           value: 'body',
         }).ariaSnapshot({
-          timeout: timeoutMs,
+          timeout: control.timeoutMs,
         });
         const passwordValuesAfter = await readPasswordValues(page);
         return redactSecretValues(snapshot, [...passwordValuesBefore, ...passwordValuesAfter]);
       },
       'BROWSER_ERROR',
       'Failed to capture page snapshot',
-      timeoutMs,
+      control.timeoutMs,
     );
   }
 
   async visibleText(
     handle: BrowserPageHandle,
     locator: Locator,
-    timeoutMs: number,
+    control: OperationControl,
   ): Promise<string> {
+    throwIfCancelled(control.signal);
     return this.wrapElement(
-      () => this.locate(this.getPage(handle), locator).innerText({ timeout: timeoutMs }),
+      () => this.locate(this.getPage(handle), locator).innerText({ timeout: control.timeoutMs }),
       'read visible text',
       locator,
-      timeoutMs,
+      control.timeoutMs,
     );
   }
 
-  async screenshot(handle: BrowserPageHandle, timeoutMs: number): Promise<Uint8Array> {
+  async screenshot(handle: BrowserPageHandle, control: OperationControl): Promise<Uint8Array> {
+    throwIfCancelled(control.signal);
     return this.wrapAction(
-      () => this.getPage(handle).screenshot({ timeout: timeoutMs, type: 'png' }),
+      () => this.getPage(handle).screenshot({ timeout: control.timeoutMs, type: 'png' }),
       'BROWSER_ERROR',
       'Failed to capture page screenshot',
-      timeoutMs,
+      control.timeoutMs,
     );
   }
 

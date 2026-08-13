@@ -84,6 +84,36 @@ describe('BrowserMeshRuntime', () => {
     await runtime.shutdown();
   });
 
+  it('cancels queued work before execution without overtaking in-flight work or blocking another session', async () => {
+    const { runtime, engine } = testRuntime();
+    const a = await runtime.createSession();
+    const b = await runtime.createSession();
+    let releaseNavigation!: () => void;
+    engine.navigationGate = new Promise<void>((resolve) => (releaseNavigation = resolve));
+    let navigationStarted!: () => void;
+    const started = new Promise<void>((resolve) => (navigationStarted = resolve));
+    engine.onNavigationStart = navigationStarted;
+
+    const first = runtime.navigate(a, 'https://first.example');
+    await started;
+    const controller = new AbortController();
+    const cancelled = runtime.navigate(
+      { ...a, signal: controller.signal },
+      'https://must-not-run.example',
+    );
+    controller.abort(new DOMException('cancelled by test', 'AbortError'));
+
+    await expect(runtime.getTitle(b)).resolves.toMatchObject({ value: 'Fake' });
+    releaseNavigation();
+    await first;
+    await expect(cancelled).rejects.toMatchObject({ name: 'AbortError' });
+    engine.navigationGate = undefined;
+    await expect(runtime.navigate(a, 'https://recovered.example')).resolves.toMatchObject({
+      value: 'https://recovered.example/',
+    });
+    await runtime.shutdown();
+  });
+
   it('correlates rejected operations and enforces the HTTP(S) navigation policy', async () => {
     const { runtime, events } = testRuntime();
     const created = await runtime.createSession();
