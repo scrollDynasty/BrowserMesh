@@ -546,7 +546,9 @@ presentation. Safe application failures carry typed runtime `operationId` correl
 bounded JSON-only MCP error mapper; raw causes never cross the adapter. Annotations are centralized,
 statically reviewed metadata and never runtime authorization. MCP handlers translate request
 cancellation to an engine-independent operation signal and runtime-owned deadline before crossing
-inward.
+inward. The deadline is absolute from acceptance: after a queue wait, the runtime rejects an
+expired operation before resolving its page handle or touching the engine. Adapter waits/actions
+use only the remaining budget.
 
 Passive waits and atomic action/wait composites are application operations occupying one session
 queue slot. Engine ports expose typed conditions/actions and cancellation; they do not expose
@@ -563,6 +565,8 @@ Dialogs are ephemeral and blocking, so there is no later inspect API. The adapte
 dialog listener before the typed click/press, verifies the expected dialog type, accepts or
 dismisses it under the shared deadline, and returns only bounded message/default-value metadata.
 Unexpected dialogs are dismissed before the operation fails, preventing a blocked page and queue.
+A popup produced by a non-popup composite is likewise closed before a typed failure and is never
+registered as a managed page. Composite listeners are removed on every outcome.
 
 Observability listeners are implemented in the Playwright adapter, but their safe normalized event
 models, bounded stores, cursors, ownership, and lifecycle are controlled by runtime/application
@@ -575,7 +579,8 @@ subscriptions through the browser-engine port. Runtime page entries own the disp
 bounded mixed event store; reads filter by event kind without creating an adapter dependency.
 Page-scoped cursor namespaces reject a cursor presented for another page even inside the same
 session. The Playwright adapter owns a bounded per-page in-flight request map solely for correlation
-and duration; terminal events remove entries and teardown clears the map. Redirect hops remain
+and duration; response headers do not end correlation, while `requestfinished` or `requestfailed`
+does. Terminal events remove entries and teardown clears the map. Redirect hops remain
 separate correlated request pairs. Only page-owned HTTP(S) metadata enters the port, including
 EventSource but excluding service-worker traffic, WebSockets, `data:` and `blob:` URLs.
 
@@ -587,7 +592,10 @@ The runtime parses documented ARIA YAML with a conforming parser before applying
 interactive filtering and per-node child limits. Cursor pages are served from a bounded immutable
 per-page serialization (four entries, 30-second TTL, 1,000,000-code-point source cap), so ordinary
 DOM mutations cannot reorder later pages. Navigation and all page/session teardown paths clear the
-store; opaque cursor ownership is checked only within the addressed page.
+store; opaque cursor ownership is checked only within the addressed page. Every cursor page either
+advances by at least one Unicode code point or returns a typed validation error when `maxBytes`
+cannot contain that point. Normal navigation and action-and-navigation composites invalidate the
+page's retained snapshots.
 Session context settings are normalized and validated by the runtime before the Playwright adapter
 is invoked. Each session entry retains an immutable effective value and passes it through the
 `BrowserEnginePort` context-creation boundary; session views return defensive copies. The MCP

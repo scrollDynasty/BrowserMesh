@@ -75,6 +75,61 @@ describe('BrowserMeshRuntime', () => {
     });
     await runtime.shutdown();
   });
+
+  it('expires a queued operation before it touches the engine and recovers the queue', async () => {
+    let titleCalls = 0;
+    class CountingEngine extends FakeEngine {
+      override async title(): Promise<string> {
+        titleCalls += 1;
+        return 'Fake';
+      }
+    }
+    const { runtime, engine } = testRuntime(new CountingEngine());
+    const target = await runtime.createSession();
+    let releaseNavigation: (() => void) | undefined;
+    engine.navigationGate = new Promise<void>((resolve) => {
+      releaseNavigation = resolve;
+    });
+    let notifyStarted: (() => void) | undefined;
+    const started = new Promise<void>((resolve) => {
+      notifyStarted = resolve;
+    });
+    engine.onNavigationStart = notifyStarted;
+    const blocking = runtime.navigate(target, 'https://deadline.example/blocking');
+    await started;
+    const expired = runtime.getTitle({ ...target, timeoutMs: 5 });
+    await new Promise<void>((resolve) => setTimeout(resolve, 20));
+    releaseNavigation?.();
+    await blocking;
+    await expect(expired).rejects.toMatchObject({ code: 'OPERATION_TIMEOUT' });
+    expect(titleCalls).toBe(0);
+    await expect(runtime.getTitle(target)).resolves.toMatchObject({ value: 'Fake' });
+    expect(titleCalls).toBe(1);
+    await runtime.shutdown();
+  });
+
+  it.each(['click', 'press'] as const)(
+    'invalidates retained snapshot cursors after a %s action-and-navigation composite',
+    async (kind) => {
+      const { runtime, engine } = testRuntime();
+      const target = await runtime.createSession();
+      engine.snapshotText = '- document:\n  - button "Long enough to paginate"\n';
+      const captured = await runtime.snapshot(target, { maxChars: 10 });
+      const cursor = captured.value.pagination.nextCursor;
+      if (cursor === null) throw new Error('Expected a paginated snapshot');
+      await runtime.actionAndWait(
+        target,
+        kind === 'click'
+          ? { kind, locator: { strategy: 'testId', value: 'navigate' } }
+          : { kind, locator: { strategy: 'testId', value: 'navigate' }, key: 'Enter' },
+        { kind: 'navigation', matcher: { kind: 'exact', value: 'https://next.example/' } },
+      );
+      await expect(runtime.snapshot(target, { cursor })).rejects.toMatchObject({
+        code: 'STALE_SNAPSHOT_CURSOR',
+      });
+      await runtime.shutdown();
+    },
+  );
   it('registers popup handles as non-default managed pages and closes overflow popups', async () => {
     const { runtime, engine } = testRuntime(undefined, { maxPagesPerSession: 2 });
     const created = await runtime.createSession();
