@@ -15,7 +15,7 @@ import { FakeEngine, testRuntime } from '../support/fakes.js';
 
 describe('MCP adapter', () => {
   it('publishes and fulfills the exact structured contract for every tool', async () => {
-    const { runtime } = testRuntime();
+    const { runtime, engine } = testRuntime();
     const server = createMcpServer(runtime);
     const client = new Client({ name: 'test-client', version: '1.0.0' });
     const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
@@ -64,6 +64,14 @@ describe('MCP adapter', () => {
       expect(
         discovered.tools.find(({ name }) => name === 'browser_snapshot')?.description,
       ).toContain('password-input values are redacted');
+      expect(toolPresentation.browser_wait.annotations).toMatchObject({
+        readOnlyHint: true,
+        openWorldHint: true,
+      });
+      expect(toolPresentation.browser_action_and_wait.annotations).toMatchObject({
+        readOnlyHint: false,
+        openWorldHint: true,
+      });
       const runtimeInfoTool = discovered.tools.find(({ name }) => name === 'browser_runtime_info');
       expect(runtimeInfoTool?.title).toBe('Inspect BrowserMesh runtime');
       expect(runtimeInfoTool?.annotations).toEqual({
@@ -160,6 +168,37 @@ describe('MCP adapter', () => {
       });
       const screenshot = await callSuccess(client, 'browser_screenshot', target);
       expect(screenshot.content.some((block) => block.type === 'image')).toBe(true);
+      await callSuccess(client, 'browser_wait', {
+        ...target,
+        condition: {
+          kind: 'url',
+          matcher: { kind: 'exact', value: 'https://example.test/contract' },
+        },
+      });
+      await callSuccess(client, 'browser_action_and_wait', {
+        ...target,
+        action: { kind: 'click', locator: { strategy: 'role', value: 'button', name: 'Submit' } },
+        wait: {
+          kind: 'response',
+          matcher: { kind: 'exact', value: 'https://example.test/result' },
+        },
+      });
+      engine.failNextWait = true;
+      const timedOutWait = requireCallResult(
+        await client.callTool({
+          name: 'browser_wait',
+          arguments: {
+            ...target,
+            condition: { kind: 'text', text: 'missing', state: 'present' },
+          },
+        }),
+      );
+      expect(timedOutWait.isError).toBe(true);
+      expect(timedOutWait.structuredContent).toBeUndefined();
+      const timedOutError = publicErrorSchema.parse(JSON.parse(readText(timedOutWait))).error;
+      expect(timedOutError.code).toBe('OPERATION_TIMEOUT');
+      expect(timedOutError.operationId).toMatch(/^operation_/u);
+      await callSuccess(client, 'browser_get_title', target);
       await callSuccess(client, 'browser_state_save', {
         sessionId: target.sessionId,
         stateId: 'contract-state',

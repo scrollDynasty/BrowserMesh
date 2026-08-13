@@ -41,6 +41,56 @@ export type Locator =
       readonly value: string;
     };
 
+export type UrlMatcher =
+  | { readonly kind: 'exact'; readonly value: string }
+  | { readonly kind: 'glob'; readonly value: string };
+
+export type WaitCondition =
+  | { readonly kind: 'url'; readonly matcher: UrlMatcher }
+  | { readonly kind: 'load'; readonly state: 'domcontentloaded' | 'load' }
+  | {
+      readonly kind: 'locator';
+      readonly locator: Locator;
+      readonly state: 'visible' | 'hidden' | 'attached' | 'detached' | 'enabled' | 'disabled';
+    }
+  | {
+      readonly kind: 'text';
+      readonly text: string;
+      readonly state: 'present' | 'absent';
+    };
+
+export type BrowserAction =
+  | { readonly kind: 'click'; readonly locator: Locator }
+  | { readonly kind: 'press'; readonly locator: Locator; readonly key: string };
+
+export type ActionWaitCondition =
+  | {
+      readonly kind: 'navigation';
+      readonly matcher?: UrlMatcher;
+      readonly loadState?: 'domcontentloaded' | 'load';
+    }
+  | {
+      readonly kind: 'response';
+      readonly matcher: UrlMatcher;
+      readonly method?: string;
+      readonly status?: number;
+    };
+
+export interface WaitResult {
+  readonly condition: WaitCondition;
+}
+
+export interface ActionAndWaitResult {
+  readonly action: BrowserAction;
+  readonly wait: ActionWaitCondition;
+  readonly event: {
+    readonly kind: 'navigation' | 'response';
+    readonly url: string;
+    readonly method?: string;
+    readonly status?: number;
+  };
+}
+
 export interface OperationResult<T> {
   readonly operationId: string;
   readonly sessionId?: string;

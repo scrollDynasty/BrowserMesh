@@ -1,4 +1,11 @@
-import type { BrowserStorageState, Locator } from '../../domain/models.js';
+import type {
+  ActionAndWaitResult,
+  ActionWaitCondition,
+  BrowserAction,
+  BrowserStorageState,
+  Locator,
+  WaitCondition,
+} from '../../domain/models.js';
 
 export interface BrowserPageHandle {
   readonly id: symbol;
@@ -52,5 +59,12 @@ export interface BrowserEnginePort {
   snapshot(page: BrowserPageHandle, timeoutMs: number): Promise<string>;
   visibleText(page: BrowserPageHandle, locator: Locator, timeoutMs: number): Promise<string>;
   screenshot(page: BrowserPageHandle, timeoutMs: number): Promise<Uint8Array>;
+  wait(page: BrowserPageHandle, condition: WaitCondition, timeoutMs: number): Promise<void>;
+  actionAndWait(
+    page: BrowserPageHandle,
+    action: BrowserAction,
+    wait: ActionWaitCondition,
+    timeoutMs: number,
+  ): Promise<ActionAndWaitResult['event']>;
   storageState(context: BrowserContextHandle): Promise<BrowserStorageState>;
 }

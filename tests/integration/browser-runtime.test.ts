@@ -167,6 +167,150 @@ describe('real Chromium runtime', () => {
     });
   });
 
+  it('waits for bounded passive URL, load, locator, and exact-case text conditions', async () => {
+    const target = await createTarget();
+    await runtime.navigate(target, `${web.baseUrl}/waits`);
+    await runtime.wait(target, {
+      kind: 'url',
+      matcher: { kind: 'glob', value: `${web.baseUrl}/wait*` },
+    });
+    await runtime.wait(target, {
+      kind: 'url',
+      matcher: { kind: 'exact', value: `${web.baseUrl}/waits` },
+    });
+    await runtime.wait(target, { kind: 'load', state: 'domcontentloaded' });
+    await runtime.wait(target, { kind: 'load', state: 'load' });
+    await runtime.wait(target, {
+      kind: 'locator',
+      locator: { strategy: 'testId', value: 'delayed' },
+      state: 'attached',
+    });
+    await runtime.wait(target, {
+      kind: 'locator',
+      locator: { strategy: 'testId', value: 'disabled' },
+      state: 'disabled',
+    });
+    await runtime.wait(target, {
+      kind: 'locator',
+      locator: { strategy: 'testId', value: 'delayed' },
+      state: 'visible',
+    });
+    await runtime.wait(target, {
+      kind: 'locator',
+      locator: { strategy: 'testId', value: 'removed' },
+      state: 'detached',
+    });
+    await runtime.wait(target, {
+      kind: 'locator',
+      locator: { strategy: 'testId', value: 'hidden-later' },
+      state: 'hidden',
+    });
+    await runtime.wait(target, {
+      kind: 'locator',
+      locator: { strategy: 'testId', value: 'toggle' },
+      state: 'enabled',
+    });
+    await runtime.wait(target, { kind: 'text', text: 'Case-Sensitive Ready', state: 'present' });
+    await runtime.wait(target, { kind: 'text', text: 'Never Here', state: 'absent' });
+    await expect(
+      runtime.wait(
+        { ...target, timeoutMs: 50 },
+        { kind: 'text', text: 'case-sensitive ready', state: 'present' },
+      ),
+    ).rejects.toMatchObject({ code: 'OPERATION_TIMEOUT' });
+    await expect(runtime.getTitle(target)).resolves.toMatchObject({ value: 'Wait conditions' });
+  });
+
+  it('registers composite navigation and response waiters before click actions', async () => {
+    const target = await createTarget();
+    await runtime.navigate(target, `${web.baseUrl}/action-waits`);
+    await expect(
+      runtime.actionAndWait(
+        { ...target, timeoutMs: 50 },
+        { kind: 'click', locator: { strategy: 'testId', value: 'request' } },
+        {
+          kind: 'response',
+          matcher: { kind: 'exact', value: `${web.baseUrl}/api/never` },
+        },
+      ),
+    ).rejects.toMatchObject({ code: 'OPERATION_TIMEOUT' });
+    await expect(runtime.getTitle(target)).resolves.toMatchObject({ value: 'Action waits' });
+    const response = await runtime.actionAndWait(
+      target,
+      { kind: 'click', locator: { strategy: 'testId', value: 'request' } },
+      {
+        kind: 'response',
+        matcher: { kind: 'glob', value: `${web.baseUrl}/api/*` },
+        method: 'GET',
+        status: 200,
+      },
+    );
+    expect(response.value.event).toMatchObject({
+      kind: 'response',
+      method: 'GET',
+      status: 200,
+    });
+    expect(response.value.event.url).toContain('token=%5BREDACTED%5D');
+    expect(response.value.event.url).not.toContain('top-secret');
+
+    const pressedResponse = await runtime.actionAndWait(
+      target,
+      { kind: 'press', locator: { strategy: 'testId', value: 'request' }, key: 'Enter' },
+      {
+        kind: 'response',
+        matcher: { kind: 'glob', value: `${web.baseUrl}/api/*` },
+        status: 200,
+      },
+    );
+    expect(pressedResponse.value.event).toMatchObject({ kind: 'response', status: 200 });
+
+    const navigation = await runtime.actionAndWait(
+      target,
+      { kind: 'click', locator: { strategy: 'testId', value: 'navigate' } },
+      {
+        kind: 'navigation',
+        matcher: { kind: 'exact', value: `${web.baseUrl}/action-destination` },
+        loadState: 'load',
+      },
+    );
+    expect(navigation.value.event).toMatchObject({
+      kind: 'navigation',
+      url: `${web.baseUrl}/action-destination`,
+    });
+  });
+
+  it('keeps waits ordered per session, parallel across sessions, and usable after timeout', async () => {
+    const a = await createTarget();
+    const b = await createTarget();
+    await Promise.all([
+      runtime.navigate(a, `${web.baseUrl}/waits`),
+      runtime.navigate(b, `${web.baseUrl}/waits`),
+    ]);
+    await Promise.all([
+      runtime.wait(a, {
+        kind: 'locator',
+        locator: { strategy: 'testId', value: 'delayed' },
+        state: 'visible',
+      }),
+      runtime.wait(b, {
+        kind: 'locator',
+        locator: { strategy: 'testId', value: 'delayed' },
+        state: 'visible',
+      }),
+    ]);
+    await expect(
+      runtime.wait(
+        { ...a, timeoutMs: 25 },
+        { kind: 'text', text: 'missing forever', state: 'present' },
+      ),
+    ).rejects.toMatchObject({ code: 'OPERATION_TIMEOUT' });
+    const navigation = runtime.navigate(a, `${web.baseUrl}/action-destination`);
+    const read = runtime.getTitle(a);
+    await expect(navigation).resolves.toMatchObject({ value: `${web.baseUrl}/action-destination` });
+    await expect(read).resolves.toMatchObject({ value: 'Action destination' });
+    await expect(runtime.getTitle(b)).resolves.toMatchObject({ value: 'Wait conditions' });
+  });
+
   it('returns diagnostic locator errors without losing sessions or queued work', async () => {
     const first = await createTarget();
     const second = await createTarget();
