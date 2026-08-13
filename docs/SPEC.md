@@ -1094,6 +1094,14 @@ Session creation may add validated viewport, device scale, locale, timezone, col
 motion, user agent, and geolocation with explicit permissions. The normalized effective context is
 returned and tested for cross-session isolation.
 
+The implemented safe context slice validates viewport width/height as integers `1..10000`, device
+scale factor as a finite number `0.1..10`, locale as one canonical Unicode locale identifier,
+timezone as a canonical IANA timezone ID, color scheme as `light|dark|no-preference`, reduced
+motion as `reduce|no-preference`, and user agent as 1..512 characters. Text rejects C0/C1 control
+characters. Invalid locale/timezone input returns `INVALID_ARGUMENT` before browser resources are
+created. Geolocation/permissions remain deferred pending an exact permission allowlist and safe
+origin policy.
+
 Typed hover, focus, check, uncheck, double-click, and scroll-into-view are explicit page operations.
 They use semantic locators, bounded timeouts, request cancellation, and the owning session queue.
 Page-coordinate scroll, drag/drop, dialog handling, popup wait, iframe-scoped semantic targeting,

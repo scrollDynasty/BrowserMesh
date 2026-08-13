@@ -56,6 +56,7 @@ describe('MCP adapter', () => {
       expect(createTool?.description).toContain('different user, account, role');
       expect(createTool?.description).toContain('independent parallel workflow');
       expect(createTool?.inputSchema).toHaveProperty('properties.stateId');
+      expect(createTool?.inputSchema).toHaveProperty('properties.contextSettings');
       expect(createTool?.inputSchema).not.toHaveProperty('properties.fromState');
       const clickTool = discovered.tools.find(({ name }) => name === 'browser_click');
       expect(clickTool?.description).toContain('exactly by default');
@@ -110,12 +111,30 @@ describe('MCP adapter', () => {
         `BrowserMesh ${parsedRuntimeInfo.serverVersion}; Chromium not_started; 0 active and 0 failed sessions.`,
       );
 
-      const created = await callSuccess(client, 'browser_session_create', { name: 'mcp' });
+      const created = await callSuccess(client, 'browser_session_create', {
+        name: 'mcp',
+        contextSettings: { locale: 'EN-us', timezoneId: 'Etc/UTC' },
+      });
+      expect(created.structuredContent).toMatchObject({
+        session: { contextSettings: { locale: 'en-US', timezoneId: 'UTC' } },
+      });
       const target = z
         .object({ initialPage: z.object({ sessionId: z.string(), pageId: z.string() }) })
         .parse(created.structuredContent).initialPage;
       expect(created.structuredContent).not.toHaveProperty('value');
       expect(readCompatibilityText(created)).toEqual(created.structuredContent);
+
+      const badTimezone = requireCallResult(
+        await client.callTool({
+          name: 'browser_session_create',
+          arguments: { contextSettings: { timezoneId: 'Mars/Olympus' } },
+        }),
+      );
+      expect(badTimezone.isError).toBe(true);
+      expect(publicErrorSchema.parse(JSON.parse(readText(badTimezone))).error).toMatchObject({
+        code: 'INVALID_ARGUMENT',
+        message: 'The request contains an invalid argument',
+      });
 
       const missing = requireCallResult(
         await client.callTool({

@@ -134,6 +134,7 @@ export class PlaywrightBrowserEngine implements BrowserEnginePort {
   async createContext(options: {
     readonly control: OperationControl;
     readonly storageState?: BrowserStorageState;
+    readonly settings: import('../../domain/context-settings.js').BrowserContextSettings;
   }): Promise<BrowserContextHandle> {
     throwIfCancelled(options.control.signal);
     await this.start();
@@ -141,9 +142,10 @@ export class PlaywrightBrowserEngine implements BrowserEnginePort {
     if (browser === undefined)
       throw new BrowserMeshError('BROWSER_ERROR', 'Browser is unavailable');
     try {
-      const context = await browser.newContext(
-        options.storageState === undefined ? {} : { storageState: options.storageState },
-      );
+      const context = await browser.newContext({
+        ...options.settings,
+        ...(options.storageState === undefined ? {} : { storageState: options.storageState }),
+      });
       context.setDefaultTimeout(options.control.timeoutMs);
       context.setDefaultNavigationTimeout(options.control.timeoutMs);
       const handle: ContextHandle = { id: Symbol('context'), kind: 'context' };

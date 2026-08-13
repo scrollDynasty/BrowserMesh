@@ -170,6 +170,27 @@ export async function startTestWebServer(): Promise<TestWebServer> {
       );
       return;
     }
+    if (url.pathname === '/context-settings') {
+      response.end(
+        page(
+          'Context settings',
+          `<div data-testid="context"></div><script>
+            const values = [
+              innerWidth,
+              innerHeight,
+              devicePixelRatio,
+              navigator.language,
+              Intl.DateTimeFormat().resolvedOptions().timeZone,
+              matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light',
+              matchMedia('(prefers-reduced-motion: reduce)').matches ? 'reduce' : 'no-preference',
+              navigator.userAgent
+            ];
+            document.querySelector('[data-testid=context]').textContent = values.join('|');
+          </script>`,
+        ),
+      );
+      return;
+    }
     if (url.pathname === '/network-observability') {
       response.end(
         page(

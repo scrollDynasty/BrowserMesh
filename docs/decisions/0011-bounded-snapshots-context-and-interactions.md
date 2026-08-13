@@ -24,6 +24,14 @@ Session creation may accept validated viewport, scale, locale, timezone, color s
 motion, user agent, and geolocation with explicit permissions. The normalized effective settings
 are returned without secrets and remain isolated per context.
 
+The first context-settings slice accepts viewport width/height (integers `1..10000`), device scale
+factor (`0.1..10`), one canonical Unicode locale identifier, one canonical IANA timezone ID,
+`light|dark|no-preference` color scheme, `reduce|no-preference` reduced motion, and a user agent of
+at most 512 characters. Text values reject C0/C1 controls. These engine-independent values are
+normalized before context creation and returned in every session view. Geolocation and permissions
+remain deferred until a follow-up contract defines an exact permission allowlist and a safe,
+validated origin-scoping policy; accepting this ADR does not permit an open-ended permission API.
+
 New interactions are typed capabilities: hover/focus, check/uncheck, double-click, scroll/scroll
 into view, drag/drop, dialog handling, popup wait, iframe-scoped semantic targeting, and full-page or
 element screenshot. Arbitrary JavaScript and arbitrary filesystem paths remain forbidden. Uploads

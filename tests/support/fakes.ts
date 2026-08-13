@@ -10,6 +10,7 @@ import type {
   StateRepositoryPort,
 } from '../../src/application/ports/state-repository.js';
 import { BrowserMeshError } from '../../src/domain/errors.js';
+import type { BrowserContextSettings } from '../../src/domain/context-settings.js';
 import type { BrowserStorageState, Locator, SnapshotOptions } from '../../src/domain/models.js';
 import type {
   ActionAndWaitResult,
@@ -23,6 +24,7 @@ import { BrowserMeshRuntime, type RuntimeOptions } from '../../src/runtime/brows
 interface FakeContext extends BrowserContextHandle {
   pages: Set<symbol>;
   closed: boolean;
+  settings: BrowserContextSettings;
 }
 interface FakePage extends BrowserPageHandle {
   contextId: symbol;
@@ -104,8 +106,15 @@ export class FakeEngine implements BrowserEnginePort {
     this.contexts.clear();
     this.pages.clear();
   }
-  async createContext(): Promise<BrowserContextHandle> {
-    const context: FakeContext = { id: Symbol('context'), pages: new Set(), closed: false };
+  async createContext(options?: {
+    readonly settings?: BrowserContextSettings;
+  }): Promise<BrowserContextHandle> {
+    const context: FakeContext = {
+      id: Symbol('context'),
+      pages: new Set(),
+      closed: false,
+      settings: options?.settings ?? {},
+    };
     this.contexts.set(context.id, context);
     return context;
   }

@@ -10,7 +10,7 @@ import type {
 import { SNAPSHOT_LIMITS } from '../../domain/snapshots.js';
 import { BROWSERMESH_VERSION } from '../../infrastructure/generated/version.js';
 import type { BrowserMeshRuntime, OperationTarget } from '../../runtime/browsermesh-runtime.js';
-import { contractFor } from './contracts.js';
+import { contextSettingsSchema, contractFor } from './contracts.js';
 import { applicationErrorResult, structuredResult } from './results.js';
 
 const role = z.enum([
@@ -151,11 +151,12 @@ export function createMcpServer(runtime: BrowserMeshRuntime): McpServer {
     {
       ...contractFor('browser_session_create'),
       description:
-        'Create a new isolated browser session with its own cookies, storage, and pages. Create a separate session whenever a task involves a different user, account, role, authentication state, or independent parallel workflow; never reuse one session for identities that must remain isolated. The response directly returns both sessionId and the deterministic initial pageId for immediate navigation. Pass stateId only to restore previously saved browser state.',
+        'Create a new isolated browser session with its own cookies, storage, pages, and optional validated contextSettings (viewport, scale, locale, timezone, color scheme, reduced motion, and user agent). Create a separate session whenever a task involves a different user, account, role, authentication state, device profile, accessibility preference, or independent parallel workflow; never reuse one session for identities or context settings that must remain isolated. The response directly returns both sessionId and the deterministic initial pageId plus normalized effective settings. Pass stateId only to restore previously saved browser state.',
       inputSchema: {
         name: z.string().min(1).max(128).optional(),
         metadata: z.record(z.string(), z.string()).optional(),
         stateId: z.string().min(1).max(128).optional(),
+        contextSettings: contextSettingsSchema.optional(),
       },
     },
     (input, extra) =>

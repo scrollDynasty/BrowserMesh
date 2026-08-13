@@ -237,26 +237,35 @@ async function main(): Promise<void> {
         },
       }),
     );
-    const snapshot = readStructuredResult(
-      await client.callTool({
-        name: 'browser_snapshot',
-        arguments: {
-          sessionId: createdIds.sessionId,
-          pageId: createdIds.pageId,
-          scope: { strategy: 'role', value: 'button', name: 'Run package action' },
-          maxDepth: 1,
-          includeBoundingBoxes: true,
-          maxChars: 4,
-          maxBytes: 4,
-        },
-      }),
-    );
+    const snapshot = z
+      .object({
+        partial: z.boolean(),
+        contentFormat: z.string(),
+        truncation: z.object({ truncated: z.boolean() }),
+        appliedBounds: z.object({ maxDepth: z.number(), includeBoundingBoxes: z.boolean() }),
+      })
+      .parse(
+        readStructuredResult(
+          await client.callTool({
+            name: 'browser_snapshot',
+            arguments: {
+              sessionId: createdIds.sessionId,
+              pageId: createdIds.pageId,
+              scope: { strategy: 'role', value: 'button', name: 'Run package action' },
+              maxDepth: 1,
+              includeBoundingBoxes: true,
+              maxChars: 4,
+              maxBytes: 4,
+            },
+          }),
+        ),
+      );
     if (
-      snapshot.partial !== true ||
+      !snapshot.partial ||
       snapshot.contentFormat !== 'aria-yaml-fragment' ||
-      snapshot.truncation?.truncated !== true ||
-      snapshot.appliedBounds?.maxDepth !== 1 ||
-      snapshot.appliedBounds?.includeBoundingBoxes !== true
+      !snapshot.truncation.truncated ||
+      snapshot.appliedBounds.maxDepth !== 1 ||
+      !snapshot.appliedBounds.includeBoundingBoxes
     ) {
       throw new Error('Packaged MCP bounded snapshot contract did not match its applied limits');
     }

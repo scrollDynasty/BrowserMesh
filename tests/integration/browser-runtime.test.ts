@@ -39,6 +39,43 @@ describe('real Chromium runtime', () => {
     ).rejects.toMatchObject({ code: 'PAGE_NOT_FOUND' });
   });
 
+  it('applies different effective context settings to concurrent isolated sessions', async () => {
+    const a = await runtime.createSession({
+      contextSettings: {
+        viewport: { width: 800, height: 600 },
+        deviceScaleFactor: 2,
+        locale: 'en-US',
+        timezoneId: 'UTC',
+        colorScheme: 'dark',
+        reducedMotion: 'reduce',
+        userAgent: 'BrowserMesh-A',
+      },
+    });
+    const b = await runtime.createSession({
+      contextSettings: {
+        viewport: { width: 1024, height: 700 },
+        deviceScaleFactor: 1,
+        locale: 'fr-FR',
+        timezoneId: 'Europe/Paris',
+        colorScheme: 'light',
+        reducedMotion: 'no-preference',
+        userAgent: 'BrowserMesh-B',
+      },
+    });
+    await Promise.all([
+      runtime.navigate(a, `${web.baseUrl}/context-settings`),
+      runtime.navigate(b, `${web.baseUrl}/context-settings`),
+    ]);
+    const locator = { strategy: 'testId', value: 'context' } as const;
+    expect((await runtime.visibleText(a, locator)).value).toBe(
+      '800|600|2|en-US|UTC|dark|reduce|BrowserMesh-A',
+    );
+    expect((await runtime.visibleText(b, locator)).value).toBe(
+      '1024|700|1|fr-FR|Europe/Paris|light|no-preference|BrowserMesh-B',
+    );
+    expect(a.value.contextSettings).not.toEqual(b.value.contextSettings);
+  });
+
   it('creates, lists, routes, and closes additional pages explicitly', async () => {
     const initial = await createTarget();
     const additional = await runtime.createPage(initial.sessionId);
@@ -78,13 +115,17 @@ describe('real Chromium runtime', () => {
     const saved = await runtime.saveSessionState(original.sessionId, 'auth-state');
     expect(saved.value.stateId).toBe('auth-state');
     await runtime.closeSession(original.sessionId);
-    const restored = await runtime.createSession({ stateId: 'auth-state' });
+    const restored = await runtime.createSession({
+      stateId: 'auth-state',
+      contextSettings: { locale: 'fr-FR' },
+    });
     const target = { sessionId: restored.sessionId, pageId: restored.pageId };
     await runtime.navigate(target, web.baseUrl);
     expect((await runtime.visibleText(target, { strategy: 'testId', value: 'state' })).value).toBe(
       'restored|identity=restored',
     );
     expect(restored.value.restoredFromStateId).toBe('auth-state');
+    expect(restored.value.contextSettings).toEqual({ locale: 'fr-FR' });
   });
 
   it('supports actions, inspection and capture', async () => {

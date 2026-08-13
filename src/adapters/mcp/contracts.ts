@@ -5,6 +5,33 @@ const operationId = z.string().min(1);
 const sessionId = z.string().min(1);
 const pageId = z.string().min(1);
 const timestamp = z.string().min(1);
+const safeContextText = (maximum: number) =>
+  z
+    .string()
+    .min(1)
+    .max(maximum)
+    .refine(
+      (value) =>
+        Array.from(value, (character) => character.codePointAt(0) ?? 0).every(
+          (codePoint) => codePoint > 31 && (codePoint < 127 || codePoint > 159),
+        ),
+      'Control characters are not allowed',
+    );
+
+export const contextSettingsSchema = z.object({
+  viewport: z
+    .object({
+      width: z.number().int().min(1).max(10_000),
+      height: z.number().int().min(1).max(10_000),
+    })
+    .optional(),
+  deviceScaleFactor: z.number().min(0.1).max(10).optional(),
+  locale: safeContextText(64).optional(),
+  timezoneId: safeContextText(128).optional(),
+  colorScheme: z.enum(['light', 'dark', 'no-preference']).optional(),
+  reducedMotion: z.enum(['reduce', 'no-preference']).optional(),
+  userAgent: safeContextText(512).optional(),
+});
 
 export const sessionViewSchema = z.object({
   sessionId,
@@ -14,6 +41,7 @@ export const sessionViewSchema = z.object({
   lastActivityAt: timestamp,
   metadata: z.record(z.string(), z.string()),
   restoredFromStateId: z.string().optional(),
+  contextSettings: contextSettingsSchema,
 });
 
 export const pageViewSchema = z.object({
