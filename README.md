@@ -256,6 +256,10 @@ A read-style operation does not bypass an in-progress navigation or interaction.
 
 A failed or timed-out operation must not poison the queue. Later accepted operations continue normally after the failed operation settles.
 
+Each `timeoutMs` is one absolute budget starting when BrowserMesh accepts the operation. Time spent
+waiting in the owning session queue and every later browser-adapter step consume that same budget;
+no adapter step receives a renewed full timeout.
+
 MCP request cancellation is propagated into BrowserMesh as an engine-independent operation signal.
 A same-session request cancelled while queued is skipped before it can touch browser state. If a
 Playwright action is already running and cannot be aborted safely, BrowserMesh keeps its queue slot
@@ -409,8 +413,9 @@ Screenshots are returned as MCP image content instead of being written to a call
 filesystem path. The optional `capture` mode selects the viewport, the full scrollable page, or one
 strictly resolved semantic/CSS element; the default remains the viewport. Structured output reports
 actual PNG width, height, and encoded bytes. BrowserMesh measures CSS-pixel dimensions before capture
-and validates actual PNG dimensions and bytes afterward; configured overflow returns
-`LIMIT_EXCEEDED` and does not poison the session queue.
+and validates actual PNG dimensions and bytes afterward. Full-page and element modes capture the
+fixed measured clip, so later page growth cannot expand native image allocation. Configured
+overflow returns `LIMIT_EXCEEDED` and does not poison the session queue.
 
 ### Persistence
 
