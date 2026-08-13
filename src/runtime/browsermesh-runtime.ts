@@ -9,6 +9,7 @@ import type { SavedStateView, StateRepositoryPort } from '../application/ports/s
 import {
   createOperationControl,
   isCancellation,
+  remainingOperationTime,
   throwIfCancelled,
   type OperationControl,
 } from '../application/operation-control.js';
@@ -134,6 +135,7 @@ export class BrowserMeshRuntime {
   private readonly sessions = new Map<string, SessionEntry>();
   private accepting = true;
   private started = false;
+  private startPromise: Promise<void> | undefined;
   private shutdownPromise: Promise<void> | undefined;
   private readonly now: () => Date;
   private readonly removeDisconnectListener: () => void;
@@ -148,8 +150,15 @@ export class BrowserMeshRuntime {
   async start(): Promise<void> {
     this.ensureAccepting();
     if (this.started) return;
-    await this.options.engine.start();
-    this.started = true;
+    if (this.startPromise !== undefined) return this.startPromise;
+    this.startPromise = (async () => {
+      await this.options.engine.start();
+      this.ensureAccepting();
+      this.started = true;
+    })().finally(() => {
+      this.startPromise = undefined;
+    });
+    return this.startPromise;
   }
 
   runtimeInfo(): BrowserRuntimeInfo {
@@ -674,15 +683,21 @@ export class BrowserMeshRuntime {
     action: BrowserAction,
     wait: ActionWaitCondition,
   ): Promise<PageAddressedOperationResult<ActionAndWaitResult>> {
-    return this.pageOperation(target, async (page, control) => {
+    return this.pageOperation(target, async (page, control, pageEntry) => {
       const normalizedAction = normalizeAction(action);
       const normalizedWait = normalizeActionWait(wait);
-      const engineEvent = await this.options.engine.actionAndWait(
-        page,
-        normalizedAction,
-        normalizedWait,
-        control,
-      );
+      let engineEvent: BrowserEngineActionWaitEvent;
+      try {
+        engineEvent = await this.options.engine.actionAndWait(
+          page,
+          normalizedAction,
+          normalizedWait,
+          control,
+        );
+      } finally {
+        // A composite action can replace the main document even when its expected event fails.
+        pageEntry.snapshots.clear();
+      }
       const event = await this.registerActionWaitEvent(target.sessionId, engineEvent);
       return {
         action: normalizedAction,
@@ -868,6 +883,7 @@ export class BrowserMeshRuntime {
       const value = await this.withSession(
         target.sessionId,
         async (entry) => {
+          remainingOperationTime(control);
           const page = this.getPageEntry(entry, target.pageId);
           return action(page.handle, control, page);
         },

@@ -25,6 +25,7 @@ import type {
 } from '../../application/ports/browser-engine.js';
 import {
   isCancellation,
+  remainingOperationTime,
   throwIfCancelled,
   type OperationControl,
 } from '../../application/operation-control.js';
@@ -70,6 +71,7 @@ const INTERACTIVE_SELECTOR =
 export class PlaywrightBrowserEngine implements BrowserEnginePort {
   private browser: Browser | undefined;
   private startPromise: Promise<void> | undefined;
+  private stopPromise: Promise<void> | undefined;
   private stopping = false;
   private launchState: BrowserEngineDiagnostics['launchState'] = 'not_started';
   private readonly disconnectedListeners = new Set<() => void>();
@@ -109,6 +111,9 @@ export class PlaywrightBrowserEngine implements BrowserEnginePort {
   }
 
   async start(): Promise<void> {
+    if (this.stopPromise !== undefined) {
+      await this.stopPromise;
+    }
     if (this.browser?.isConnected() === true) return;
     if (this.startPromise !== undefined) return this.startPromise;
     this.startPromise = (async () => {
@@ -137,20 +142,27 @@ export class PlaywrightBrowserEngine implements BrowserEnginePort {
   }
 
   async stop(): Promise<void> {
+    if (this.stopPromise !== undefined) return this.stopPromise;
     this.stopping = true;
-    const browser = this.browser;
-    this.browser = undefined;
-    this.pages.clear();
-    this.elementRefs.clear();
-    this.contexts.clear();
-    try {
-      if (browser !== undefined) {
-        await this.wrapBrowserAction(() => browser.close(), 'Failed to stop Chromium');
+    this.stopPromise = (async () => {
+      try {
+        // A launch already accepted before shutdown owns this lifecycle and must be reaped.
+        await this.startPromise?.catch(() => undefined);
+        const browser = this.browser;
+        this.browser = undefined;
+        this.pages.clear();
+        this.elementRefs.clear();
+        this.contexts.clear();
+        if (browser !== undefined) {
+          await this.wrapBrowserAction(() => browser.close(), 'Failed to stop Chromium');
+        }
+      } finally {
+        this.stopping = false;
+        this.launchState = 'not_started';
+        this.stopPromise = undefined;
       }
-    } finally {
-      this.stopping = false;
-      this.launchState = 'not_started';
-    }
+    })();
+    return this.stopPromise;
   }
 
   async createContext(options: {
@@ -282,7 +294,6 @@ export class PlaywrightBrowserEngine implements BrowserEnginePort {
       const request = response.request();
       const tracked = inFlight.get(request);
       if (tracked === undefined) return;
-      inFlight.delete(request);
       listener({
         kind: 'response',
         requestId: tracked.requestId,
@@ -292,6 +303,9 @@ export class PlaywrightBrowserEngine implements BrowserEnginePort {
         status: response.status(),
         durationMs: performance.now() - tracked.startedAt,
       });
+    };
+    const onRequestFinished = (request: Request): void => {
+      inFlight.delete(request);
     };
     const onRequestFailed = (request: Request): void => {
       const tracked = inFlight.get(request);
@@ -319,6 +333,7 @@ export class PlaywrightBrowserEngine implements BrowserEnginePort {
       page.off('pageerror', onPageError);
       page.off('request', onRequest);
       page.off('response', onResponse);
+      page.off('requestfinished', onRequestFinished);
       page.off('requestfailed', onRequestFailed);
       page.off('close', dispose);
     };
@@ -326,6 +341,7 @@ export class PlaywrightBrowserEngine implements BrowserEnginePort {
     page.on('pageerror', onPageError);
     page.on('request', onRequest);
     page.on('response', onResponse);
+    page.on('requestfinished', onRequestFinished);
     page.on('requestfailed', onRequestFailed);
     page.once('close', dispose);
     return dispose;
@@ -407,7 +423,7 @@ export class PlaywrightBrowserEngine implements BrowserEnginePort {
     await this.wrapElement(
       async () =>
         (await this.actionable(handle, locator, control)).click({
-          timeout: remainingMs(control.deadlineAt),
+          timeout: remainingOperationTime(control),
         }),
       'click',
       locator,
@@ -424,7 +440,7 @@ export class PlaywrightBrowserEngine implements BrowserEnginePort {
     await this.wrapElement(
       async () =>
         (await this.actionable(handle, locator, control)).dblclick({
-          timeout: remainingMs(control.deadlineAt),
+          timeout: remainingOperationTime(control),
         }),
       'double-click',
       locator,
@@ -441,7 +457,7 @@ export class PlaywrightBrowserEngine implements BrowserEnginePort {
     await this.wrapElement(
       async () =>
         (await this.actionable(handle, locator, control)).hover({
-          timeout: remainingMs(control.deadlineAt),
+          timeout: remainingOperationTime(control),
         }),
       'hover over',
       locator,
@@ -458,7 +474,7 @@ export class PlaywrightBrowserEngine implements BrowserEnginePort {
     await this.wrapElement(
       async () =>
         (await this.actionable(handle, locator, control)).focus({
-          timeout: remainingMs(control.deadlineAt),
+          timeout: remainingOperationTime(control),
         }),
       'focus',
       locator,
@@ -475,7 +491,7 @@ export class PlaywrightBrowserEngine implements BrowserEnginePort {
     await this.wrapElement(
       async () =>
         (await this.actionable(handle, locator, control)).check({
-          timeout: remainingMs(control.deadlineAt),
+          timeout: remainingOperationTime(control),
         }),
       'check',
       locator,
@@ -492,7 +508,7 @@ export class PlaywrightBrowserEngine implements BrowserEnginePort {
     await this.wrapElement(
       async () =>
         (await this.actionable(handle, locator, control)).uncheck({
-          timeout: remainingMs(control.deadlineAt),
+          timeout: remainingOperationTime(control),
         }),
       'uncheck',
       locator,
@@ -509,7 +525,7 @@ export class PlaywrightBrowserEngine implements BrowserEnginePort {
     await this.wrapElement(
       async () =>
         (await this.actionable(handle, locator, control)).scrollIntoViewIfNeeded({
-          timeout: remainingMs(control.deadlineAt),
+          timeout: remainingOperationTime(control),
         }),
       'scroll into view',
       locator,
@@ -547,7 +563,7 @@ export class PlaywrightBrowserEngine implements BrowserEnginePort {
         const targetLocator = await this.locate(page, target, control);
         if ((await sourceLocator.count()) > 1) throw ambiguousLocator(source);
         if ((await targetLocator.count()) > 1) throw ambiguousLocator(target);
-        await sourceLocator.dragTo(targetLocator, { timeout: remainingMs(control.deadlineAt) });
+        await sourceLocator.dragTo(targetLocator, { timeout: remainingOperationTime(control) });
       },
       'drag',
       source,
@@ -565,7 +581,7 @@ export class PlaywrightBrowserEngine implements BrowserEnginePort {
     await this.wrapElement(
       async () =>
         (await this.actionable(handle, locator, control)).fill(value, {
-          timeout: remainingMs(control.deadlineAt),
+          timeout: remainingOperationTime(control),
         }),
       'fill',
       locator,
@@ -583,7 +599,7 @@ export class PlaywrightBrowserEngine implements BrowserEnginePort {
     await this.wrapElement(
       async () =>
         (await this.actionable(handle, locator, control)).press(key, {
-          timeout: remainingMs(control.deadlineAt),
+          timeout: remainingOperationTime(control),
         }),
       'press',
       locator,
@@ -601,7 +617,7 @@ export class PlaywrightBrowserEngine implements BrowserEnginePort {
     await this.wrapElement(
       async () =>
         (await this.actionable(handle, locator, control))
-          .selectOption(value, { timeout: remainingMs(control.deadlineAt) })
+          .selectOption(value, { timeout: remainingOperationTime(control) })
           .then(() => undefined),
       'select option',
       locator,
@@ -629,7 +645,7 @@ export class PlaywrightBrowserEngine implements BrowserEnginePort {
       const passwordValuesBefore = await readPasswordValues(root);
       throwIfCancelled(control.signal);
       const snapshot = await scopedLocator.ariaSnapshot({
-        timeout: remainingMs(control.deadlineAt),
+        timeout: remainingOperationTime(control),
         ...(control.signal === undefined ? {} : { signal: control.signal }),
         ...(options.maxDepth === undefined ? {} : { depth: options.maxDepth }),
         boxes: options.includeBoundingBoxes ?? false,
@@ -666,7 +682,7 @@ export class PlaywrightBrowserEngine implements BrowserEnginePort {
     return this.wrapElement(
       async () =>
         (await this.locate(this.getPage(handle), locator, control)).innerText({
-          timeout: remainingMs(control.deadlineAt),
+          timeout: remainingOperationTime(control),
         }),
       'read visible text',
       locator,
@@ -685,7 +701,7 @@ export class PlaywrightBrowserEngine implements BrowserEnginePort {
       return this.wrapElement(
         async () =>
           (await this.locate(this.getPage(handle), screenshotLocator, control)).screenshot({
-            timeout: remainingMs(control.deadlineAt),
+            timeout: remainingOperationTime(control),
             type: 'png',
           }),
         'capture screenshot',
@@ -783,15 +799,17 @@ export class PlaywrightBrowserEngine implements BrowserEnginePort {
       },
     );
     const settled = await Promise.allSettled([actionPromise, waiter.promise]);
+    const unexpectedFailure = await waiter.unexpectedFailure();
     waiter.dispose();
     const actionResult = settled[0];
     const waitResult = settled[1];
     if (actionResult.status === 'rejected') {
       if (waitResult.status === 'fulfilled' && waitResult.value.kind === 'popup')
         await this.closePage(waitResult.value.page);
-      throw actionResult.reason;
+      throw errorObject(actionResult.reason);
     }
-    if (waitResult.status === 'rejected') throw waitResult.reason;
+    if (unexpectedFailure !== undefined) throw unexpectedFailure;
+    if (waitResult.status === 'rejected') throw errorObject(waitResult.reason);
     return waitResult.value;
   }
 
@@ -813,7 +831,7 @@ export class PlaywrightBrowserEngine implements BrowserEnginePort {
         await this.wrapElement(
           async () =>
             (await this.actionable(handle, target, control)).click({
-              timeout: remainingMs(control.deadlineAt),
+              timeout: remainingOperationTime(control),
             }),
           'click',
           target,
@@ -824,7 +842,7 @@ export class PlaywrightBrowserEngine implements BrowserEnginePort {
         await this.wrapElement(
           async () =>
             (await this.actionable(handle, target, control)).press(action.key, {
-              timeout: remainingMs(control.deadlineAt),
+              timeout: remainingOperationTime(control),
             }),
           'press',
           target,
@@ -1093,10 +1111,6 @@ function escapeRegex(value: string): string {
   return value.replaceAll(/[\\^$.*+?()[\]{}|]/g, '\\$&');
 }
 
-function remainingMs(deadline: number): number {
-  return Math.max(1, deadline - Date.now());
-}
-
 async function pollUntil(
   check: (remainingMs: number) => Promise<boolean>,
   control: OperationControl,
@@ -1104,12 +1118,11 @@ async function pollUntil(
   let satisfied = false;
   while (!satisfied) {
     throwIfCancelled(control.signal);
-    const remaining = Math.max(1, control.deadlineAt - Date.now());
+    const remaining = remainingOperationTime(control);
     satisfied = await check(remaining);
     throwIfCancelled(control.signal);
     if (satisfied) continue;
-    const remainingAfterCheck = control.deadlineAt - Date.now();
-    if (remainingAfterCheck <= 0) throw operationTimeout(control.timeoutMs);
+    const remainingAfterCheck = remainingOperationTime(control);
     await cancellableDelay(Math.min(25, remainingAfterCheck), control.signal);
   }
 }
@@ -1158,6 +1171,7 @@ interface EventWaiter {
   readonly promise: Promise<BrowserEngineActionWaitEvent>;
   cancel(error: unknown): void;
   dispose(): void;
+  unexpectedFailure(): Promise<Error | undefined>;
 }
 
 function createEventWaiter(
@@ -1167,6 +1181,8 @@ function createEventWaiter(
   registerPopup: (popup: Page) => BrowserPageHandle,
 ): EventWaiter {
   let settled = false;
+  let unexpectedError: Error | undefined;
+  let unexpectedCleanup: Promise<void> = Promise.resolve();
   let resolvePromise!: (value: BrowserEngineActionWaitEvent) => void;
   let rejectPromise!: (reason: unknown) => void;
   const promise = new Promise<BrowserEngineActionWaitEvent>((resolve, reject) => {
@@ -1193,7 +1209,7 @@ function createEventWaiter(
       return;
     void (async () => {
       if (wait.loadState !== undefined)
-        await page.waitForLoadState(wait.loadState, { timeout: remainingMs(control.deadlineAt) });
+        await page.waitForLoadState(wait.loadState, { timeout: remainingOperationTime(control) });
       finish({ kind: 'navigation', url: safeObservedUrl(url) });
     })().catch(fail);
   };
@@ -1211,11 +1227,57 @@ function createEventWaiter(
     });
   };
   const onPopup = (popup: Page): void => {
-    if (wait.kind !== 'popup') return;
+    if (wait.kind !== 'popup') {
+      const error = new BrowserMeshError(
+        'BROWSER_ERROR',
+        `Unexpected popup while waiting for ${wait.kind}`,
+        { details: { expectedEvent: wait.kind, actualEvent: 'popup' } },
+      );
+      unexpectedError ??= error;
+      unexpectedCleanup = unexpectedCleanup.then(async () => {
+        try {
+          await popup.close();
+        } catch (cleanupError) {
+          unexpectedError = new BrowserMeshError(
+            'BROWSER_ERROR',
+            'Unexpected popup handling and cleanup both failed',
+            { cause: new AggregateError([error, cleanupError]) },
+          );
+        }
+        fail(unexpectedError);
+      });
+      return;
+    }
     finish({ kind: 'popup', page: registerPopup(popup) });
   };
   const onDialog = (dialog: Dialog): void => {
-    if (wait.kind !== 'dialog') return;
+    if (wait.kind !== 'dialog') {
+      const error = new BrowserMeshError(
+        'BROWSER_ERROR',
+        `Unexpected ${dialog.type()} dialog while waiting for ${wait.kind}`,
+        {
+          details: {
+            expectedEvent: wait.kind,
+            actualEvent: 'dialog',
+            actualDialogType: dialog.type(),
+          },
+        },
+      );
+      unexpectedError ??= error;
+      unexpectedCleanup = unexpectedCleanup.then(async () => {
+        try {
+          await dialog.dismiss();
+        } catch (cleanupError) {
+          unexpectedError = new BrowserMeshError(
+            'BROWSER_ERROR',
+            'Unexpected dialog handling and cleanup both failed',
+            { cause: new AggregateError([error, cleanupError]) },
+          );
+        }
+        fail(unexpectedError);
+      });
+      return;
+    }
     void (async () => {
       if (dialog.type() !== wait.dialogType) {
         await dialog.dismiss();
@@ -1270,7 +1332,7 @@ function createEventWaiter(
     }
   };
   control.signal?.addEventListener('abort', onAbort, { once: true });
-  const timeoutMs = remainingMs(control.deadlineAt);
+  const timeoutMs = remainingOperationTime(control);
   const timer = setTimeout(() => fail(operationTimeout(control.timeoutMs)), timeoutMs);
   const dispose = (): void => {
     clearTimeout(timer);
@@ -1282,7 +1344,15 @@ function createEventWaiter(
   };
   if (control.signal?.aborted === true) onAbort();
   void promise.finally(dispose).catch(() => undefined);
-  return { promise, cancel: fail, dispose };
+  return {
+    promise,
+    cancel: fail,
+    dispose,
+    async unexpectedFailure() {
+      await unexpectedCleanup;
+      return unexpectedError;
+    },
+  };
 }
 
 function safeObservedUrl(value: string): string {
@@ -1343,4 +1413,8 @@ function isStrictModeViolation(error: unknown): boolean {
 function errorMessage(error: unknown): string {
   const message = error instanceof Error ? error.message : String(error);
   return message.replaceAll(/\s+/g, ' ').trim().slice(0, 2_000) || 'Unknown Playwright error';
+}
+
+function errorObject(error: unknown): Error {
+  return error instanceof Error ? error : new Error(String(error));
 }

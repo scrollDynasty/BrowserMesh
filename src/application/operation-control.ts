@@ -1,3 +1,5 @@
+import { BrowserMeshError } from '../domain/errors.js';
+
 /** Engine-independent control metadata owned by the application/runtime layer. */
 export interface OperationControl {
   readonly signal: AbortSignal | undefined;
@@ -28,6 +30,23 @@ export function throwIfCancelled(signal?: AbortSignal): void {
         : String(signal.reason),
     'AbortError',
   );
+}
+
+/** Return the single runtime-owned deadline budget, rejecting before engine access once spent. */
+export function remainingOperationTime(
+  control: OperationControl,
+  now: () => number = Date.now,
+): number {
+  throwIfCancelled(control.signal);
+  const remaining = control.deadlineAt - now();
+  if (remaining <= 0) {
+    throw new BrowserMeshError(
+      'OPERATION_TIMEOUT',
+      `Operation exceeded ${String(control.timeoutMs)}ms`,
+      { details: { timeoutMs: control.timeoutMs } },
+    );
+  }
+  return remaining;
 }
 
 export function isCancellation(error: unknown): error is Error {

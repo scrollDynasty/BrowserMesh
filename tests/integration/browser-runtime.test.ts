@@ -556,7 +556,7 @@ describe('real Chromium runtime', () => {
     expect(new Set(duplicates.map((event) => event.requestId)).size).toBe(2);
 
     const failures = (await runtime.listFailedRequests(target, { limit: 100 })).value;
-    expect(failures.events).toHaveLength(1);
+    expect(failures.events.length).toBeGreaterThanOrEqual(2);
     expect(failures.events[0]).toMatchObject({
       kind: 'request_failed',
       method: 'GET',
@@ -564,6 +564,16 @@ describe('real Chromium runtime', () => {
     });
     expect(failures.events[0]?.failure).toMatch(/ERR_[A-Z_]+|Request failed/u);
     expect(JSON.stringify(failures)).not.toContain('transport-secret');
+    expect(JSON.stringify(failures)).not.toContain('stream-secret');
+    const truncatedResponse = network.events.find(
+      (event) => event.kind === 'response' && event.url?.includes('/api/headers-then-fail'),
+    );
+    const truncatedFailure = failures.events.find(
+      (event) => event.kind === 'request_failed' && event.url?.includes('/api/headers-then-fail'),
+    );
+    expect(truncatedResponse).toBeDefined();
+    expect(truncatedFailure).toBeDefined();
+    expect(truncatedFailure?.requestId).toBe(truncatedResponse?.requestId);
   });
 
   it('redacts password input values from accessibility snapshots', async () => {
@@ -822,6 +832,43 @@ describe('real Chromium runtime', () => {
     await expect(runtime.getTitle(target)).resolves.toMatchObject({
       value: 'Popup and dialog actions',
     });
+
+    const page = requireListenerCountingPage(firstPrivateValue(harness.engine, 'pages'));
+    const context = requireBrowserContext(firstPrivateValue(harness.engine, 'contexts'));
+    const baselineDialogListeners = page.listenerCount('dialog');
+    const baselinePopupListeners = page.listenerCount('popup');
+    const baselineManagedPages = (await runtime.listPages(target.sessionId)).value.length;
+    const baselineContextPages = context.pages().length;
+    await expect(
+      runtime.actionAndWait(
+        target,
+        { kind: 'click', locator: { strategy: 'testId', value: 'unexpected-dialog' } },
+        { kind: 'response', matcher: { kind: 'exact', value: `${web.baseUrl}/api/result` } },
+      ),
+    ).rejects.toMatchObject({ code: 'BROWSER_ERROR' });
+    expect(page.listenerCount('dialog')).toBe(baselineDialogListeners);
+    expect(page.listenerCount('popup')).toBe(baselinePopupListeners);
+    await expect(runtime.getTitle(target)).resolves.toMatchObject({
+      value: 'Popup and dialog actions',
+    });
+
+    await expect(
+      runtime.actionAndWait(
+        target,
+        { kind: 'click', locator: { strategy: 'testId', value: 'unexpected-popup' } },
+        {
+          kind: 'response',
+          matcher: { kind: 'exact', value: `${web.baseUrl}/api/delayed-result` },
+        },
+      ),
+    ).rejects.toMatchObject({ code: 'BROWSER_ERROR' });
+    expect((await runtime.listPages(target.sessionId)).value).toHaveLength(baselineManagedPages);
+    expect(context.pages()).toHaveLength(baselineContextPages);
+    expect(page.listenerCount('dialog')).toBe(baselineDialogListeners);
+    expect(page.listenerCount('popup')).toBe(baselinePopupListeners);
+    await expect(runtime.getTitle(target)).resolves.toMatchObject({
+      value: 'Popup and dialog actions',
+    });
   });
 
   it('closes a real overflow popup and recovers the same-session queue', async () => {
@@ -1005,6 +1052,36 @@ function privateMapSize(engine: PlaywrightBrowserEngine, property: string): numb
   return value.size;
 }
 
+function firstPrivateValue(engine: PlaywrightBrowserEngine, property: string): unknown {
+  const value: unknown = Reflect.get(engine, property);
+  if (!(value instanceof Map)) throw new Error(`${property} registry is unavailable`);
+  const first: unknown = value.values().next().value;
+  if (first === undefined) throw new Error(`${property} registry is empty`);
+  return first;
+}
+
+function requireListenerCountingPage(value: unknown): { listenerCount(event: string): number } {
+  if (
+    typeof value !== 'object' ||
+    value === null ||
+    !('listenerCount' in value) ||
+    typeof value.listenerCount !== 'function'
+  )
+    throw new Error('Page does not expose listenerCount');
+  return value as { listenerCount(event: string): number };
+}
+
+function requireBrowserContext(value: unknown): BrowserContext {
+  if (
+    typeof value !== 'object' ||
+    value === null ||
+    !('pages' in value) ||
+    typeof value.pages !== 'function'
+  )
+    throw new Error('Browser context does not expose pages');
+  return value as BrowserContext;
+}
+
 async function captureBrowserMeshError(
   operation: Promise<unknown>,
   expectedCode: BrowserMeshErrorCode,
@@ -1021,6 +1098,24 @@ async function captureBrowserMeshError(
 }
 
 describe('real Chromium creation/shutdown synchronization', () => {
+  it('reaps a Chromium launch accepted immediately before stop and can restart cleanly', async () => {
+    const engine = new PlaywrightBrowserEngine({ headless: true, timeoutMs: 5_000 });
+    const starting = engine.start();
+    const stopping = engine.stop();
+    await Promise.all([starting, stopping]);
+    expect(engine.diagnostics()).toMatchObject({
+      launchState: 'not_started',
+      browserVersion: null,
+    });
+    expect(Reflect.get(engine, 'browser')).toBeUndefined();
+    expect(privateMapSize(engine, 'contexts')).toBe(0);
+    expect(privateMapSize(engine, 'pages')).toBe(0);
+
+    await engine.start();
+    expect(engine.diagnostics().launchState).toBe('ready');
+    await engine.stop();
+  });
+
   it('closes an unregistered context when cancellation races permission granting', async () => {
     const engine = new PlaywrightBrowserEngine({ headless: true, timeoutMs: 5_000 });
     await engine.start();

@@ -205,6 +205,19 @@ export function pageSnapshot(
     returned.push(codePoint);
     returnedBytes += bytes;
   }
+  if (returned.length === 0 && offsetChars < codePoints.length) {
+    throw new BrowserMeshError(
+      'INVALID_ARGUMENT',
+      'maxBytes is too small to return the next Unicode code point',
+      {
+        details: {
+          maxBytes: prepared.appliedBounds.maxBytes,
+          requiredBytes: Buffer.byteLength(codePoints.at(offsetChars) ?? '', 'utf8'),
+          offsetChars,
+        },
+      },
+    );
+  }
   const nextOffset = offsetChars + returned.length;
   const hasNext = nextOffset < codePoints.length;
   const paginated = offsetChars > 0 || hasNext || prepared.sourceLimited;

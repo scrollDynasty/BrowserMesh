@@ -51,6 +51,22 @@ describe('bounded snapshots', () => {
     });
   });
 
+  it('rejects a byte page that cannot advance over its next Unicode code point', () => {
+    expect(() =>
+      pageSnapshot(
+        prepareSnapshot('😀next', normalizeSnapshotOptions({ maxChars: 10, maxBytes: 1 })),
+        0,
+        'snapshot_1',
+        new Date(0).toISOString(),
+      ),
+    ).toThrow(
+      expect.objectContaining<Partial<BrowserMeshError>>({
+        code: 'INVALID_ARGUMENT',
+        message: 'maxBytes is too small to return the next Unicode code point',
+      }),
+    );
+  });
+
   it.each([
     [{ maxDepth: -1 }, 'maxDepth'],
     [{ maxDepth: 101 }, 'maxDepth'],
