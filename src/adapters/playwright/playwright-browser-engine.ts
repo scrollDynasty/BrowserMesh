@@ -31,6 +31,7 @@ import type {
   BrowserStorageState,
   Locator,
   SnapshotOptions,
+  ScreenshotOptions,
   UrlMatcher,
   WaitCondition,
 } from '../../domain/models.js';
@@ -456,6 +457,44 @@ export class PlaywrightBrowserEngine implements BrowserEnginePort {
     );
   }
 
+  async scroll(
+    handle: BrowserPageHandle,
+    deltaX: number,
+    deltaY: number,
+    control: OperationControl,
+  ): Promise<void> {
+    throwIfCancelled(control.signal);
+    await this.wrapAction(
+      () => this.getPage(handle).mouse.wheel(deltaX, deltaY),
+      'BROWSER_ERROR',
+      'Failed to scroll page',
+      control.timeoutMs,
+      { deltaX, deltaY },
+    );
+  }
+
+  async dragAndDrop(
+    handle: BrowserPageHandle,
+    source: Locator,
+    target: Locator,
+    control: OperationControl,
+  ): Promise<void> {
+    throwIfCancelled(control.signal);
+    const page = this.getPage(handle);
+    await this.wrapElement(
+      async () => {
+        const sourceLocator = this.locate(page, source);
+        const targetLocator = this.locate(page, target);
+        if ((await sourceLocator.count()) > 1) throw ambiguousLocator(source);
+        if ((await targetLocator.count()) > 1) throw ambiguousLocator(target);
+        await sourceLocator.dragTo(targetLocator, { timeout: control.timeoutMs });
+      },
+      'drag',
+      source,
+      control.timeoutMs,
+    );
+  }
+
   async fill(
     handle: BrowserPageHandle,
     locator: Locator,
@@ -550,10 +589,32 @@ export class PlaywrightBrowserEngine implements BrowserEnginePort {
     );
   }
 
-  async screenshot(handle: BrowserPageHandle, control: OperationControl): Promise<Uint8Array> {
+  async screenshot(
+    handle: BrowserPageHandle,
+    options: ScreenshotOptions,
+    control: OperationControl,
+  ): Promise<Uint8Array> {
     throwIfCancelled(control.signal);
+    const screenshotLocator = options.locator;
+    if (screenshotLocator !== undefined) {
+      return this.wrapElement(
+        () =>
+          this.locate(this.getPage(handle), screenshotLocator).screenshot({
+            timeout: control.timeoutMs,
+            type: 'png',
+          }),
+        'capture screenshot',
+        screenshotLocator,
+        control.timeoutMs,
+      );
+    }
     return this.wrapAction(
-      () => this.getPage(handle).screenshot({ timeout: control.timeoutMs, type: 'png' }),
+      () =>
+        this.getPage(handle).screenshot({
+          timeout: control.timeoutMs,
+          type: 'png',
+          fullPage: options.fullPage ?? false,
+        }),
       'BROWSER_ERROR',
       'Failed to capture page screenshot',
       control.timeoutMs,

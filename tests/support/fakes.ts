@@ -206,6 +206,12 @@ export class FakeEngine implements BrowserEnginePort {
   async scrollIntoView(handle: BrowserPageHandle): Promise<void> {
     await this.interact(handle, 'scroll-into-view');
   }
+  async scroll(handle: BrowserPageHandle): Promise<void> {
+    await this.interact(handle, 'scroll');
+  }
+  async dragAndDrop(handle: BrowserPageHandle): Promise<void> {
+    await this.interact(handle, 'drag-and-drop');
+  }
   async fill(): Promise<void> {}
   async press(): Promise<void> {}
   async selectOption(): Promise<void> {}

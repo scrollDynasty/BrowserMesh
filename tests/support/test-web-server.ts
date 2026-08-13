@@ -150,6 +150,8 @@ export async function startTestWebServer(): Promise<TestWebServer> {
           <input aria-label="Focus target" onfocus="document.querySelector('[data-testid=status]').textContent='focused'" />
           <label><input type="checkbox" aria-label="Enabled" onchange="document.querySelector('[data-testid=status]').textContent=this.checked?'checked':'unchecked'" /> Enabled</label>
           <button data-testid="double" ondblclick="document.querySelector('[data-testid=status]').textContent='double-clicked'">Double target</button>
+          <div data-testid="drag-source" draggable="true">Drag source</div>
+          <div data-testid="drop-target" ondragover="event.preventDefault()" ondrop="event.preventDefault(); document.querySelector('[data-testid=status]').textContent='dropped'">Drop target</div>
           <div style="height:2000px"></div>
           <button data-testid="offscreen">Offscreen target</button>
           <script>

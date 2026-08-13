@@ -80,6 +80,11 @@ export interface SnapshotResult {
   };
 }
 
+export interface ScreenshotOptions {
+  readonly fullPage?: boolean;
+  readonly locator?: Locator;
+}
+
 export type UrlMatcher =
   | { readonly kind: 'exact'; readonly value: string }
   | { readonly kind: 'glob'; readonly value: string };
