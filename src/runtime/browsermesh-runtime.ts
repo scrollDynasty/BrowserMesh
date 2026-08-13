@@ -45,6 +45,13 @@ import {
   SNAPSHOT_LIMITS,
   type PreparedSnapshot,
 } from '../domain/snapshots.js';
+import {
+  boundUtf8Text,
+  DEFAULT_RESOURCE_LIMITS,
+  normalizeSessionLabels,
+  type ResourceLimits,
+  type TextTruncation,
+} from '../domain/resource-limits.js';
 import type { IdGenerator } from '../infrastructure/id.js';
 import { SerialQueue } from './serial-queue.js';
 import {
@@ -68,6 +75,18 @@ interface RetainedSnapshot {
   readonly id: string;
   readonly prepared: PreparedSnapshot;
   readonly expiresAtMs: number;
+}
+
+function pngDimensions(capture: Buffer): { readonly width: number; readonly height: number } {
+  const signature = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]);
+  if (
+    capture.byteLength < 24 ||
+    !capture.subarray(0, signature.byteLength).equals(signature) ||
+    capture.readUInt32BE(8) !== 13 ||
+    capture.subarray(12, 16).toString('ascii') !== 'IHDR'
+  )
+    throw new BrowserMeshError('BROWSER_ERROR', 'Browser returned an invalid PNG screenshot');
+  return { width: capture.readUInt32BE(16), height: capture.readUInt32BE(20) };
 }
 
 interface SessionEntry {
@@ -102,6 +121,17 @@ export interface RuntimeOptions {
   readonly playwrightVersion: string;
   readonly headless: boolean;
   readonly observability?: ObservabilityLimits;
+  readonly resources?: ResourceLimits;
+}
+
+export interface VisibleTextOperationResult extends PageAddressedOperationResult<string> {
+  readonly truncation: TextTruncation;
+}
+
+export interface ScreenshotOperationResult extends PageAddressedOperationResult<string> {
+  readonly width: number;
+  readonly height: number;
+  readonly bytes: number;
 }
 
 export interface BrowserRuntimeInfo {
@@ -116,6 +146,7 @@ export interface BrowserRuntimeInfo {
   readonly defaultTimeoutMs: number;
   readonly maxSessions: number;
   readonly maxPagesPerSession: number;
+  readonly resourceLimits: ResourceLimits;
   readonly activeSessions: number;
   readonly failedSessions: number;
 }
@@ -175,6 +206,7 @@ export class BrowserMeshRuntime {
       defaultTimeoutMs: this.options.defaultTimeoutMs,
       maxSessions: this.options.maxSessions,
       maxPagesPerSession: this.options.maxPagesPerSession,
+      resourceLimits: this.resourceLimits(),
       activeSessions: this.activeSessionCount(),
       failedSessions: Array.from(this.sessions.values()).filter(({ status }) => status === 'failed')
         .length,
@@ -195,6 +227,8 @@ export class BrowserMeshRuntime {
       {},
       () => {
         this.ensureAccepting();
+        const labels = normalizeSessionLabels(input, this.resourceLimits().session);
+        const contextSettings = normalizeContextSettings(input.contextSettings);
         if (this.activeSessionCount() >= this.options.maxSessions) {
           throw new BrowserMeshError(
             'LIMIT_EXCEEDED',
@@ -203,14 +237,13 @@ export class BrowserMeshRuntime {
         }
         const id = this.options.ids.next('session');
         const timestamp = this.timestamp();
-        const contextSettings = normalizeContextSettings(input.contextSettings);
         const entry: SessionEntry = {
           id,
-          ...(input.name === undefined ? {} : { name: input.name }),
+          ...(labels.name === undefined ? {} : { name: labels.name }),
           status: 'creating',
           createdAt: timestamp,
           lastActivityAt: timestamp,
-          metadata: { ...(input.metadata ?? {}) },
+          metadata: labels.metadata,
           restoredFromStateId: input.stateId,
           contextSettings,
           context: undefined,
@@ -524,13 +557,17 @@ export class BrowserMeshRuntime {
     });
   }
 
-  visibleText(
-    target: OperationTarget,
-    locator: Locator,
-  ): Promise<PageAddressedOperationResult<string>> {
-    return this.pageOperation(target, (page, control) =>
-      this.options.engine.visibleText(page, locator, control),
-    );
+  visibleText(target: OperationTarget, locator: Locator): Promise<VisibleTextOperationResult> {
+    return this.pageOperation(target, async (page, control) =>
+      boundUtf8Text(
+        await this.options.engine.visibleText(page, locator, control),
+        this.resourceLimits().visibleText,
+      ),
+    ).then(({ value, ...result }) => ({
+      ...result,
+      value: value.text,
+      truncation: value.truncation,
+    }));
   }
 
   click(
@@ -661,10 +698,29 @@ export class BrowserMeshRuntime {
   screenshot(
     target: OperationTarget,
     options: ScreenshotOptions = {},
-  ): Promise<PageAddressedOperationResult<string>> {
-    return this.pageOperation(target, async (page, control) =>
-      Buffer.from(await this.options.engine.screenshot(page, options, control)).toString('base64'),
-    );
+  ): Promise<ScreenshotOperationResult> {
+    return this.pageOperation(target, async (page, control) => {
+      const expected = await this.options.engine.screenshotDimensions(page, options, control);
+      this.validateScreenshotDimensions(expected.width, expected.height);
+      const capture = Buffer.from(await this.options.engine.screenshot(page, options, control));
+      const limits = this.resourceLimits().screenshot;
+      if (capture.byteLength > limits.maxBytes)
+        throw new BrowserMeshError('LIMIT_EXCEEDED', 'Screenshot exceeds the encoded byte limit');
+      const actual = pngDimensions(capture);
+      this.validateScreenshotDimensions(actual.width, actual.height);
+      return {
+        base64: capture.toString('base64'),
+        width: actual.width,
+        height: actual.height,
+        bytes: capture.byteLength,
+      };
+    }).then(({ value, ...result }) => ({
+      ...result,
+      value: value.base64,
+      width: value.width,
+      height: value.height,
+      bytes: value.bytes,
+    }));
   }
 
   wait(
@@ -748,11 +804,18 @@ export class BrowserMeshRuntime {
         this.ensurePersistence();
         return this.withSession(
           sessionId,
-          async (entry) =>
-            this.options.stateRepository.save(
-              stateId,
-              await this.options.engine.storageState(this.requireContext(entry)),
-            ),
+          async (entry) => {
+            const state = await this.options.engine.storageState(this.requireContext(entry));
+            if (
+              Buffer.byteLength(JSON.stringify(state), 'utf8') >
+              this.resourceLimits().persistence.maxStateBytes
+            )
+              throw new BrowserMeshError(
+                'LIMIT_EXCEEDED',
+                'Saved state exceeds the per-state byte limit',
+              );
+            return this.options.stateRepository.save(stateId, state);
+          },
           options.signal,
         );
       },
@@ -1108,6 +1171,25 @@ export class BrowserMeshRuntime {
   private ensurePersistence(): void {
     if (!this.options.persistenceEnabled)
       throw new BrowserMeshError('PERSISTENCE_DISABLED', 'Persistence is disabled');
+  }
+
+  private resourceLimits(): ResourceLimits {
+    return this.options.resources ?? DEFAULT_RESOURCE_LIMITS;
+  }
+
+  private validateScreenshotDimensions(width: number, height: number): void {
+    const limits = this.resourceLimits().screenshot;
+    if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0)
+      throw new BrowserMeshError('BROWSER_ERROR', 'Browser returned invalid screenshot dimensions');
+    if (
+      width > limits.maxDimensionPixels ||
+      height > limits.maxDimensionPixels ||
+      width * height > limits.maxPixels
+    )
+      throw new BrowserMeshError(
+        'LIMIT_EXCEEDED',
+        'Screenshot exceeds the pixel or dimension limit',
+      );
   }
 
   private ensureAccepting(): void {

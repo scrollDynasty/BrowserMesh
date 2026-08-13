@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { testRuntime } from '../support/fakes.js';
+import { DEFAULT_RESOURCE_LIMITS } from '../../src/domain/resource-limits.js';
 
 describe('runtime info', () => {
   it('reports safe exact configuration and does not launch the browser', async () => {
@@ -17,6 +18,7 @@ describe('runtime info', () => {
       defaultTimeoutMs: 1_000,
       maxSessions: 50,
       maxPagesPerSession: 5,
+      resourceLimits: DEFAULT_RESOURCE_LIMITS,
       activeSessions: 0,
       failedSessions: 0,
     });

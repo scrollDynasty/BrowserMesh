@@ -125,6 +125,11 @@ export interface BrowserEnginePort {
     locator: Locator,
     control: OperationControl,
   ): Promise<string>;
+  screenshotDimensions(
+    page: BrowserPageHandle,
+    options: ScreenshotOptions,
+    control: OperationControl,
+  ): Promise<{ readonly width: number; readonly height: number }>;
   screenshot(
     page: BrowserPageHandle,
     options: ScreenshotOptions,
