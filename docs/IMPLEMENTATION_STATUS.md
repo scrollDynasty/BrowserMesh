@@ -1,6 +1,6 @@
 # BrowserMesh v0.1 Implementation Status
 
-Updated: 2026-08-12
+Updated: 2026-08-13
 
 The current `docs/SPEC.md` defines implementation phases 0 through 9. Its testing requirements and acceptance criteria are the final completion gate (the previously referenced “Phase 10” work).
 
@@ -27,7 +27,9 @@ The current `docs/SPEC.md` defines implementation phases 0 through 9. Its testin
 - Dependabot covers npm and pinned GitHub Actions dependencies; vulnerability alerts and automated
   security updates are enabled in the repository.
 - Release Please prepares reviewed version/changelog PRs from merged contributor changes.
-- A protected `vX.Y.Z` tag runs the complete verification gates and publishes with npm Trusted Publishing (GitHub OIDC); ordinary pushes and feature PRs cannot publish.
+- A protected `vX.Y.Z` tag runs the complete verification gates, publishes with npm Trusted
+  Publishing, and updates the official MCP Registry; both publications use GitHub OIDC, while
+  ordinary pushes and feature PRs cannot publish.
 - Contributor, conduct, security, and maintainer release/setup documentation is present in the repository root and `docs/releasing.md`.
 
 ## Acceptance evidence
@@ -57,11 +59,12 @@ User → external AI client → MCP → BrowserMesh → isolated browser session
   - TypeScript typecheck: passed.
   - ESLint: passed.
   - Prettier check: passed.
-  - Vitest: 15 test files and 53 tests passed.
+  - Vitest: 16 test files and 61 tests passed.
   - V8 coverage thresholds: statements 90%, branches 75%, functions 95%, lines 90%.
   - Production build: passed.
 - `npm run verify:package`: passed after the clean install, including installed tarball MCP/Chromium smoke.
 - Release configuration JSON and all repository YAML files parsed successfully.
+- Official `mcp-publisher` v1.8.1 validation of `server.json`: passed.
 - `git diff --check`: passed.
 
 Known blockers: none.
