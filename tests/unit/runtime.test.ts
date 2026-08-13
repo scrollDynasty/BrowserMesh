@@ -114,6 +114,61 @@ describe('BrowserMeshRuntime', () => {
     await runtime.shutdown();
   });
 
+  it('routes typed interactions through the owning session queue and recovers after failure', async () => {
+    const { runtime, engine } = testRuntime();
+    const a = await runtime.createSession();
+    const b = await runtime.createSession();
+    const locator = { strategy: 'testId', value: 'control' } as const;
+
+    engine.failNextInteraction = true;
+    await expect(runtime.hover(a, locator)).rejects.toMatchObject({ code: 'OPERATION_TIMEOUT' });
+    await runtime.focus(a, locator);
+    await runtime.check(a, locator);
+    await runtime.uncheck(a, locator);
+    await runtime.doubleClick(a, locator);
+    await runtime.scrollIntoView(a, locator);
+    expect(engine.interactionOrder).toEqual([
+      'hover',
+      'focus',
+      'check',
+      'uncheck',
+      'double-click',
+      'scroll-into-view',
+    ]);
+
+    await expect(
+      runtime.focus({ sessionId: a.sessionId, pageId: b.pageId }, locator),
+    ).rejects.toMatchObject({ code: 'PAGE_NOT_FOUND' });
+    await runtime.shutdown();
+  });
+
+  it('does not execute a cancelled queued interaction or let later same-session work overtake', async () => {
+    const { runtime, engine } = testRuntime();
+    const a = await runtime.createSession();
+    const b = await runtime.createSession();
+    const locator = { strategy: 'role', value: 'button', name: 'Control' } as const;
+    let release!: () => void;
+    engine.interactionGate = new Promise<void>((resolve) => (release = resolve));
+    let notifyStarted!: () => void;
+    const started = new Promise<void>((resolve) => (notifyStarted = resolve));
+    engine.onInteractionStart = notifyStarted;
+
+    const first = runtime.hover(a, locator);
+    await started;
+    const controller = new AbortController();
+    const cancelled = runtime.focus({ ...a, signal: controller.signal }, locator);
+    const later = runtime.doubleClick(a, locator);
+    const independent = runtime.check(b, locator);
+    controller.abort(new DOMException('cancelled by test', 'AbortError'));
+
+    release();
+    await expect(first).resolves.toMatchObject({ sessionId: a.sessionId, pageId: a.pageId });
+    await expect(cancelled).rejects.toMatchObject({ name: 'AbortError' });
+    await Promise.all([later, independent]);
+    expect(engine.interactionOrder).toEqual(['hover', 'check', 'double-click']);
+    await runtime.shutdown();
+  });
+
   it('cleans up a session cancelled during creation instead of leaving a creating tombstone', async () => {
     let releaseCreation!: () => void;
     let creationStarted!: () => void;

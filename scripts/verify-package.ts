@@ -252,6 +252,29 @@ async function main(): Promise<void> {
     }
     readStructuredResult(
       await client.callTool({
+        name: 'browser_hover',
+        arguments: {
+          sessionId: createdIds.sessionId,
+          pageId: createdIds.pageId,
+          locator: { strategy: 'role', value: 'button', name: 'Run package action' },
+        },
+      }),
+    );
+    const hoveredStatus = readStructuredResult(
+      await client.callTool({
+        name: 'browser_visible_text',
+        arguments: {
+          sessionId: createdIds.sessionId,
+          pageId: createdIds.pageId,
+          locator: { strategy: 'testId', value: 'status' },
+        },
+      }),
+    );
+    if (hoveredStatus.text !== 'hovered') {
+      throw new Error('Packaged MCP typed hover did not update the DOM');
+    }
+    readStructuredResult(
+      await client.callTool({
         name: 'browser_click',
         arguments: {
           sessionId: createdIds.sessionId,
@@ -309,7 +332,7 @@ async function startPackageTestServer(): Promise<PackageTestServer> {
   const server: Server = createServer((_request, response) => {
     response.setHeader('content-type', 'text/html; charset=utf-8');
     response.end(
-      '<!doctype html><title>Package smoke</title><button aria-label="Run package action" onclick="document.querySelector(`[data-testid=status]`).textContent=`clicked`">Run</button><div data-testid="status">ready</div>',
+      '<!doctype html><title>Package smoke</title><button aria-label="Run package action" onmouseenter="document.querySelector(`[data-testid=status]`).textContent=`hovered`" onclick="document.querySelector(`[data-testid=status]`).textContent=`clicked`">Run</button><div data-testid="status">ready</div>',
     );
   });
   server.listen(0, '127.0.0.1');

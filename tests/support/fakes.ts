@@ -48,6 +48,10 @@ export class FakeEngine implements BrowserEnginePort {
   readonly compositeOrder: string[] = [];
   compositeGate: Promise<void> | undefined;
   onCompositeStart: (() => void) | undefined;
+  readonly interactionOrder: string[] = [];
+  interactionGate: Promise<void> | undefined;
+  onInteractionStart: (() => void) | undefined;
+  failNextInteraction = false;
   private readonly disconnectedListeners = new Set<() => void>();
   private readonly observers = new Map<symbol, Set<(event: BrowserObservation) => void>>();
 
@@ -172,6 +176,24 @@ export class FakeEngine implements BrowserEnginePort {
   async forward(): Promise<void> {}
   async reload(): Promise<void> {}
   async click(): Promise<void> {}
+  async doubleClick(handle: BrowserPageHandle): Promise<void> {
+    await this.interact(handle, 'double-click');
+  }
+  async hover(handle: BrowserPageHandle): Promise<void> {
+    await this.interact(handle, 'hover');
+  }
+  async focus(handle: BrowserPageHandle): Promise<void> {
+    await this.interact(handle, 'focus');
+  }
+  async check(handle: BrowserPageHandle): Promise<void> {
+    await this.interact(handle, 'check');
+  }
+  async uncheck(handle: BrowserPageHandle): Promise<void> {
+    await this.interact(handle, 'uncheck');
+  }
+  async scrollIntoView(handle: BrowserPageHandle): Promise<void> {
+    await this.interact(handle, 'scroll-into-view');
+  }
   async fill(): Promise<void> {}
   async press(): Promise<void> {}
   async selectOption(): Promise<void> {}
@@ -234,6 +256,18 @@ export class FakeEngine implements BrowserEnginePort {
     const page = this.pages.get(handle.id);
     if (page === undefined) throw new BrowserMeshError('PAGE_NOT_FOUND', 'closed');
     return page;
+  }
+  private async interact(handle: BrowserPageHandle, action: string): Promise<void> {
+    const page = this.page(handle);
+    this.onInteractionStart?.();
+    await this.concurrent(page.contextId, async () => {
+      if (this.interactionGate !== undefined) await this.interactionGate;
+      this.interactionOrder.push(action);
+      if (this.failNextInteraction) {
+        this.failNextInteraction = false;
+        throw new BrowserMeshError('OPERATION_TIMEOUT', 'simulated interaction timeout');
+      }
+    });
   }
   private async concurrent(contextId: symbol, action: () => Promise<void>): Promise<void> {
     this.activeGlobal += 1;

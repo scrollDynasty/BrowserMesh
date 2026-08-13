@@ -366,6 +366,93 @@ export class PlaywrightBrowserEngine implements BrowserEnginePort {
     );
   }
 
+  async doubleClick(
+    handle: BrowserPageHandle,
+    locator: Locator,
+    control: OperationControl,
+  ): Promise<void> {
+    throwIfCancelled(control.signal);
+    await this.wrapElement(
+      () => this.locate(this.getPage(handle), locator).dblclick({ timeout: control.timeoutMs }),
+      'double-click',
+      locator,
+      control.timeoutMs,
+    );
+  }
+
+  async hover(
+    handle: BrowserPageHandle,
+    locator: Locator,
+    control: OperationControl,
+  ): Promise<void> {
+    throwIfCancelled(control.signal);
+    await this.wrapElement(
+      () => this.locate(this.getPage(handle), locator).hover({ timeout: control.timeoutMs }),
+      'hover over',
+      locator,
+      control.timeoutMs,
+    );
+  }
+
+  async focus(
+    handle: BrowserPageHandle,
+    locator: Locator,
+    control: OperationControl,
+  ): Promise<void> {
+    throwIfCancelled(control.signal);
+    await this.wrapElement(
+      () => this.locate(this.getPage(handle), locator).focus({ timeout: control.timeoutMs }),
+      'focus',
+      locator,
+      control.timeoutMs,
+    );
+  }
+
+  async check(
+    handle: BrowserPageHandle,
+    locator: Locator,
+    control: OperationControl,
+  ): Promise<void> {
+    throwIfCancelled(control.signal);
+    await this.wrapElement(
+      () => this.locate(this.getPage(handle), locator).check({ timeout: control.timeoutMs }),
+      'check',
+      locator,
+      control.timeoutMs,
+    );
+  }
+
+  async uncheck(
+    handle: BrowserPageHandle,
+    locator: Locator,
+    control: OperationControl,
+  ): Promise<void> {
+    throwIfCancelled(control.signal);
+    await this.wrapElement(
+      () => this.locate(this.getPage(handle), locator).uncheck({ timeout: control.timeoutMs }),
+      'uncheck',
+      locator,
+      control.timeoutMs,
+    );
+  }
+
+  async scrollIntoView(
+    handle: BrowserPageHandle,
+    locator: Locator,
+    control: OperationControl,
+  ): Promise<void> {
+    throwIfCancelled(control.signal);
+    await this.wrapElement(
+      () =>
+        this.locate(this.getPage(handle), locator).scrollIntoViewIfNeeded({
+          timeout: control.timeoutMs,
+        }),
+      'scroll into view',
+      locator,
+      control.timeoutMs,
+    );
+  }
+
   async fill(
     handle: BrowserPageHandle,
     locator: Locator,
