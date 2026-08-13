@@ -109,13 +109,17 @@ deferred scope. They are not missing parts of the accepted program.
 
 ## Verification checkpoint
 
-- Combined final error-contract/resource-budget hardening `npm run verify`: passed with 26 test files
-  and 156 tests, coverage thresholds, strict typecheck, lint, formatting, and production build.
+- Combined final error-contract/resource-budget/lifecycle hardening `npm run verify`: passed with 26
+  test files and 161 tests, coverage thresholds, strict typecheck, lint, formatting, and production
+  build.
 - `BROWSERMESH_HEADLESS=true npm run verify:package`: passed with build/tarball inspection, clean
   temporary installation, public import/bin, MCP version/discovery, real Chromium navigation,
   interaction, and cleanup smoke.
 - Targeted classifier/runtime/MCP/real-Chromium verification: 78 tests passed. `git diff --check`
   passed.
+- Final lifecycle integration preserves stop-during-start cleanup, operation deadline accounting
+  from queue acceptance, stale-ref mapping after engine failures, close/shutdown draining, and
+  snapshot-cursor immutability while retaining stable public failure reasons.
 
 The parent integration task must still run the final adversarial audit and its full
 fresh-environment matrix before marking release completion.
