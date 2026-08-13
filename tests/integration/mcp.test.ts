@@ -306,6 +306,62 @@ describe('MCP adapter', () => {
       await runtime.shutdown();
     }
   });
+
+  it('propagates MCP cancellation without allowing same-session work to overtake', async () => {
+    const engine = new FakeEngine();
+    const { runtime } = testRuntime(engine);
+    const server = createMcpServer(runtime);
+    const client = new Client({ name: 'cancellation-test', version: '1.0.0' });
+    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+    await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
+    let releaseNavigation: (() => void) | undefined;
+    try {
+      const created = await callSuccess(client, 'browser_session_create', {});
+      const page = z
+        .object({ initialPage: z.object({ sessionId: z.string(), pageId: z.string() }) })
+        .parse(created.structuredContent).initialPage;
+      engine.navigationGate = new Promise<void>((resolve) => (releaseNavigation = resolve));
+      let navigationStarted!: () => void;
+      const started = new Promise<void>((resolve) => (navigationStarted = resolve));
+      engine.onNavigationStart = navigationStarted;
+      const controller = new AbortController();
+      const navigation = client.callTool(
+        {
+          name: 'browser_navigate',
+          arguments: { ...page, url: 'https://cancelled.example' },
+        },
+        undefined,
+        { signal: controller.signal },
+      );
+      await started;
+      controller.abort();
+      let cancellation: unknown;
+      void navigation.catch((error: unknown) => {
+        cancellation = error;
+      });
+      await new Promise<void>((resolve) => setImmediate(resolve));
+      expect(cancellation).toMatchObject({ name: 'McpError' });
+      expect(cancellation).toBeInstanceOf(Error);
+      expect((cancellation as Error).message).toContain('AbortError');
+
+      let followerSettled = false;
+      const follower = client
+        .callTool({ name: 'browser_get_url', arguments: page })
+        .finally(() => (followerSettled = true));
+      await Promise.resolve();
+      expect(followerSettled).toBe(false);
+      releaseNavigation?.();
+      const followerResult = await follower;
+      expect(z.object({ url: z.string() }).parse(followerResult.structuredContent).url).toContain(
+        'cancelled.example',
+      );
+    } finally {
+      releaseNavigation?.();
+      await client.close();
+      await server.close();
+      await runtime.shutdown();
+    }
+  });
 });
 
 const expectedToolNames = Object.keys(outputSchemas).sort();

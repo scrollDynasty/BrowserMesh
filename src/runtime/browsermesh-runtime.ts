@@ -5,6 +5,12 @@ import type {
 } from '../application/ports/browser-engine.js';
 import type { EventSinkPort } from '../application/ports/events.js';
 import type { SavedStateView, StateRepositoryPort } from '../application/ports/state-repository.js';
+import {
+  createOperationControl,
+  isCancellation,
+  throwIfCancelled,
+  type OperationControl,
+} from '../application/operation-control.js';
 import { BrowserMeshError, correlateBrowserMeshError } from '../domain/errors.js';
 import type {
   ActionAndWaitResult,
@@ -89,6 +95,11 @@ export interface OperationTarget {
   readonly sessionId: string;
   readonly pageId: string;
   readonly timeoutMs?: number;
+  readonly signal?: AbortSignal;
+}
+
+export interface OperationOptions {
+  readonly signal?: AbortSignal;
 }
 
 export class BrowserMeshRuntime {
@@ -139,6 +150,7 @@ export class BrowserMeshRuntime {
       readonly metadata?: Readonly<Record<string, string>> | undefined;
       readonly stateId?: string | undefined;
     } = {},
+    options: OperationOptions = {},
   ): Promise<PageAddressedOperationResult<SessionView>> {
     let createdPageId: string | undefined;
     return this.runOperation(
@@ -169,14 +181,16 @@ export class BrowserMeshRuntime {
           disconnected: false,
         };
         this.sessions.set(id, entry);
+        const control = createOperationControl(this.options.defaultTimeoutMs, options.signal);
         return entry.queue.run(async () => {
           try {
             const storageState =
               input.stateId === undefined ? undefined : await this.loadState(input.stateId);
             entry.context = await this.options.engine.createContext({
-              timeoutMs: this.options.defaultTimeoutMs,
+              control,
               ...(storageState === undefined ? {} : { storageState }),
             });
+            throwIfCancelled(options.signal);
             if (entry.disconnected) {
               throw new BrowserMeshError(
                 'BROWSER_DISCONNECTED',
@@ -184,6 +198,7 @@ export class BrowserMeshRuntime {
               );
             }
             const page = await this.createManagedPage(entry, entry.context);
+            throwIfCancelled(options.signal);
             entry.defaultPageId = page.id;
             createdPageId = page.id;
             entry.status = 'ready';
@@ -216,71 +231,124 @@ export class BrowserMeshRuntime {
         sessionId: session.sessionId,
         ...(createdPageId === undefined ? {} : { pageId: createdPageId }),
       }),
+      options,
     ).then((result) => this.requirePageAddress(result));
   }
 
-  listSessions(): Promise<OperationResult<readonly SessionView[]>> {
-    return this.runOperation({}, () => {
-      this.ensureAccepting();
-      return Array.from(this.sessions.values(), (entry) => this.sessionView(entry));
-    });
-  }
-
-  getSession(sessionId: string): Promise<OperationResult<SessionView>> {
-    return this.runOperation({ sessionId }, () => {
-      this.ensureAccepting();
-      return this.sessionView(this.getSessionEntry(sessionId));
-    });
-  }
-
-  closeSession(sessionId: string): Promise<OperationResult<SessionView>> {
-    return this.runOperation({ sessionId }, () => {
-      this.ensureAccepting();
-      const entry = this.getSessionEntry(sessionId);
-      if (entry.status !== 'closed' && entry.status !== 'failed') entry.accepting = false;
-      return this.closeSessionEntry(entry);
-    });
-  }
-
-  createPage(sessionId: string): Promise<PageAddressedOperationResult<PageView>> {
+  listSessions(options: OperationOptions = {}): Promise<OperationResult<readonly SessionView[]>> {
     return this.runOperation(
-      { sessionId },
-      () =>
-        this.withSession(sessionId, async (entry) => {
-          if (entry.pages.size >= this.options.maxPagesPerSession) {
-            throw new BrowserMeshError(
-              'LIMIT_EXCEEDED',
-              `Maximum of ${String(this.options.maxPagesPerSession)} pages per session reached`,
-            );
-          }
-          const context = this.requireContext(entry);
-          const page = await this.createManagedPage(entry, context);
-          this.emit('page.created', { sessionId, pageId: page.id });
-          return this.pageView(entry, page);
-        }),
-      (page) => ({ pageId: page.pageId }),
-    ).then((result) => this.requirePageAddress(result));
-  }
-
-  listPages(sessionId: string): Promise<OperationResult<readonly PageView[]>> {
-    return this.runOperation({ sessionId }, () =>
-      this.withSession(sessionId, (entry) =>
-        Promise.resolve(Array.from(entry.pages.values(), (page) => this.pageView(entry, page))),
-      ),
+      {},
+      () => {
+        this.ensureAccepting();
+        return Array.from(this.sessions.values(), (entry) => this.sessionView(entry));
+      },
+      undefined,
+      options,
     );
   }
 
-  closePage(sessionId: string, pageId: string): Promise<OperationResult<null>> {
-    return this.runOperation({ sessionId, pageId }, () =>
-      this.withSession(sessionId, async (entry) => {
-        const page = this.getPageEntry(entry, pageId);
-        await this.options.engine.closePage(page.handle);
-        page.stopObserving();
-        entry.pages.delete(pageId);
-        if (entry.defaultPageId === pageId) entry.defaultPageId = entry.pages.keys().next().value;
-        this.emit('page.closed', { sessionId, pageId });
-        return null;
-      }),
+  getSession(
+    sessionId: string,
+    options: OperationOptions = {},
+  ): Promise<OperationResult<SessionView>> {
+    return this.runOperation(
+      { sessionId },
+      () => {
+        this.ensureAccepting();
+        return this.sessionView(this.getSessionEntry(sessionId));
+      },
+      undefined,
+      options,
+    );
+  }
+
+  closeSession(
+    sessionId: string,
+    options: OperationOptions = {},
+  ): Promise<OperationResult<SessionView>> {
+    return this.runOperation(
+      { sessionId },
+      () => {
+        this.ensureAccepting();
+        const entry = this.getSessionEntry(sessionId);
+        if (entry.status !== 'closed' && entry.status !== 'failed') entry.accepting = false;
+        return this.closeSessionEntry(entry);
+      },
+      undefined,
+      options,
+    );
+  }
+
+  createPage(
+    sessionId: string,
+    options: OperationOptions = {},
+  ): Promise<PageAddressedOperationResult<PageView>> {
+    return this.runOperation(
+      { sessionId },
+      () =>
+        this.withSession(
+          sessionId,
+          async (entry) => {
+            if (entry.pages.size >= this.options.maxPagesPerSession) {
+              throw new BrowserMeshError(
+                'LIMIT_EXCEEDED',
+                `Maximum of ${String(this.options.maxPagesPerSession)} pages per session reached`,
+              );
+            }
+            const context = this.requireContext(entry);
+            const page = await this.createManagedPage(entry, context);
+            this.emit('page.created', { sessionId, pageId: page.id });
+            return this.pageView(entry, page);
+          },
+          options.signal,
+        ),
+      (page) => ({ pageId: page.pageId }),
+      options,
+    ).then((result) => this.requirePageAddress(result));
+  }
+
+  listPages(
+    sessionId: string,
+    options: OperationOptions = {},
+  ): Promise<OperationResult<readonly PageView[]>> {
+    return this.runOperation(
+      { sessionId },
+      () =>
+        this.withSession(
+          sessionId,
+          (entry) =>
+            Promise.resolve(Array.from(entry.pages.values(), (page) => this.pageView(entry, page))),
+          options.signal,
+        ),
+      undefined,
+      options,
+    );
+  }
+
+  closePage(
+    sessionId: string,
+    pageId: string,
+    options: OperationOptions = {},
+  ): Promise<OperationResult<null>> {
+    return this.runOperation(
+      { sessionId, pageId },
+      () =>
+        this.withSession(
+          sessionId,
+          async (entry) => {
+            const page = this.getPageEntry(entry, pageId);
+            await this.options.engine.closePage(page.handle);
+            page.stopObserving();
+            entry.pages.delete(pageId);
+            if (entry.defaultPageId === pageId)
+              entry.defaultPageId = entry.pages.keys().next().value;
+            this.emit('page.closed', { sessionId, pageId });
+            return null;
+          },
+          options.signal,
+        ),
+      undefined,
+      options,
     );
   }
 
@@ -288,7 +356,7 @@ export class BrowserMeshRuntime {
     target: OperationTarget,
     url: string,
   ): Promise<PageAddressedOperationResult<string>> {
-    return this.pageOperation(target, async (page, timeoutMs) => {
+    return this.pageOperation(target, async (page, control) => {
       let parsed: URL;
       try {
         parsed = new URL(url);
@@ -298,7 +366,7 @@ export class BrowserMeshRuntime {
       if (!['http:', 'https:'].includes(parsed.protocol)) {
         throw new BrowserMeshError('INVALID_ARGUMENT', 'Only http and https URLs are allowed');
       }
-      await this.options.engine.navigate(page, parsed.href, timeoutMs);
+      await this.options.engine.navigate(page, parsed.href, control);
       return this.options.engine.url(page);
     });
   }
@@ -326,22 +394,22 @@ export class BrowserMeshRuntime {
   }
 
   back(target: OperationTarget): Promise<PageAddressedOperationResult<string>> {
-    return this.pageOperation(target, async (page, timeoutMs) => {
-      await this.options.engine.back(page, timeoutMs);
+    return this.pageOperation(target, async (page, control) => {
+      await this.options.engine.back(page, control);
       return this.options.engine.url(page);
     });
   }
 
   forward(target: OperationTarget): Promise<PageAddressedOperationResult<string>> {
-    return this.pageOperation(target, async (page, timeoutMs) => {
-      await this.options.engine.forward(page, timeoutMs);
+    return this.pageOperation(target, async (page, control) => {
+      await this.options.engine.forward(page, control);
       return this.options.engine.url(page);
     });
   }
 
   reload(target: OperationTarget): Promise<PageAddressedOperationResult<string>> {
-    return this.pageOperation(target, async (page, timeoutMs) => {
-      await this.options.engine.reload(page, timeoutMs);
+    return this.pageOperation(target, async (page, control) => {
+      await this.options.engine.reload(page, control);
       return this.options.engine.url(page);
     });
   }
@@ -351,14 +419,12 @@ export class BrowserMeshRuntime {
   }
 
   getTitle(target: OperationTarget): Promise<PageAddressedOperationResult<string>> {
-    return this.pageOperation(target, (page, timeoutMs) =>
-      this.options.engine.title(page, timeoutMs),
-    );
+    return this.pageOperation(target, (page, control) => this.options.engine.title(page, control));
   }
 
   snapshot(target: OperationTarget): Promise<PageAddressedOperationResult<string>> {
-    return this.pageOperation(target, (page, timeoutMs) =>
-      this.options.engine.snapshot(page, timeoutMs),
+    return this.pageOperation(target, (page, control) =>
+      this.options.engine.snapshot(page, control),
     );
   }
 
@@ -366,14 +432,14 @@ export class BrowserMeshRuntime {
     target: OperationTarget,
     locator: Locator,
   ): Promise<PageAddressedOperationResult<string>> {
-    return this.pageOperation(target, (page, timeoutMs) =>
-      this.options.engine.visibleText(page, locator, timeoutMs),
+    return this.pageOperation(target, (page, control) =>
+      this.options.engine.visibleText(page, locator, control),
     );
   }
 
   click(target: OperationTarget, locator: Locator): Promise<PageAddressedOperationResult<null>> {
-    return this.pageOperation(target, async (page, timeoutMs) => {
-      await this.options.engine.click(page, locator, timeoutMs);
+    return this.pageOperation(target, async (page, control) => {
+      await this.options.engine.click(page, locator, control);
       return null;
     });
   }
@@ -383,8 +449,8 @@ export class BrowserMeshRuntime {
     locator: Locator,
     value: string,
   ): Promise<PageAddressedOperationResult<null>> {
-    return this.pageOperation(target, async (page, timeoutMs) => {
-      await this.options.engine.fill(page, locator, value, timeoutMs);
+    return this.pageOperation(target, async (page, control) => {
+      await this.options.engine.fill(page, locator, value, control);
       return null;
     });
   }
@@ -394,8 +460,8 @@ export class BrowserMeshRuntime {
     locator: Locator,
     key: string,
   ): Promise<PageAddressedOperationResult<null>> {
-    return this.pageOperation(target, async (page, timeoutMs) => {
-      await this.options.engine.press(page, locator, key, timeoutMs);
+    return this.pageOperation(target, async (page, control) => {
+      await this.options.engine.press(page, locator, key, control);
       return null;
     });
   }
@@ -405,15 +471,15 @@ export class BrowserMeshRuntime {
     locator: Locator,
     value: string,
   ): Promise<PageAddressedOperationResult<null>> {
-    return this.pageOperation(target, async (page, timeoutMs) => {
-      await this.options.engine.selectOption(page, locator, value, timeoutMs);
+    return this.pageOperation(target, async (page, control) => {
+      await this.options.engine.selectOption(page, locator, value, control);
       return null;
     });
   }
 
   screenshot(target: OperationTarget): Promise<PageAddressedOperationResult<string>> {
-    return this.pageOperation(target, async (page, timeoutMs) =>
-      Buffer.from(await this.options.engine.screenshot(page, timeoutMs)).toString('base64'),
+    return this.pageOperation(target, async (page, control) =>
+      Buffer.from(await this.options.engine.screenshot(page, control)).toString('base64'),
     );
   }
 
@@ -421,9 +487,9 @@ export class BrowserMeshRuntime {
     target: OperationTarget,
     condition: WaitCondition,
   ): Promise<PageAddressedOperationResult<WaitResult>> {
-    return this.pageOperation(target, async (page, timeoutMs) => {
+    return this.pageOperation(target, async (page, control) => {
       const normalized = normalizeWaitCondition(condition);
-      await this.options.engine.wait(page, normalized, timeoutMs);
+      await this.options.engine.wait(page, normalized, control);
       return { condition: normalized };
     });
   }
@@ -433,7 +499,7 @@ export class BrowserMeshRuntime {
     action: BrowserAction,
     wait: ActionWaitCondition,
   ): Promise<PageAddressedOperationResult<ActionAndWaitResult>> {
-    return this.pageOperation(target, async (page, timeoutMs) => {
+    return this.pageOperation(target, async (page, control) => {
       const normalizedAction = normalizeAction(action);
       const normalizedWait = normalizeActionWait(wait);
       return {
@@ -443,40 +509,67 @@ export class BrowserMeshRuntime {
           page,
           normalizedAction,
           normalizedWait,
-          timeoutMs,
+          control,
         ),
       };
     });
   }
 
-  saveSessionState(sessionId: string, stateId: string): Promise<OperationResult<SavedStateView>> {
-    return this.runOperation({ sessionId }, async () => {
-      this.ensureAccepting();
-      this.ensurePersistence();
-      return this.withSession(sessionId, async (entry) =>
-        this.options.stateRepository.save(
-          stateId,
-          await this.options.engine.storageState(this.requireContext(entry)),
-        ),
-      );
-    });
+  saveSessionState(
+    sessionId: string,
+    stateId: string,
+    options: OperationOptions = {},
+  ): Promise<OperationResult<SavedStateView>> {
+    return this.runOperation(
+      { sessionId },
+      async () => {
+        this.ensureAccepting();
+        this.ensurePersistence();
+        return this.withSession(
+          sessionId,
+          async (entry) =>
+            this.options.stateRepository.save(
+              stateId,
+              await this.options.engine.storageState(this.requireContext(entry)),
+            ),
+          options.signal,
+        );
+      },
+      undefined,
+      options,
+    );
   }
 
-  listSavedStates(): Promise<OperationResult<readonly SavedStateView[]>> {
-    return this.runOperation({}, () => {
-      this.ensureAccepting();
-      this.ensurePersistence();
-      return this.options.stateRepository.list();
-    });
+  listSavedStates(
+    options: OperationOptions = {},
+  ): Promise<OperationResult<readonly SavedStateView[]>> {
+    return this.runOperation(
+      {},
+      () => {
+        this.ensureAccepting();
+        this.ensurePersistence();
+        return this.options.stateRepository.list();
+      },
+      undefined,
+      options,
+    );
   }
 
-  removeSavedState(stateId: string): Promise<OperationResult<null>> {
-    return this.runOperation({}, async () => {
-      this.ensureAccepting();
-      this.ensurePersistence();
-      await this.options.stateRepository.remove(stateId);
-      return null;
-    });
+  removeSavedState(
+    stateId: string,
+    options: OperationOptions = {},
+  ): Promise<OperationResult<null>> {
+    return this.runOperation(
+      {},
+      async () => {
+        this.ensureAccepting();
+        this.ensurePersistence();
+        await this.options.stateRepository.remove(stateId);
+        return null;
+      },
+      undefined,
+      options,
+    );
   }
 
   shutdown(): Promise<void> {
@@ -515,14 +608,17 @@ export class BrowserMeshRuntime {
     identifiers: { readonly sessionId?: string; readonly pageId?: string },
     action: () => T | Promise<T>,
     identifyValue?: (value: T) => { readonly sessionId?: string; readonly pageId?: string },
+    options: OperationOptions = {},
   ): Promise<OperationResult<T>> {
     const operationId = this.options.ids.next('operation');
     this.emit('operation.started', { operationId, ...identifiers });
     let pending: Promise<T>;
     try {
+      throwIfCancelled(options.signal);
       pending = Promise.resolve(action());
     } catch (error) {
       this.emit('operation.failed', { operationId, ...identifiers });
+      if (isCancellation(error)) return Promise.reject(error);
       return Promise.reject(correlateBrowserMeshError(error, operationId));
     }
     return pending.then(
@@ -533,6 +629,7 @@ export class BrowserMeshRuntime {
       },
       (error: unknown) => {
         this.emit('operation.failed', { operationId, ...identifiers });
+        if (isCancellation(error)) throw error;
         throw correlateBrowserMeshError(error, operationId);
       },
     );
@@ -540,10 +637,11 @@ export class BrowserMeshRuntime {
 
   private async pageOperation<T>(
     target: OperationTarget,
-    action: (page: BrowserPageHandle, timeoutMs: number) => Promise<T>,
+    action: (page: BrowserPageHandle, control: OperationControl) => Promise<T>,
   ): Promise<PageAddressedOperationResult<T>> {
     const operationId = this.options.ids.next('operation');
     const timeoutMs = target.timeoutMs ?? this.options.defaultTimeoutMs;
+    const control = createOperationControl(timeoutMs, target.signal);
     this.emit('operation.started', {
       operationId,
       sessionId: target.sessionId,
@@ -556,10 +654,15 @@ export class BrowserMeshRuntime {
           'timeoutMs must be an integer between 1 and 300000',
         );
       }
-      const value = await this.withSession(target.sessionId, async (entry) => {
-        const page = this.getPageEntry(entry, target.pageId);
-        return action(page.handle, timeoutMs);
-      });
+      throwIfCancelled(target.signal);
+      const value = await this.withSession(
+        target.sessionId,
+        async (entry) => {
+          const page = this.getPageEntry(entry, target.pageId);
+          return action(page.handle, control);
+        },
+        target.signal,
+      );
       this.emit('operation.completed', {
         operationId,
         sessionId: target.sessionId,
@@ -572,6 +675,7 @@ export class BrowserMeshRuntime {
         sessionId: target.sessionId,
         pageId: target.pageId,
       });
+      if (isCancellation(error)) throw error;
       throw correlateBrowserMeshError(error, operationId);
     }
   }
@@ -602,6 +706,7 @@ export class BrowserMeshRuntime {
   private async withSession<T>(
     sessionId: string,
     action: (entry: SessionEntry) => Promise<T>,
+    signal?: AbortSignal,
   ): Promise<T> {
     this.ensureAccepting();
     const entry = this.readySession(sessionId);
@@ -618,7 +723,7 @@ export class BrowserMeshRuntime {
       const result = await action(entry);
       entry.lastActivityAt = this.timestamp();
       return result;
-    });
+    }, signal);
   }
 
   private readySession(sessionId: string): SessionEntry {

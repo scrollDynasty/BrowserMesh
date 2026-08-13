@@ -17,6 +17,11 @@ import type {
   BrowserPageHandle,
   BrowserObservation,
 } from '../../application/ports/browser-engine.js';
+import {
+  isCancellation,
+  throwIfCancelled,
+  type OperationControl,
+} from '../../application/operation-control.js';
 import { BrowserMeshError } from '../../domain/errors.js';
 import type {
   ActionAndWaitResult,
@@ -120,9 +125,10 @@ export class PlaywrightBrowserEngine implements BrowserEnginePort {
   }
 
   async createContext(options: {
-    readonly timeoutMs: number;
+    readonly control: OperationControl;
     readonly storageState?: BrowserStorageState;
   }): Promise<BrowserContextHandle> {
+    throwIfCancelled(options.control.signal);
     await this.start();
     const browser = this.browser;
     if (browser === undefined)
@@ -131,8 +137,8 @@ export class PlaywrightBrowserEngine implements BrowserEnginePort {
       const context = await browser.newContext(
         options.storageState === undefined ? {} : { storageState: options.storageState },
       );
-      context.setDefaultTimeout(options.timeoutMs);
-      context.setDefaultNavigationTimeout(options.timeoutMs);
+      context.setDefaultTimeout(options.control.timeoutMs);
+      context.setDefaultNavigationTimeout(options.control.timeoutMs);
       const handle: ContextHandle = { id: Symbol('context'), kind: 'context' };
       this.contexts.set(handle.id, context);
       context.once('close', () => this.dropContext(handle.id));
@@ -208,70 +214,80 @@ export class PlaywrightBrowserEngine implements BrowserEnginePort {
     return this.getPage(handle).url();
   }
 
-  async title(handle: BrowserPageHandle, timeoutMs: number): Promise<string> {
+  async title(handle: BrowserPageHandle, control: OperationControl): Promise<string> {
+    throwIfCancelled(control.signal);
     return this.wrapAction(
       () => this.getPage(handle).title(),
       'BROWSER_ERROR',
       'Failed to get page title',
-      timeoutMs,
+      control.timeoutMs,
     );
   }
 
-  async navigate(handle: BrowserPageHandle, url: string, timeoutMs: number): Promise<void> {
+  async navigate(handle: BrowserPageHandle, url: string, control: OperationControl): Promise<void> {
+    throwIfCancelled(control.signal);
     await this.wrapAction(
       () =>
         this.getPage(handle)
-          .goto(url, { timeout: timeoutMs })
+          .goto(url, { timeout: control.timeoutMs })
           .then(() => undefined),
       'NAVIGATION_FAILED',
       `Navigation failed for ${url}`,
-      timeoutMs,
+      control.timeoutMs,
       { url },
     );
   }
 
-  async back(handle: BrowserPageHandle, timeoutMs: number): Promise<void> {
+  async back(handle: BrowserPageHandle, control: OperationControl): Promise<void> {
+    throwIfCancelled(control.signal);
     await this.wrapAction(
       () =>
         this.getPage(handle)
-          .goBack({ timeout: timeoutMs })
+          .goBack({ timeout: control.timeoutMs })
           .then(() => undefined),
       'NAVIGATION_FAILED',
       'Back navigation failed',
-      timeoutMs,
+      control.timeoutMs,
     );
   }
 
-  async forward(handle: BrowserPageHandle, timeoutMs: number): Promise<void> {
+  async forward(handle: BrowserPageHandle, control: OperationControl): Promise<void> {
+    throwIfCancelled(control.signal);
     await this.wrapAction(
       () =>
         this.getPage(handle)
-          .goForward({ timeout: timeoutMs })
+          .goForward({ timeout: control.timeoutMs })
           .then(() => undefined),
       'NAVIGATION_FAILED',
       'Forward navigation failed',
-      timeoutMs,
+      control.timeoutMs,
     );
   }
 
-  async reload(handle: BrowserPageHandle, timeoutMs: number): Promise<void> {
+  async reload(handle: BrowserPageHandle, control: OperationControl): Promise<void> {
+    throwIfCancelled(control.signal);
     await this.wrapAction(
       () =>
         this.getPage(handle)
-          .reload({ timeout: timeoutMs })
+          .reload({ timeout: control.timeoutMs })
           .then(() => undefined),
       'NAVIGATION_FAILED',
       'Reload failed',
-      timeoutMs,
+      control.timeoutMs,
     );
   }
 
-  async click(handle: BrowserPageHandle, locator: Locator, timeoutMs: number): Promise<void> {
+  async click(
+    handle: BrowserPageHandle,
+    locator: Locator,
+    control: OperationControl,
+  ): Promise<void> {
+    throwIfCancelled(control.signal);
     await this.wrapElement(
-      () => this.locate(this.getPage(handle), locator).click({ timeout: timeoutMs }),
+      () => this.locate(this.getPage(handle), locator).click({ timeout: control.timeoutMs }),
       'click',
       locator,
-      timeoutMs,
+      control.timeoutMs,
     );
   }
 
@@ -279,13 +295,14 @@ export class PlaywrightBrowserEngine implements BrowserEnginePort {
     handle: BrowserPageHandle,
     locator: Locator,
     value: string,
-    timeoutMs: number,
+    control: OperationControl,
   ): Promise<void> {
+    throwIfCancelled(control.signal);
     await this.wrapElement(
-      () => this.locate(this.getPage(handle), locator).fill(value, { timeout: timeoutMs }),
+      () => this.locate(this.getPage(handle), locator).fill(value, { timeout: control.timeoutMs }),
       'fill',
       locator,
-      timeoutMs,
+      control.timeoutMs,
     );
   }
 
@@ -293,13 +310,14 @@ export class PlaywrightBrowserEngine implements BrowserEnginePort {
     handle: BrowserPageHandle,
     locator: Locator,
     key: string,
-    timeoutMs: number,
+    control: OperationControl,
   ): Promise<void> {
+    throwIfCancelled(control.signal);
     await this.wrapElement(
-      () => this.locate(this.getPage(handle), locator).press(key, { timeout: timeoutMs }),
+      () => this.locate(this.getPage(handle), locator).press(key, { timeout: control.timeoutMs }),
       'press',
       locator,
-      timeoutMs,
+      control.timeoutMs,
     );
   }
 
@@ -307,20 +325,22 @@ export class PlaywrightBrowserEngine implements BrowserEnginePort {
     handle: BrowserPageHandle,
     locator: Locator,
     value: string,
-    timeoutMs: number,
+    control: OperationControl,
   ): Promise<void> {
+    throwIfCancelled(control.signal);
     await this.wrapElement(
       () =>
         this.locate(this.getPage(handle), locator)
-          .selectOption(value, { timeout: timeoutMs })
+          .selectOption(value, { timeout: control.timeoutMs })
           .then(() => undefined),
       'select option',
       locator,
-      timeoutMs,
+      control.timeoutMs,
     );
   }
 
-  async snapshot(handle: BrowserPageHandle, timeoutMs: number): Promise<string> {
+  async snapshot(handle: BrowserPageHandle, control: OperationControl): Promise<string> {
+    throwIfCancelled(control.signal);
     return this.wrapAction(
       async () => {
         const page = this.getPage(handle);
@@ -329,74 +349,79 @@ export class PlaywrightBrowserEngine implements BrowserEnginePort {
           strategy: 'css',
           value: 'body',
         }).ariaSnapshot({
-          timeout: timeoutMs,
+          timeout: control.timeoutMs,
         });
         const passwordValuesAfter = await readPasswordValues(page);
         return redactSecretValues(snapshot, [...passwordValuesBefore, ...passwordValuesAfter]);
       },
       'BROWSER_ERROR',
       'Failed to capture page snapshot',
-      timeoutMs,
+      control.timeoutMs,
     );
   }
 
   async visibleText(
     handle: BrowserPageHandle,
     locator: Locator,
-    timeoutMs: number,
+    control: OperationControl,
   ): Promise<string> {
+    throwIfCancelled(control.signal);
     return this.wrapElement(
-      () => this.locate(this.getPage(handle), locator).innerText({ timeout: timeoutMs }),
+      () => this.locate(this.getPage(handle), locator).innerText({ timeout: control.timeoutMs }),
       'read visible text',
       locator,
-      timeoutMs,
+      control.timeoutMs,
     );
   }
 
-  async screenshot(handle: BrowserPageHandle, timeoutMs: number): Promise<Uint8Array> {
+  async screenshot(handle: BrowserPageHandle, control: OperationControl): Promise<Uint8Array> {
+    throwIfCancelled(control.signal);
     return this.wrapAction(
-      () => this.getPage(handle).screenshot({ timeout: timeoutMs, type: 'png' }),
+      () => this.getPage(handle).screenshot({ timeout: control.timeoutMs, type: 'png' }),
       'BROWSER_ERROR',
       'Failed to capture page screenshot',
-      timeoutMs,
+      control.timeoutMs,
     );
   }
 
   async wait(
     handle: BrowserPageHandle,
     condition: WaitCondition,
-    timeoutMs: number,
+    control: OperationControl,
   ): Promise<void> {
+    throwIfCancelled(control.signal);
     const page = this.getPage(handle);
     await this.wrapAction(
       async () => {
         switch (condition.kind) {
           case 'url':
-            await page.waitForURL((url) => matchesUrl(url.href, condition.matcher), {
-              timeout: timeoutMs,
-            });
+            await pollUntil(
+              () => Promise.resolve(matchesUrl(page.url(), condition.matcher)),
+              control,
+            );
             return;
           case 'load':
-            await page.waitForLoadState(condition.state, { timeout: timeoutMs });
+            await pollUntil(async () => {
+              const readyState = await page.evaluate(() => document.readyState);
+              return condition.state === 'load'
+                ? readyState === 'complete'
+                : readyState === 'interactive' || readyState === 'complete';
+            }, control);
             return;
           case 'locator': {
             const locator = this.locate(page, condition.locator);
-            if (
-              condition.state === 'visible' ||
-              condition.state === 'hidden' ||
-              condition.state === 'attached' ||
-              condition.state === 'detached'
-            ) {
-              await locator.waitFor({ state: condition.state, timeout: timeoutMs });
-              return;
-            }
             await pollUntil(async (remaining) => {
               const count = await locator.count();
               if (count > 1) throw ambiguousLocator(condition.locator);
+              if (condition.state === 'detached') return count === 0;
+              if (condition.state === 'hidden')
+                return count === 0 || (await locator.isHidden({ timeout: remaining }));
               if (count === 0) return false;
+              if (condition.state === 'attached') return true;
+              if (condition.state === 'visible') return locator.isVisible({ timeout: remaining });
               const enabled = await locator.isEnabled({ timeout: remaining });
               return condition.state === 'enabled' ? enabled : !enabled;
-            }, timeoutMs);
+            }, control);
             return;
           }
           case 'text':
@@ -410,12 +435,12 @@ export class PlaywrightBrowserEngine implements BrowserEnginePort {
               );
               const present = bodyText.includes(condition.text);
               return condition.state === 'present' ? present : !present;
-            }, timeoutMs);
+            }, control);
         }
       },
       'BROWSER_ERROR',
       'Wait condition failed',
-      timeoutMs,
+      control.timeoutMs,
       { condition },
     );
   }
@@ -424,17 +449,19 @@ export class PlaywrightBrowserEngine implements BrowserEnginePort {
     handle: BrowserPageHandle,
     action: BrowserAction,
     wait: ActionWaitCondition,
-    timeoutMs: number,
+    control: OperationControl,
   ): Promise<ActionAndWaitResult['event']> {
+    throwIfCancelled(control.signal);
     const page = this.getPage(handle);
-    const deadline = Date.now() + timeoutMs;
-    const waiter = createEventWaiter(page, wait, deadline);
-    const actionPromise = this.performCompositeAction(page, action, remainingMs(deadline)).catch(
-      (error: unknown) => {
-        waiter.cancel(error);
-        throw error;
-      },
-    );
+    const waiter = createEventWaiter(page, wait, control);
+    const actionPromise = this.performCompositeAction(
+      page,
+      action,
+      remainingMs(control.deadlineAt),
+    ).catch((error: unknown) => {
+      waiter.cancel(error);
+      throw error;
+    });
     const settled = await Promise.allSettled([actionPromise, waiter.promise]);
     waiter.dispose();
     const actionResult = settled[0];
@@ -539,6 +566,7 @@ export class PlaywrightBrowserEngine implements BrowserEnginePort {
     } catch (error) {
       if (error instanceof BrowserMeshError) throw error;
       const timedOut = error instanceof Error && error.name === 'TimeoutError';
+      if (isCancellation(error)) throw error;
       const cause = errorMessage(error);
       throw new BrowserMeshError(
         timedOut ? 'OPERATION_TIMEOUT' : code,
@@ -604,18 +632,39 @@ function remainingMs(deadline: number): number {
 
 async function pollUntil(
   check: (remainingMs: number) => Promise<boolean>,
-  timeoutMs: number,
+  control: OperationControl,
 ): Promise<void> {
-  const deadline = Date.now() + timeoutMs;
   let satisfied = false;
   while (!satisfied) {
-    const remaining = Math.max(1, deadline - Date.now());
+    throwIfCancelled(control.signal);
+    const remaining = Math.max(1, control.deadlineAt - Date.now());
     satisfied = await check(remaining);
+    throwIfCancelled(control.signal);
     if (satisfied) continue;
-    const remainingAfterCheck = deadline - Date.now();
-    if (remainingAfterCheck <= 0) throw operationTimeout(timeoutMs);
-    await new Promise<void>((resolve) => setTimeout(resolve, Math.min(25, remainingAfterCheck)));
+    const remainingAfterCheck = control.deadlineAt - Date.now();
+    if (remainingAfterCheck <= 0) throw operationTimeout(control.timeoutMs);
+    await cancellableDelay(Math.min(25, remainingAfterCheck), control.signal);
   }
+}
+
+function cancellableDelay(delayMs: number, signal?: AbortSignal): Promise<void> {
+  throwIfCancelled(signal);
+  return new Promise<void>((resolve, reject) => {
+    const onAbort = (): void => {
+      clearTimeout(timer);
+      signal?.removeEventListener('abort', onAbort);
+      try {
+        throwIfCancelled(signal);
+      } catch (error) {
+        reject(error instanceof Error ? error : new DOMException(String(error), 'AbortError'));
+      }
+    };
+    const timer = setTimeout(() => {
+      signal?.removeEventListener('abort', onAbort);
+      resolve();
+    }, delayMs);
+    signal?.addEventListener('abort', onAbort, { once: true });
+  });
 }
 
 function operationTimeout(timeoutMs: number): BrowserMeshError {
@@ -636,7 +685,11 @@ interface EventWaiter {
   dispose(): void;
 }
 
-function createEventWaiter(page: Page, wait: ActionWaitCondition, deadline: number): EventWaiter {
+function createEventWaiter(
+  page: Page,
+  wait: ActionWaitCondition,
+  control: OperationControl,
+): EventWaiter {
   let settled = false;
   let resolvePromise!: (value: ActionAndWaitResult['event']) => void;
   let rejectPromise!: (reason: unknown) => void;
@@ -652,7 +705,7 @@ function createEventWaiter(page: Page, wait: ActionWaitCondition, deadline: numb
   const fail = (error: unknown): void => {
     if (settled) return;
     settled = true;
-    rejectPromise(error);
+    rejectPromise(error instanceof Error ? error : new Error(String(error)));
   };
   const onNavigation = (frame: Frame): void => {
     if (frame !== page.mainFrame()) return;
@@ -664,7 +717,7 @@ function createEventWaiter(page: Page, wait: ActionWaitCondition, deadline: numb
       return;
     void (async () => {
       if (wait.loadState !== undefined)
-        await page.waitForLoadState(wait.loadState, { timeout: remainingMs(deadline) });
+        await page.waitForLoadState(wait.loadState, { timeout: remainingMs(control.deadlineAt) });
       finish({ kind: 'navigation', url: safeObservedUrl(url) });
     })().catch(fail);
   };
@@ -683,13 +736,23 @@ function createEventWaiter(page: Page, wait: ActionWaitCondition, deadline: numb
   };
   page.on('framenavigated', onNavigation);
   page.on('response', onResponse);
-  const timeoutMs = remainingMs(deadline);
-  const timer = setTimeout(() => fail(operationTimeout(timeoutMs)), timeoutMs);
+  const onAbort = (): void => {
+    try {
+      throwIfCancelled(control.signal);
+    } catch (error) {
+      fail(error);
+    }
+  };
+  control.signal?.addEventListener('abort', onAbort, { once: true });
+  const timeoutMs = remainingMs(control.deadlineAt);
+  const timer = setTimeout(() => fail(operationTimeout(control.timeoutMs)), timeoutMs);
   const dispose = (): void => {
     clearTimeout(timer);
+    control.signal?.removeEventListener('abort', onAbort);
     page.off('framenavigated', onNavigation);
     page.off('response', onResponse);
   };
+  if (control.signal?.aborted === true) onAbort();
   void promise.finally(dispose).catch(() => undefined);
   return { promise, cancel: fail, dispose };
 }

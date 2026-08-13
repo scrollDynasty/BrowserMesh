@@ -6,6 +6,26 @@ import { FakeEngine } from '../support/fakes.js';
 const accessible: DataDirectoryProbePort = { probe: async () => undefined };
 
 describe('doctor', () => {
+  it('honors a pre-cancelled diagnostic signal before starting work', async () => {
+    const engine = new FakeEngine();
+    const controller = new AbortController();
+    controller.abort(new DOMException('cancelled by test', 'AbortError'));
+    await expect(
+      runDoctor({
+        engine,
+        dataDirectory: accessible,
+        nodeVersion: '24.1.0',
+        minimumNodeMajor: 22,
+        packageVersion: '0.1.3',
+        runtimeVersion: '0.1.3',
+        operationTimeoutMs: 1_000,
+        overallTimeoutMs: 5_000,
+        signal: controller.signal,
+      }),
+    ).rejects.toMatchObject({ name: 'AbortError' });
+    expect(engine.started).toBe(false);
+  });
+
   it('returns the stable schema and required check IDs after a complete smoke cleanup', async () => {
     const engine = new FakeEngine();
     const result = await runDoctor({

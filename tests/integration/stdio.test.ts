@@ -57,6 +57,37 @@ describe('stdio executable', () => {
       });
       expect(url.isError).not.toBe(true);
       expect(url.structuredContent).toMatchObject({ url: 'about:blank' });
+      const cancellation = new AbortController();
+      const waiting = client.callTool(
+        {
+          name: 'browser_wait',
+          arguments: {
+            sessionId: first.sessionId,
+            pageId: first.pageId,
+            timeoutMs: 5_000,
+            condition: { kind: 'text', text: 'will-never-appear', state: 'present' },
+          },
+        },
+        undefined,
+        { signal: cancellation.signal },
+      );
+      await new Promise<void>((resolve) => setTimeout(resolve, 50));
+      cancellation.abort();
+      let cancellationError: unknown;
+      try {
+        await waiting;
+      } catch (error) {
+        cancellationError = error;
+      }
+      expect(cancellationError).toBeInstanceOf(Error);
+      expect((cancellationError as Error).name).toBe('McpError');
+      expect((cancellationError as Error).message).toContain('AbortError');
+      await expect(
+        client.callTool({
+          name: 'browser_get_url',
+          arguments: { sessionId: first.sessionId, pageId: first.pageId },
+        }),
+      ).resolves.toMatchObject({ structuredContent: { url: 'about:blank' } });
       const crossSession = await client.callTool({
         name: 'browser_get_url',
         arguments: { sessionId: first.sessionId, pageId: second.pageId },

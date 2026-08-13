@@ -36,14 +36,14 @@ pending and does not retroactively make the baseline incomplete.
 
 ## Professional MCP improvement program
 
-| Milestone                                              | Status                                                                                                 | Contract |
-| ------------------------------------------------------ | ------------------------------------------------------------------------------------------------------ | -------- |
-| Version chain, headless config, runtime info, doctor   | Complete: exact version chain, validated config, non-launching runtime info, and bounded doctor        | ADR 0007 |
-| Structured MCP output, annotations, cancellation       | Partial: structured output and annotations complete; wait cancellation pending                         | ADR 0008 |
-| Passive waits and atomic action/wait                   | Partial: passive conditions and click/press + navigation/response complete; popup/cancellation pending | ADR 0009 |
-| Bounded redacted browser observability                 | Partial: console/page-error collectors complete; network/failed-request collectors pending             | ADR 0010 |
-| Bounded snapshots, context options, typed interactions | Accepted; pending implementation                                                                       | ADR 0011 |
-| Filesystem-backed artifacts                            | Design gate accepted; capability ADR and implementation deferred                                       | ADR 0012 |
+| Milestone                                              | Status                                                                                                   | Contract |
+| ------------------------------------------------------ | -------------------------------------------------------------------------------------------------------- | -------- |
+| Version chain, headless config, runtime info, doctor   | Complete: exact version chain, validated config, non-launching runtime info, and bounded doctor          | ADR 0007 |
+| Structured MCP output, annotations, cancellation       | Complete: structured output, annotations, end-to-end request signals, queue-safe cancellation            | ADR 0008 |
+| Passive waits and atomic action/wait                   | Partial: passive conditions, click/press + navigation/response, and cancellation complete; popup pending | ADR 0009 |
+| Bounded redacted browser observability                 | Partial: console/page-error collectors complete; network/failed-request collectors pending               | ADR 0010 |
+| Bounded snapshots, context options, typed interactions | Accepted; pending implementation                                                                         | ADR 0011 |
+| Filesystem-backed artifacts                            | Design gate accepted; capability ADR and implementation deferred                                         | ADR 0012 |
 
 Remote HTTP/multi-client security and internal agent orchestration are not part of the accepted
 implementation program. The latter remains a separate external layer.
@@ -120,6 +120,17 @@ Known blockers: none.
 
 Latest post-v0.1 slice verification:
 
+- ADR 0008 cancellation is complete: every asynchronous MCP handler forwards the request signal, the runtime
+  owns engine-independent signal/deadline metadata, queued cancellations never execute, and an
+  in-flight non-abortable action retains its session queue slot until it settles. Passive waits and
+  atomic event waiters detach owned abort listeners/timers and leave the queue usable.
+- Deterministic coverage includes queued cancellation, in-flight non-overtake, queue recovery,
+  cross-session independence, cancellable real-browser waits, in-memory MCP cancellation, and real
+  stdio cancellation.
+- Cancellation slice `npm run verify`: passed (21 files, 94 tests, coverage thresholds, lint,
+  format, typecheck, and build). `BROWSERMESH_HEADLESS=true npm run verify:package`: passed,
+  including packed-file inspection, clean tarball installation, MCP discovery, browser smoke, and
+  shutdown.
 - ADR 0010 console/page-error slice adds engine-neutral normalized Playwright subscriptions,
   runtime-owned bounded per-page stores and listener disposers, opaque page-scoped monotonic
   cursors, metadata-only defaults, explicit bounded/redacted text, overflow gap/drop accounting,

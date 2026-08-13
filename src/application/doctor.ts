@@ -4,6 +4,7 @@ import type {
   BrowserPageHandle,
 } from './ports/browser-engine.js';
 import type { DataDirectoryProbePort } from './ports/data-directory.js';
+import { createOperationControl, throwIfCancelled } from './operation-control.js';
 
 export const DOCTOR_SCHEMA_VERSION = '1' as const;
 export const doctorCheckIds = [
@@ -41,12 +42,14 @@ export interface DoctorOptions {
   readonly operationTimeoutMs: number;
   readonly overallTimeoutMs: number;
   readonly now?: () => number;
+  readonly signal?: AbortSignal;
 }
 
 export async function runDoctor(options: DoctorOptions): Promise<DoctorResult> {
   const now = options.now ?? Date.now;
   const deadline = now() + options.overallTimeoutMs;
   const checks: DoctorCheck[] = [];
+  throwIfCancelled(options.signal);
 
   const nodeMajor = Number.parseInt(options.nodeVersion.split('.')[0] ?? '', 10);
   checks.push(
@@ -59,6 +62,7 @@ export async function runDoctor(options: DoctorOptions): Promise<DoctorResult> {
           `Install Node.js ${String(options.minimumNodeMajor)} or newer.`,
         ),
   );
+  throwIfCancelled(options.signal);
 
   checks.push(
     options.packageVersion === options.runtimeVersion
@@ -74,6 +78,7 @@ export async function runDoctor(options: DoctorOptions): Promise<DoctorResult> {
           'Reinstall or rebuild BrowserMesh from one package version.',
         ),
   );
+  throwIfCancelled(options.signal);
 
   checks.push(
     await runCheck(
@@ -89,6 +94,7 @@ export async function runDoctor(options: DoctorOptions): Promise<DoctorResult> {
       ],
     ),
   );
+  throwIfCancelled(options.signal);
 
   checks.push(
     await runBooleanCheck(
@@ -104,6 +110,7 @@ export async function runDoctor(options: DoctorOptions): Promise<DoctorResult> {
       ],
     ),
   );
+  throwIfCancelled(options.signal);
 
   checks.push(await runSmokeCheck(options, Math.max(0, deadline - now())));
 
@@ -122,7 +129,10 @@ async function runSmokeCheck(options: DoctorOptions, remainingMs: number): Promi
   try {
     await options.engine.start();
     context = await options.engine.createContext({
-      timeoutMs: Math.min(options.operationTimeoutMs, remainingMs),
+      control: createOperationControl(
+        Math.min(options.operationTimeoutMs, remainingMs),
+        options.signal,
+      ),
     });
     page = await options.engine.createPage(context);
   } catch (error) {
