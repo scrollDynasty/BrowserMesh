@@ -330,9 +330,10 @@ describe('MCP adapter', () => {
       await Promise.resolve();
       expect(followerSettled).toBe(false);
       releaseNavigation?.();
-      await expect(follower).resolves.toMatchObject({
-        structuredContent: { url: expect.any(String) },
-      });
+      const followerResult = await follower;
+      expect(z.object({ url: z.string() }).parse(followerResult.structuredContent).url).toContain(
+        'cancelled.example',
+      );
     } finally {
       releaseNavigation?.();
       await client.close();

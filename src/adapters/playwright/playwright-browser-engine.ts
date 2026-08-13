@@ -392,8 +392,7 @@ export class PlaywrightBrowserEngine implements BrowserEnginePort {
                 return count === 0 || (await locator.isHidden({ timeout: remaining }));
               if (count === 0) return false;
               if (condition.state === 'attached') return true;
-              if (condition.state === 'visible')
-                return locator.isVisible({ timeout: remaining });
+              if (condition.state === 'visible') return locator.isVisible({ timeout: remaining });
               const enabled = await locator.isEnabled({ timeout: remaining });
               return condition.state === 'enabled' ? enabled : !enabled;
             }, control);
@@ -429,12 +428,14 @@ export class PlaywrightBrowserEngine implements BrowserEnginePort {
     throwIfCancelled(control.signal);
     const page = this.getPage(handle);
     const waiter = createEventWaiter(page, wait, control);
-    const actionPromise = this.performCompositeAction(page, action, remainingMs(control.deadlineAt)).catch(
-      (error: unknown) => {
-        waiter.cancel(error);
-        throw error;
-      },
-    );
+    const actionPromise = this.performCompositeAction(
+      page,
+      action,
+      remainingMs(control.deadlineAt),
+    ).catch((error: unknown) => {
+      waiter.cancel(error);
+      throw error;
+    });
     const settled = await Promise.allSettled([actionPromise, waiter.promise]);
     waiter.dispose();
     const actionResult = settled[0];
@@ -629,7 +630,7 @@ function cancellableDelay(delayMs: number, signal?: AbortSignal): Promise<void> 
       try {
         throwIfCancelled(signal);
       } catch (error) {
-        reject(error);
+        reject(error instanceof Error ? error : new DOMException(String(error), 'AbortError'));
       }
     };
     const timer = setTimeout(() => {
@@ -678,7 +679,7 @@ function createEventWaiter(
   const fail = (error: unknown): void => {
     if (settled) return;
     settled = true;
-    rejectPromise(error);
+    rejectPromise(error instanceof Error ? error : new Error(String(error)));
   };
   const onNavigation = (frame: Frame): void => {
     if (frame !== page.mainFrame()) return;
@@ -718,7 +719,7 @@ function createEventWaiter(
   };
   control.signal?.addEventListener('abort', onAbort, { once: true });
   const timeoutMs = remainingMs(control.deadlineAt);
-  const timer = setTimeout(() => fail(operationTimeout(timeoutMs)), timeoutMs);
+  const timer = setTimeout(() => fail(operationTimeout(control.timeoutMs)), timeoutMs);
   const dispose = (): void => {
     clearTimeout(timer);
     control.signal?.removeEventListener('abort', onAbort);

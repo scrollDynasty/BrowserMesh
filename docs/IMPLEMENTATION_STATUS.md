@@ -36,14 +36,14 @@ pending and does not retroactively make the baseline incomplete.
 
 ## Professional MCP improvement program
 
-| Milestone                                              | Status                                                                                                 | Contract |
-| ------------------------------------------------------ | ------------------------------------------------------------------------------------------------------ | -------- |
-| Version chain, headless config, runtime info, doctor   | Complete: exact version chain, validated config, non-launching runtime info, and bounded doctor        | ADR 0007 |
-| Structured MCP output, annotations, cancellation       | Partial: structured output and annotations complete; wait cancellation pending                         | ADR 0008 |
-| Passive waits and atomic action/wait                   | Partial: passive conditions and click/press + navigation/response complete; popup/cancellation pending | ADR 0009 |
-| Bounded redacted browser observability                 | Accepted; pending implementation                                                                       | ADR 0010 |
-| Bounded snapshots, context options, typed interactions | Accepted; pending implementation                                                                       | ADR 0011 |
-| Filesystem-backed artifacts                            | Design gate accepted; capability ADR and implementation deferred                                       | ADR 0012 |
+| Milestone                                              | Status                                                                                                   | Contract |
+| ------------------------------------------------------ | -------------------------------------------------------------------------------------------------------- | -------- |
+| Version chain, headless config, runtime info, doctor   | Complete: exact version chain, validated config, non-launching runtime info, and bounded doctor          | ADR 0007 |
+| Structured MCP output, annotations, cancellation       | Complete: structured output, annotations, end-to-end request signals, queue-safe cancellation            | ADR 0008 |
+| Passive waits and atomic action/wait                   | Partial: passive conditions, click/press + navigation/response, and cancellation complete; popup pending | ADR 0009 |
+| Bounded redacted browser observability                 | Accepted; pending implementation                                                                         | ADR 0010 |
+| Bounded snapshots, context options, typed interactions | Accepted; pending implementation                                                                         | ADR 0011 |
+| Filesystem-backed artifacts                            | Design gate accepted; capability ADR and implementation deferred                                         | ADR 0012 |
 
 Remote HTTP/multi-client security and internal agent orchestration are not part of the accepted
 implementation program. The latter remains a separate external layer.

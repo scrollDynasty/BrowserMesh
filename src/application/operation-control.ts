@@ -19,10 +19,17 @@ export function createOperationControl(
  */
 export function throwIfCancelled(signal?: AbortSignal): void {
   if (!signal?.aborted) return;
-  if (signal.reason !== undefined) throw signal.reason;
-  throw new DOMException('The operation was aborted', 'AbortError');
+  if (signal.reason instanceof Error && signal.reason.name === 'AbortError') throw signal.reason;
+  throw new DOMException(
+    signal.reason === undefined
+      ? 'The operation was aborted'
+      : signal.reason instanceof Error
+        ? signal.reason.message
+        : String(signal.reason),
+    'AbortError',
+  );
 }
 
-export function isCancellation(error: unknown): boolean {
+export function isCancellation(error: unknown): error is Error {
   return error instanceof Error && error.name === 'AbortError';
 }

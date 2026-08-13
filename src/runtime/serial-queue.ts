@@ -13,14 +13,10 @@ export class SerialQueue {
     const start = async (): Promise<T> => {
       // A request cancelled while waiting must never touch browser state.
       throwIfCancelled(signal);
-      try {
-        const value = await task();
-        // Do not release the queue early for an in-flight action that cannot be aborted.
-        throwIfCancelled(signal);
-        return value;
-      } catch (error) {
-        throw error;
-      }
+      const value = await task();
+      // Do not release the queue early for an in-flight action that cannot be aborted.
+      throwIfCancelled(signal);
+      return value;
     };
     const result = this.tail.then(start, start);
     this.tail = result.then(

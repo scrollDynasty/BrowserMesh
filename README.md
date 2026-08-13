@@ -256,6 +256,14 @@ A read-style operation does not bypass an in-progress navigation or interaction.
 
 A failed or timed-out operation must not poison the queue. Later accepted operations continue normally after the failed operation settles.
 
+MCP request cancellation is propagated into BrowserMesh as an engine-independent operation signal.
+A same-session request cancelled while queued is skipped before it can touch browser state. If a
+Playwright action is already running and cannot be aborted safely, BrowserMesh keeps its queue slot
+until the real action settles, so later work cannot overtake it. Passive waits detach their owned
+abort listeners and timers promptly, and the session queue remains usable after cancellation. MCP
+clients observe their SDK's cancellation error (typically an `AbortError`, or an MCP error carrying
+that reason); a separate tool result after protocol cancellation is not guaranteed.
+
 Different sessions do **not** share a global operation lock:
 
 ```text
