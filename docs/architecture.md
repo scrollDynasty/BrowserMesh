@@ -499,6 +499,57 @@ If concurrent independent MCP clients later require access protection, a generic
 
 Such a lease must not depend on an internal LLM Agent abstraction.
 
+## Accepted post-v0.1 evolution
+
+The improvement program extends the modular monolith without changing dependency direction or the
+external-client boundary.
+
+```text
+MCP stdio adapter / doctor CLI
+             │
+             ▼
+BrowserMeshRuntime ── version/config/runtime-health services
+       │       │
+       │       ├── bounded per-page observability stores
+       │       └── per-session queue and cancellation ownership
+       ▼
+BrowserEnginePort / StateRepositoryPort
+       ▲
+       │
+Playwright and filesystem adapters
+```
+
+Version data is generated at build time into infrastructure and injected toward adapters. Runtime
+diagnostics consume safe runtime/config views; they do not inspect process environment, repository
+files, adapter-private paths, or Playwright objects. The doctor CLI composes the same application
+ports and owns a bounded, disposable smoke lifecycle. MCP discovery and `browser_runtime_info` do
+not force browser launch.
+
+Structured MCP mapping remains adapter work. Output schemas mirror stable application result
+models, while compatibility text and image blocks are presentation. MCP cancellation is translated
+to an engine-independent operation signal before crossing inward. Annotations are static reviewed
+metadata and never runtime authorization.
+
+Passive waits and atomic action/wait composites are application operations occupying one session
+queue slot. Engine ports expose typed conditions/actions and cancellation; they do not expose
+Playwright waiters. A composite registers its event waiter before its action and has one deadline
+and cleanup owner.
+
+Observability listeners are implemented in the Playwright adapter, but their safe normalized event
+models, bounded stores, cursors, ownership, and lifecycle are controlled by runtime/application
+contracts. Each page owns at most one listener set. Teardown removes listeners before handles are
+discarded. Ring-buffer overflow is observable through dropped counts. Browser event bodies,
+headers, console object graphs, and raw exceptions never enter the normalized event port.
+
+Snapshot bounds, context settings, and new actions are engine-independent value contracts.
+Short-lived element references, if introduced, are runtime IDs resolving only inside the adapter;
+they are bounded and invalidated with page/document lifecycle. They are conveniences, not durable
+identity or exposed locator handles.
+
+Filesystem-backed artifacts are not part of this architecture yet. ADR 0012 establishes a design
+gate: a capability-specific follow-up ADR must define repository ports, quotas, retention,
+redaction, and cleanup before code or public tools are added.
+
 ## Architectural evolution
 
 Possible future adapters/features include:
@@ -508,6 +559,9 @@ Possible future adapters/features include:
 - OpenTelemetry;
 - remote browser workers;
 - generic client/workflow leases.
+
+These are deferred possibilities, not accepted implementation scope. In particular, the current
+program adds neither remote HTTP nor internal agents.
 
 They must be added around the existing core rather than by leaking transport/Playwright concepts into the domain.
 
