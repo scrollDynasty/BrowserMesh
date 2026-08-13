@@ -115,9 +115,10 @@ Enable Dependabot alerts/security updates and private vulnerability reporting. `
 6. Verify registry state:
 
 ```sh
-npm view multi-agent-browser-mcp version dist-tags --json
+PACKAGE_VERSION="$(node -p "require('./package.json').version")"
+npm view "multi-agent-browser-mcp@$PACKAGE_VERSION" version dist-tags --json
 curl "https://registry.modelcontextprotocol.io/v0.1/servers?search=io.github.scrollDynasty/browsermesh"
-npx -y multi-agent-browser-mcp@latest
+npx -y "multi-agent-browser-mcp@$PACKAGE_VERSION"
 ```
 
 The npm package declares the official Registry identity
