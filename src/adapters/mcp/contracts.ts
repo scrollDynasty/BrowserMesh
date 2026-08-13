@@ -58,7 +58,7 @@ export const savedStateViewSchema = z.object({
 });
 
 const pageOperation = { operationId, sessionId, pageId } as const;
-const locatorSchema = z.discriminatedUnion('strategy', [
+const locatorSelectorSchema = z.discriminatedUnion('strategy', [
   z.object({
     strategy: z.literal('role'),
     value: z.enum([
@@ -79,6 +79,38 @@ const locatorSchema = z.discriminatedUnion('strategy', [
   z.object({
     strategy: z.enum(['text', 'label', 'placeholder', 'testId', 'css']),
     value: z.string(),
+  }),
+]);
+const frameScopeSchema = z.discriminatedUnion('kind', [
+  z.object({ kind: z.literal('main') }),
+  z.object({
+    kind: z.literal('iframe'),
+    chain: z.array(locatorSelectorSchema).min(1).max(5),
+  }),
+]);
+const locatorSchema = z.discriminatedUnion('strategy', [
+  z.object({
+    strategy: z.literal('role'),
+    value: z.enum([
+      'button',
+      'link',
+      'textbox',
+      'checkbox',
+      'radio',
+      'combobox',
+      'heading',
+      'listitem',
+      'option',
+      'tab',
+    ]),
+    name: z.string().optional(),
+    exact: z.boolean().optional(),
+    frame: frameScopeSchema.optional(),
+  }),
+  z.object({
+    strategy: z.enum(['text', 'label', 'placeholder', 'testId', 'css']),
+    value: z.string(),
+    frame: frameScopeSchema.optional(),
   }),
 ]);
 const nullableLocatorSchema = locatorSchema.nullable();

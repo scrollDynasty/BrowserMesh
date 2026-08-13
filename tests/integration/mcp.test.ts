@@ -63,6 +63,7 @@ describe('MCP adapter', () => {
       expect(clickTool?.description).toContain('LOCATOR_AMBIGUOUS');
       expect(clickTool?.inputSchema).toHaveProperty('properties.locator');
       expect(clickTool?.inputSchema).toHaveProperty('properties.ref');
+      expect(clickTool?.description).toContain('iframe chain');
       expect(toolPresentation.browser_hover).toEqual({
         title: 'Hover over page element',
         annotations: {
@@ -192,7 +193,15 @@ describe('MCP adapter', () => {
       await callSuccess(client, 'browser_get_title', target);
       const boundedSnapshot = await callSuccess(client, 'browser_snapshot', {
         ...target,
-        scope: { strategy: 'role', value: 'button', name: 'Submit' },
+        scope: {
+          strategy: 'role',
+          value: 'button',
+          name: 'Submit',
+          frame: {
+            kind: 'iframe',
+            chain: [{ strategy: 'testId', value: 'workspace-frame' }],
+          },
+        },
         maxDepth: 1,
         includeBoundingBoxes: true,
         maxChars: 4,
@@ -203,7 +212,16 @@ describe('MCP adapter', () => {
         contentFormat: 'aria-yaml-fragment',
         partial: true,
         appliedBounds: {
-          scope: { strategy: 'role', value: 'button', name: 'Submit', exact: true },
+          scope: {
+            strategy: 'role',
+            value: 'button',
+            name: 'Submit',
+            exact: true,
+            frame: {
+              kind: 'iframe',
+              chain: [{ strategy: 'testId', value: 'workspace-frame' }],
+            },
+          },
           maxDepth: 1,
           includeBoundingBoxes: true,
           maxChars: 4,
@@ -212,7 +230,16 @@ describe('MCP adapter', () => {
         truncation: { truncated: true, byMaxChars: true, byMaxBytes: true },
       });
       expect(engine.lastSnapshotOptions).toEqual({
-        scope: { strategy: 'role', value: 'button', name: 'Submit', exact: true },
+        scope: {
+          strategy: 'role',
+          value: 'button',
+          name: 'Submit',
+          exact: true,
+          frame: {
+            kind: 'iframe',
+            chain: [{ strategy: 'testId', value: 'workspace-frame' }],
+          },
+        },
         maxDepth: 1,
         includeBoundingBoxes: true,
         includeRefs: false,
@@ -222,6 +249,27 @@ describe('MCP adapter', () => {
         ...target,
         locator: { strategy: 'testId', value: 'status' },
       });
+      const excessiveFrameDepth = requireCallResult(
+        await client.callTool({
+          name: 'browser_visible_text',
+          arguments: {
+            ...target,
+            locator: {
+              strategy: 'testId',
+              value: 'status',
+              frame: {
+                kind: 'iframe',
+                chain: Array.from({ length: 6 }, () => ({
+                  strategy: 'testId',
+                  value: 'frame',
+                })),
+              },
+            },
+          },
+        }),
+      );
+      expect(excessiveFrameDepth.isError).toBe(true);
+      expect(readText(excessiveFrameDepth)).toContain('Input validation error');
       const targetHandle = requiredValue(Array.from(engine.pages.values())[0]);
       engine.emitObservation(targetHandle, {
         kind: 'console',

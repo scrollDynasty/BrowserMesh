@@ -4,7 +4,9 @@ import type {
   ActionWaitCondition,
   BrowserAction,
   ElementTarget,
+  FrameScope,
   Locator,
+  LocatorSelector,
   SnapshotOptions,
   ScreenshotOptions,
   WaitCondition,
@@ -28,7 +30,7 @@ const role = z.enum([
   'option',
   'tab',
 ]);
-const locatorSchema = z.discriminatedUnion('strategy', [
+const locatorSelectorSchema = z.discriminatedUnion('strategy', [
   z.object({
     strategy: z.literal('role'),
     value: role,
@@ -38,6 +40,29 @@ const locatorSchema = z.discriminatedUnion('strategy', [
   z.object({
     strategy: z.enum(['text', 'label', 'placeholder', 'testId', 'css']),
     value: z.string().min(1),
+  }),
+]);
+const frameScopeSchema = z
+  .discriminatedUnion('kind', [
+    z.object({ kind: z.literal('main') }),
+    z.object({
+      kind: z.literal('iframe'),
+      chain: z.array(locatorSelectorSchema).min(1).max(5),
+    }),
+  ])
+  .describe('Top document or a bounded outer-to-inner chain of semantic iframe element selectors');
+const locatorSchema = z.discriminatedUnion('strategy', [
+  z.object({
+    strategy: z.literal('role'),
+    value: role,
+    name: z.string().optional(),
+    exact: z.boolean().optional().default(true),
+    frame: frameScopeSchema.optional(),
+  }),
+  z.object({
+    strategy: z.enum(['text', 'label', 'placeholder', 'testId', 'css']),
+    value: z.string().min(1),
+    frame: frameScopeSchema.optional(),
   }),
 ]);
 const refSchema = z.string().regex(/^@e[a-f0-9]{32}$/u);
@@ -135,8 +160,32 @@ const snapshotInputSchema = {
   maxRefs: z.number().int().positive().max(SNAPSHOT_LIMITS.maxRefs).optional(),
 };
 
+type LocatorInput = z.output<typeof locatorSchema>;
+type LocatorSelectorInput = z.output<typeof locatorSelectorSchema>;
+
+function normalizedSelector(input: LocatorSelectorInput): LocatorSelector {
+  if (input.strategy !== 'role') return { strategy: input.strategy, value: input.value };
+  return {
+    strategy: 'role',
+    value: input.value,
+    ...(input.name === undefined ? {} : { name: input.name }),
+    exact: input.exact,
+  };
+}
+
+function normalizedFrame(frame: LocatorInput['frame']): FrameScope | undefined {
+  if (frame === undefined || frame.kind === 'main') return frame;
+  return { kind: 'iframe', chain: frame.chain.map(normalizedSelector) };
+}
+
+function normalizedLocator(input: LocatorInput): Locator {
+  const selector = normalizedSelector(input);
+  const frame = normalizedFrame(input.frame);
+  return { ...selector, ...(frame === undefined ? {} : { frame }) };
+}
+
 function elementTarget(input: {
-  locator?: z.infer<typeof locatorSchema> | undefined;
+  locator?: LocatorInput | undefined;
   ref?: string | undefined;
 }): ElementTarget {
   if ((input.locator === undefined) === (input.ref === undefined))
@@ -149,13 +198,7 @@ function elementTarget(input: {
       throw new BrowserMeshError('INVALID_ARGUMENT', 'Element ref is required');
     return { ref: input.ref };
   }
-  if (input.locator.strategy !== 'role') return input.locator;
-  return {
-    strategy: 'role',
-    value: input.locator.value,
-    ...(input.locator.name === undefined ? {} : { name: input.locator.name }),
-    exact: input.locator.exact,
-  };
+  return normalizedLocator(input.locator);
 }
 
 function target(
@@ -380,7 +423,7 @@ export function createMcpServer(runtime: BrowserMeshRuntime): McpServer {
     {
       ...contractFor('browser_snapshot'),
       description:
-        'Inspect a bounded accessibility-oriented snapshot of one explicitly addressed page, optionally scoped by a locator, depth-limited, and annotated with viewport bounding boxes. Non-empty password-input values are redacted before content crosses MCP. Set includeRefs for bounded 30-second element refs used by immediate follow-up actions; refs are page-scoped and stale after navigation or DOM replacement. Results always report applied bounds and truncation; partial content is explicitly aria-yaml-fragment.',
+        'Inspect a bounded accessibility-oriented snapshot of one explicitly addressed page, optionally scoped by a locator (including a bounded semantic iframe chain), depth-limited, and annotated with viewport bounding boxes. Non-empty password-input values are redacted before content crosses MCP. Set includeRefs for bounded 30-second element refs used by immediate follow-up actions; refs are page-scoped and stale after navigation or DOM replacement. Results always report applied bounds and truncation; partial content is explicitly aria-yaml-fragment.',
       inputSchema: snapshotInputSchema,
     },
     (input, extra) =>
@@ -408,7 +451,7 @@ export function createMcpServer(runtime: BrowserMeshRuntime): McpServer {
     {
       ...contractFor('browser_visible_text'),
       description:
-        'Read visible text from a semantic or CSS locator on one explicitly addressed page. The lookup is confined to that page and session.',
+        'Read visible text from a semantic or CSS locator on one explicitly addressed page. A locator may select the top document or a bounded outer-to-inner semantic iframe chain; the lookup remains confined to that page and session.',
       inputSchema: { ...targetSchema, locator: locatorSchema },
     },
     (input, extra) =>
@@ -509,7 +552,7 @@ export function createMcpServer(runtime: BrowserMeshRuntime): McpServer {
     {
       ...contractFor('browser_click'),
       description:
-        'Click exactly one semantic/CSS locator or short-lived snapshot ref on one explicitly addressed page. Role locator names match exactly by default; ambiguous locators return LOCATOR_AMBIGUOUS and stale or cross-page refs return STALE_ELEMENT_REFERENCE. Prefer semantic locators for durable workflows.',
+        'Click exactly one semantic/CSS locator or short-lived snapshot ref on one explicitly addressed page. A locator may select the top document or a bounded outer-to-inner semantic iframe chain. Role locator names match exactly by default and every iframe-chain selector must resolve exactly; ambiguous locators return LOCATOR_AMBIGUOUS and stale or cross-page refs return STALE_ELEMENT_REFERENCE. Prefer semantic locators for durable workflows.',
       inputSchema: { ...targetSchema, ...elementInputSchema },
     },
     (input, extra) =>
@@ -687,7 +730,7 @@ export function createMcpServer(runtime: BrowserMeshRuntime): McpServer {
     {
       ...contractFor('browser_screenshot'),
       description:
-        'Capture an in-memory PNG screenshot of one explicitly addressed page. BrowserMesh returns image content and does not write to a caller-controlled path or inspect another session.',
+        'Capture an in-memory PNG screenshot of one explicitly addressed page, either as the viewport/full page or one semantic element optionally reached through a bounded iframe chain. BrowserMesh returns image content and does not write to a caller-controlled path or inspect another session.',
       inputSchema: { ...targetSchema, capture: screenshotCaptureSchema },
     },
     async (input, extra) => {
@@ -723,7 +766,7 @@ export function createMcpServer(runtime: BrowserMeshRuntime): McpServer {
     {
       ...contractFor('browser_wait'),
       description:
-        'Wait for one deterministic passive condition on an explicitly addressed page: an exact/safe-glob URL, domcontentloaded/load state, locator state, or case-sensitive text presence/absence. The wait occupies that session queue, is bounded by timeoutMs, and must not depend on a later action queued in the same session; use browser_action_and_wait for action-triggered events.',
+        'Wait for one deterministic passive condition on an explicitly addressed page: an exact/safe-glob URL, domcontentloaded/load state, locator state (optionally through a bounded semantic iframe chain), or case-sensitive top-document text presence/absence. The wait occupies that session queue, is bounded by timeoutMs, and must not depend on a later action queued in the same session; use browser_action_and_wait for action-triggered events.',
       inputSchema: { ...targetSchema, condition: waitConditionSchema },
     },
     (input, extra) =>
@@ -745,7 +788,7 @@ export function createMcpServer(runtime: BrowserMeshRuntime): McpServer {
     {
       ...contractFor('browser_action_and_wait'),
       description:
-        'Atomically register a navigation, response, popup, or dialog waiter first, then click or press on the explicitly addressed page under one shared deadline. Popup pages receive a new BrowserMesh pageId in the same session with isDefault=false and are closed if the page limit is exceeded. Dialogs must be handled atomically because they cannot be inspected later; specify the expected type and accept/dismiss action. Returned dialog text is bounded. Use this instead of parallel same-session calls when an action triggers the event.',
+        'Atomically register a navigation, response, popup, or dialog waiter first, then click or press on the explicitly addressed page under one shared deadline; the action locator may use a bounded semantic iframe chain. Popup pages receive a new BrowserMesh pageId in the same session with isDefault=false and are closed if the page limit is exceeded. Dialogs must be handled atomically because they cannot be inspected later; specify the expected type and accept/dismiss action. Returned dialog text is bounded. Use this instead of parallel same-session calls when an action triggers the event.',
       inputSchema: { ...targetSchema, action: browserActionSchema, wait: actionWaitSchema },
     },
     (input, extra) =>

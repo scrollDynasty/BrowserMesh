@@ -591,6 +591,14 @@ all page/context/browser teardown paths clear the page registry; resolution also
 and same-document connectivity before an action. Capture replaces prior refs atomically after a
 successful, non-cancelled enumeration and releases partial results on failure.
 
+ADR 0014 extends the engine-neutral `Locator` value with an optional main-document or bounded
+outer-to-inner iframe selector chain. The Playwright adapter alone converts each selector to a
+`FrameLocator`; every step is resolved exactly under the existing operation control, and no frame
+object or durable frame ID enters runtime/domain state. All locator consumers inherit the same
+scope, including waits, scoped snapshots/ref capture, visible text, element screenshots, and typed
+actions. Chains are re-resolved for each queued operation. Descendant navigation or detach makes
+old element refs stale without creating a separate frame lifecycle registry.
+
 Filesystem-backed artifacts are not part of this architecture yet. ADR 0012 establishes a design
 gate: a capability-specific follow-up ADR must define repository ports, quotas, retention,
 redaction, and cleanup before code or public tools are added.

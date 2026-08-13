@@ -195,6 +195,138 @@ describe('real Chromium runtime', () => {
     expect(fullPageCapture.value.length).toBeGreaterThan(elementCapture.value.length);
   });
 
+  it('targets nested same-origin and cross-origin iframes across inspection and actions', async () => {
+    const target = await createTarget();
+    await runtime.navigate(target, `${web.baseUrl}/iframes`);
+    const outer = {
+      kind: 'iframe',
+      chain: [{ strategy: 'testId', value: 'outer-frame' }],
+    } as const;
+    const nested = {
+      kind: 'iframe',
+      chain: [
+        { strategy: 'testId', value: 'outer-frame' },
+        { strategy: 'testId', value: 'nested-frame' },
+      ],
+    } as const;
+
+    await runtime.wait(target, {
+      kind: 'locator',
+      locator: { strategy: 'testId', value: 'frame-status', frame: outer },
+      state: 'visible',
+    });
+    await runtime.fill(
+      target,
+      { strategy: 'label', value: 'Frame input', frame: outer },
+      'isolated-frame-value',
+    );
+    await runtime.click(target, {
+      strategy: 'role',
+      value: 'button',
+      name: 'Frame action',
+      frame: outer,
+    });
+    expect(
+      (
+        await runtime.visibleText(target, {
+          strategy: 'testId',
+          value: 'frame-status',
+          frame: outer,
+        })
+      ).value,
+    ).toBe('frame-clicked');
+
+    await runtime.click(target, { strategy: 'testId', value: 'nested-action', frame: nested });
+    expect(
+      (
+        await runtime.visibleText(target, {
+          strategy: 'testId',
+          value: 'nested-status',
+          frame: nested,
+        })
+      ).value,
+    ).toBe('nested-clicked');
+    const captured = (
+      await runtime.snapshot(target, {
+        scope: { strategy: 'css', value: 'body', frame: nested },
+        includeRefs: true,
+        maxRefs: 2,
+      })
+    ).value;
+    expect(captured.snapshot).toContain('Nested action');
+    expect(captured.appliedBounds.scope).toMatchObject({ frame: nested });
+    expect(captured.refs.some((item) => item.tag === 'button')).toBe(true);
+    expect(
+      (
+        await runtime.screenshot(target, {
+          locator: { strategy: 'testId', value: 'nested-status', frame: nested },
+        })
+      ).value,
+    ).toMatch(/^iVBOR/u);
+    expect(
+      (
+        await runtime.visibleText(target, {
+          strategy: 'testId',
+          value: 'detach-frame',
+          frame: { kind: 'main' },
+        })
+      ).value,
+    ).toBe('Detach frame');
+  });
+
+  it('reports iframe-chain ambiguity exactly and recovers its session queue', async () => {
+    const target = await createTarget();
+    await runtime.navigate(target, `${web.baseUrl}/iframes`);
+    const ambiguous = {
+      strategy: 'css',
+      value: 'body',
+      frame: {
+        kind: 'iframe',
+        chain: [{ strategy: 'testId', value: 'duplicate-frame' }],
+      },
+    } as const;
+
+    await expect(runtime.visibleText(target, ambiguous)).rejects.toMatchObject({
+      code: 'LOCATOR_AMBIGUOUS',
+      details: { frameIndex: 0 },
+    });
+    await expect(runtime.getTitle(target)).resolves.toMatchObject({ value: 'Iframe targeting' });
+  });
+
+  it('makes iframe refs stale after descendant navigation or detach', async () => {
+    const target = await createTarget();
+    const scope = {
+      strategy: 'css',
+      value: 'body',
+      frame: {
+        kind: 'iframe',
+        chain: [{ strategy: 'testId', value: 'outer-frame' }],
+      },
+    } as const;
+    await runtime.navigate(target, `${web.baseUrl}/iframes`);
+    const navigatedRef = requireRef(
+      (await runtime.snapshot(target, { scope, includeRefs: true, maxRefs: 3 })).value.refs.find(
+        (item) => item.tag === 'button',
+      )?.ref,
+    );
+    await runtime.click(target, { strategy: 'testId', value: 'navigate-frame' });
+    await expect(runtime.click(target, { ref: navigatedRef })).rejects.toMatchObject({
+      code: 'STALE_ELEMENT_REFERENCE',
+    });
+
+    await runtime.reload(target);
+    const detachedRef = requireRef(
+      (await runtime.snapshot(target, { scope, includeRefs: true, maxRefs: 3 })).value.refs.find(
+        (item) => item.tag === 'button',
+      )?.ref,
+    );
+    await runtime.click(target, { strategy: 'testId', value: 'detach-frame' });
+    await expect(runtime.click(target, { ref: detachedRef })).rejects.toMatchObject({
+      code: 'STALE_ELEMENT_REFERENCE',
+    });
+    await expect(runtime.getTitle(target)).resolves.toMatchObject({ value: 'Iframe targeting' });
+  });
+
   it('keeps typed-interaction failures bounded and the real session queue usable', async () => {
     const target = await createTarget();
     await runtime.navigate(target, `${web.baseUrl}/interactions`);
