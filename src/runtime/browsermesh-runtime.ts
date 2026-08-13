@@ -55,6 +55,26 @@ export interface RuntimeOptions {
   readonly maxSessions: number;
   readonly maxPagesPerSession: number;
   readonly persistenceEnabled: boolean;
+  readonly serverVersion: string;
+  readonly nodeVersion: string;
+  readonly playwrightVersion: string;
+  readonly headless: boolean;
+}
+
+export interface BrowserRuntimeInfo {
+  readonly serverVersion: string;
+  readonly nodeVersion: string;
+  readonly playwrightVersion: string;
+  readonly browserProduct: 'chromium';
+  readonly browserVersion: string | null;
+  readonly browserLaunchState: 'not_started' | 'ready' | 'failed';
+  readonly headless: boolean;
+  readonly persistenceEnabled: boolean;
+  readonly defaultTimeoutMs: number;
+  readonly maxSessions: number;
+  readonly maxPagesPerSession: number;
+  readonly activeSessions: number;
+  readonly failedSessions: number;
 }
 
 export interface OperationTarget {
@@ -83,6 +103,26 @@ export class BrowserMeshRuntime {
     if (this.started) return;
     await this.options.engine.start();
     this.started = true;
+  }
+
+  runtimeInfo(): BrowserRuntimeInfo {
+    const diagnostics = this.options.engine.diagnostics();
+    return {
+      serverVersion: this.options.serverVersion,
+      nodeVersion: this.options.nodeVersion,
+      playwrightVersion: this.options.playwrightVersion,
+      browserProduct: 'chromium',
+      browserVersion: diagnostics.browserVersion,
+      browserLaunchState: diagnostics.launchState,
+      headless: this.options.headless,
+      persistenceEnabled: this.options.persistenceEnabled,
+      defaultTimeoutMs: this.options.defaultTimeoutMs,
+      maxSessions: this.options.maxSessions,
+      maxPagesPerSession: this.options.maxPagesPerSession,
+      activeSessions: this.activeSessionCount(),
+      failedSessions: Array.from(this.sessions.values()).filter(({ status }) => status === 'failed')
+        .length,
+    };
   }
 
   createSession(

@@ -95,6 +95,21 @@ const waitedEventSchema = z.discriminatedUnion('kind', [
 ]);
 
 export const outputSchemas = {
+  browser_runtime_info: z.object({
+    serverVersion: z.string().min(1),
+    nodeVersion: z.string().min(1),
+    playwrightVersion: z.string().min(1),
+    browserProduct: z.literal('chromium'),
+    browserVersion: z.string().min(1).nullable(),
+    browserLaunchState: z.enum(['not_started', 'ready', 'failed']),
+    headless: z.boolean(),
+    persistenceEnabled: z.boolean(),
+    defaultTimeoutMs: z.number().int().positive(),
+    maxSessions: z.number().int().positive(),
+    maxPagesPerSession: z.number().int().positive(),
+    activeSessions: z.number().int().nonnegative(),
+    failedSessions: z.number().int().nonnegative(),
+  }),
   browser_session_create: z.object({
     operationId,
     session: sessionViewSchema,
@@ -162,6 +177,7 @@ function presentation(
 
 /** Reviewed UX/risk hints. These are never used as authorization. */
 export const toolPresentation: Readonly<Record<ToolName, ToolPresentation>> = {
+  browser_runtime_info: presentation('Inspect BrowserMesh runtime', true, false, true, false),
   browser_session_create: presentation(
     'Create isolated browser session',
     false,

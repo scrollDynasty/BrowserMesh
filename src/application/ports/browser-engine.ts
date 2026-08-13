@@ -20,7 +20,16 @@ export interface BrowserEngineLaunchOptions {
   readonly timeoutMs: number;
 }
 
+export type BrowserLaunchState = 'not_started' | 'ready' | 'failed';
+
+export interface BrowserEngineDiagnostics {
+  readonly launchState: BrowserLaunchState;
+  readonly browserVersion: string | null;
+}
+
 export interface BrowserEnginePort {
+  diagnostics(): BrowserEngineDiagnostics;
+  isExecutableAvailable(): Promise<boolean>;
   onDisconnected(listener: () => void): () => void;
   start(): Promise<void>;
   stop(): Promise<void>;

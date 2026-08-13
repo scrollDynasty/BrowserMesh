@@ -7,9 +7,12 @@ import {
   type Page,
   type Response,
 } from 'playwright';
+import { constants } from 'node:fs';
+import { access } from 'node:fs/promises';
 import type {
   BrowserContextHandle,
   BrowserEngineLaunchOptions,
+  BrowserEngineDiagnostics,
   BrowserEnginePort,
   BrowserPageHandle,
 } from '../../application/ports/browser-engine.js';
@@ -36,6 +39,7 @@ export class PlaywrightBrowserEngine implements BrowserEnginePort {
   private browser: Browser | undefined;
   private startPromise: Promise<void> | undefined;
   private stopping = false;
+  private launchState: BrowserEngineDiagnostics['launchState'] = 'not_started';
   private readonly disconnectedListeners = new Set<() => void>();
   private readonly contexts = new Map<symbol, BrowserContext>();
   private readonly pages = new Map<symbol, Page>();
@@ -46,6 +50,24 @@ export class PlaywrightBrowserEngine implements BrowserEnginePort {
       timeoutMs: 10_000,
     },
   ) {}
+
+  diagnostics(): BrowserEngineDiagnostics {
+    const browser = this.browser;
+    return {
+      launchState: this.launchState,
+      browserVersion:
+        this.launchState === 'ready' && browser?.isConnected() === true ? browser.version() : null,
+    };
+  }
+
+  async isExecutableAvailable(): Promise<boolean> {
+    try {
+      await access(chromium.executablePath(), constants.X_OK);
+      return true;
+    } catch {
+      return false;
+    }
+  }
 
   onDisconnected(listener: () => void): () => void {
     this.disconnectedListeners.add(listener);
@@ -63,7 +85,9 @@ export class PlaywrightBrowserEngine implements BrowserEnginePort {
         });
         browser.once('disconnected', () => this.handleDisconnected(browser));
         this.browser = browser;
+        this.launchState = 'ready';
       } catch (error) {
+        this.launchState = 'failed';
         const cause = errorMessage(error);
         const remediation = 'Run: npx -y multi-agent-browser-mcp --install-browser';
         throw new BrowserMeshError(
@@ -90,6 +114,7 @@ export class PlaywrightBrowserEngine implements BrowserEnginePort {
       }
     } finally {
       this.stopping = false;
+      this.launchState = 'not_started';
     }
   }
 
@@ -469,6 +494,7 @@ export class PlaywrightBrowserEngine implements BrowserEnginePort {
   private handleDisconnected(browser: Browser): void {
     if (this.browser !== browser) return;
     this.browser = undefined;
+    this.launchState = 'failed';
     this.pages.clear();
     this.contexts.clear();
     if (this.stopping) return;

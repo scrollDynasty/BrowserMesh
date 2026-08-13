@@ -123,6 +123,17 @@ During MCP initialization, BrowserMesh reports the exact installed package versi
 in sync with the MCP Registry manifest, so clients can detect stale local installations without
 BrowserMesh reading repository files at runtime.
 
+To diagnose a local installation without starting the MCP transport, run:
+
+```sh
+npx -y multi-agent-browser-mcp --doctor --json
+```
+
+The command performs bounded Node/version, private data-directory access, Chromium executable,
+and real launch/context/page/cleanup checks. It emits one schema-versioned JSON result and exits
+non-zero when a required check fails. Messages and remediation never include directory contents,
+executable paths, browser arguments, environment dumps, or raw browser errors.
+
 BrowserMesh itself remains local: Chromium and BrowserMesh run on the user's machine.
 
 No BrowserMesh cloud server is required for the open-source local mode.
@@ -276,6 +287,7 @@ A completely unknown session ID still returns `SESSION_NOT_FOUND`.
 
 ### Sessions and pages
 
+- `browser_runtime_info`
 - `browser_session_create`
 - `browser_session_list`
 - `browser_session_get`
@@ -482,6 +494,11 @@ setup errors stay available when Chromium has not been installed yet. The config
 operations that are expected to take longer than the safe default.
 
 Direct scattered `process.env` access throughout the codebase is not allowed.
+
+`browser_runtime_info` is safe to call before creating a session. It reports exact BrowserMesh,
+Node, and resolved Playwright versions; effective configuration and limits; browser launch state;
+nullable live Chromium version; and active/failed session counts. It does not launch Chromium and
+does not expose paths, environment values, browser state, or raw failures.
 
 ## Logging
 

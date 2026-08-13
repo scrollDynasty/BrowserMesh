@@ -11,7 +11,7 @@ import { applicationErrorResult } from '../../src/adapters/mcp/results.js';
 import { createMcpServer } from '../../src/adapters/mcp/server.js';
 import { BrowserMeshError } from '../../src/domain/errors.js';
 import { BROWSERMESH_VERSION } from '../../src/infrastructure/generated/version.js';
-import { testRuntime } from '../support/fakes.js';
+import { FakeEngine, testRuntime } from '../support/fakes.js';
 
 describe('MCP adapter', () => {
   it('publishes and fulfills the exact structured contract for every tool', async () => {
@@ -72,6 +72,30 @@ describe('MCP adapter', () => {
         readOnlyHint: false,
         openWorldHint: true,
       });
+      const runtimeInfoTool = discovered.tools.find(({ name }) => name === 'browser_runtime_info');
+      expect(runtimeInfoTool?.title).toBe('Inspect BrowserMesh runtime');
+      expect(runtimeInfoTool?.annotations).toEqual({
+        title: 'Inspect BrowserMesh runtime',
+        readOnlyHint: true,
+        destructiveHint: false,
+        idempotentHint: true,
+        openWorldHint: false,
+      });
+      const runtimeInfo = requireCallResult(
+        await client.callTool({ name: 'browser_runtime_info', arguments: {} }),
+      );
+      const parsedRuntimeInfo = outputSchemas.browser_runtime_info.parse(
+        runtimeInfo.structuredContent,
+      );
+      expect(parsedRuntimeInfo).toMatchObject({
+        browserLaunchState: 'not_started',
+        browserVersion: null,
+        activeSessions: 0,
+        failedSessions: 0,
+      });
+      expect(readText(runtimeInfo)).toBe(
+        `BrowserMesh ${parsedRuntimeInfo.serverVersion}; Chromium not_started; 0 active and 0 failed sessions.`,
+      );
 
       const created = await callSuccess(client, 'browser_session_create', { name: 'mcp' });
       const target = z
@@ -234,6 +258,32 @@ describe('MCP adapter', () => {
         ),
       ),
     ).not.toThrow();
+  });
+
+  it('maps unexpected runtime-info failures through the safe application error contract', async () => {
+    const engine = new FakeEngine();
+    engine.diagnostics = () => {
+      throw new Error('private-path C:\\Users\\secret');
+    };
+    const { runtime } = testRuntime(engine);
+    const server = createMcpServer(runtime);
+    const client = new Client({ name: 'runtime-info-error-test', version: '1.0.0' });
+    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+    await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
+    try {
+      const failed = requireCallResult(
+        await client.callTool({ name: 'browser_runtime_info', arguments: {} }),
+      );
+      expect(failed.isError).toBe(true);
+      expect(failed.structuredContent).toBeUndefined();
+      expect(readText(failed)).toContain('INTERNAL_ERROR');
+      expect(readText(failed)).not.toContain('private-path');
+      expect(readText(failed)).not.toContain('Users');
+    } finally {
+      await client.close();
+      await server.close();
+      await runtime.shutdown();
+    }
   });
 });
 
