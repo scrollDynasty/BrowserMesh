@@ -13,12 +13,18 @@ import {
 } from '../application/operation-control.js';
 import { BrowserMeshError, correlateBrowserMeshError } from '../domain/errors.js';
 import type {
+  ActionAndWaitResult,
+  ActionWaitCondition,
+  BrowserAction,
   Locator,
   OperationResult,
   PageAddressedOperationResult,
   PageView,
   SessionStatus,
   SessionView,
+  UrlMatcher,
+  WaitCondition,
+  WaitResult,
 } from '../domain/models.js';
 import type { IdGenerator } from '../infrastructure/id.js';
 import { SerialQueue } from './serial-queue.js';
@@ -445,6 +451,38 @@ export class BrowserMeshRuntime {
     );
   }
 
+  wait(
+    target: OperationTarget,
+    condition: WaitCondition,
+  ): Promise<PageAddressedOperationResult<WaitResult>> {
+    return this.pageOperation(target, async (page, control) => {
+      const normalized = normalizeWaitCondition(condition);
+      await this.options.engine.wait(page, normalized, control);
+      return { condition: normalized };
+    });
+  }
+
+  actionAndWait(
+    target: OperationTarget,
+    action: BrowserAction,
+    wait: ActionWaitCondition,
+  ): Promise<PageAddressedOperationResult<ActionAndWaitResult>> {
+    return this.pageOperation(target, async (page, control) => {
+      const normalizedAction = normalizeAction(action);
+      const normalizedWait = normalizeActionWait(wait);
+      return {
+        action: normalizedAction,
+        wait: normalizedWait,
+        event: await this.options.engine.actionAndWait(
+          page,
+          normalizedAction,
+          normalizedWait,
+          control,
+        ),
+      };
+    });
+  }
+
   saveSessionState(
     sessionId: string,
     stateId: string,
@@ -815,4 +853,81 @@ export class BrowserMeshRuntime {
   ): void {
     this.options.events.emit({ type, timestamp: this.timestamp(), ...identifiers });
   }
+}
+
+function normalizeMatcher(matcher: UrlMatcher): UrlMatcher {
+  if (
+    matcher.value.length === 0 ||
+    matcher.value.length > 2_048 ||
+    hasControlCharacters(matcher.value)
+  )
+    throw new BrowserMeshError(
+      'INVALID_ARGUMENT',
+      'URL matcher value must contain 1 to 2048 characters without control characters',
+    );
+  if (matcher.kind === 'glob' && (matcher.value.match(/\*/g)?.length ?? 0) > 32)
+    throw new BrowserMeshError('INVALID_ARGUMENT', 'URL glob may contain at most 32 wildcards');
+  return { kind: matcher.kind, value: matcher.value };
+}
+
+function hasControlCharacters(value: string): boolean {
+  for (let index = 0; index < value.length; index += 1) {
+    if (value.charCodeAt(index) < 32) return true;
+  }
+  return false;
+}
+
+function normalizeWaitCondition(condition: WaitCondition): WaitCondition {
+  switch (condition.kind) {
+    case 'url':
+      return { kind: 'url', matcher: normalizeMatcher(condition.matcher) };
+    case 'load':
+      return { kind: 'load', state: condition.state };
+    case 'locator':
+      return { kind: 'locator', locator: condition.locator, state: condition.state };
+    case 'text':
+      if (condition.text.length === 0 || condition.text.length > 2_000)
+        throw new BrowserMeshError(
+          'INVALID_ARGUMENT',
+          'Wait text must contain 1 to 2000 characters',
+        );
+      return { kind: 'text', text: condition.text, state: condition.state };
+  }
+}
+
+function normalizeAction(action: BrowserAction): BrowserAction {
+  if (action.kind === 'press') {
+    if (action.key.length === 0 || action.key.length > 64)
+      throw new BrowserMeshError('INVALID_ARGUMENT', 'Action key must contain 1 to 64 characters');
+    return { kind: 'press', locator: action.locator, key: action.key };
+  }
+  return { kind: 'click', locator: action.locator };
+}
+
+function normalizeActionWait(wait: ActionWaitCondition): ActionWaitCondition {
+  if (wait.kind === 'navigation')
+    return {
+      kind: 'navigation',
+      ...(wait.matcher === undefined ? {} : { matcher: normalizeMatcher(wait.matcher) }),
+      loadState: wait.loadState ?? 'load',
+    };
+  if (wait.method !== undefined && !/^[A-Z]{1,16}$/u.test(wait.method))
+    throw new BrowserMeshError(
+      'INVALID_ARGUMENT',
+      'Response method must be 1 to 16 uppercase letters',
+    );
+  if (
+    wait.status !== undefined &&
+    (!Number.isInteger(wait.status) || wait.status < 100 || wait.status > 599)
+  )
+    throw new BrowserMeshError(
+      'INVALID_ARGUMENT',
+      'Response status must be an integer from 100 to 599',
+    );
+  return {
+    kind: 'response',
+    matcher: normalizeMatcher(wait.matcher),
+    ...(wait.method === undefined ? {} : { method: wait.method }),
+    ...(wait.status === undefined ? {} : { status: wait.status }),
+  };
 }

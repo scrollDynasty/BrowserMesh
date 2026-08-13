@@ -302,4 +302,78 @@ describe('BrowserMeshRuntime', () => {
     });
     await runtime.shutdown();
   });
+
+  it('serializes waits, recovers after timeout, and validates bounded matchers', async () => {
+    const { runtime, engine } = testRuntime();
+    const created = await runtime.createSession();
+    const target = { sessionId: created.sessionId, pageId: created.pageId };
+    await runtime.navigate(target, 'https://wait.example/ready');
+    const success = await runtime.wait(target, {
+      kind: 'url',
+      matcher: { kind: 'glob', value: 'https://wait.example/**' },
+    });
+    expect(success.value.condition).toEqual({
+      kind: 'url',
+      matcher: { kind: 'glob', value: 'https://wait.example/**' },
+    });
+    engine.failNextWait = true;
+    await expect(
+      runtime.wait(target, { kind: 'text', text: 'missing', state: 'present' }),
+    ).rejects.toMatchObject({ code: 'OPERATION_TIMEOUT' });
+    await expect(runtime.getUrl(target)).resolves.toMatchObject({
+      value: 'https://wait.example/ready',
+    });
+    await expect(
+      runtime.wait(target, {
+        kind: 'url',
+        matcher: { kind: 'glob', value: '*'.repeat(33) },
+      }),
+    ).rejects.toMatchObject({ code: 'INVALID_ARGUMENT' });
+    await runtime.shutdown();
+  });
+
+  it('registers a composite waiter before its action and normalizes navigation load state', async () => {
+    const { runtime, engine } = testRuntime();
+    const created = await runtime.createSession();
+    const result = await runtime.actionAndWait(
+      { sessionId: created.sessionId, pageId: created.pageId },
+      { kind: 'click', locator: { strategy: 'role', value: 'button', name: 'Continue' } },
+      { kind: 'navigation', matcher: { kind: 'exact', value: 'https://next.example/' } },
+    );
+    expect(engine.compositeOrder).toEqual(['waiter', 'click']);
+    expect(result.value.wait).toMatchObject({ kind: 'navigation', loadState: 'load' });
+    expect(result.value.event).toEqual({ kind: 'navigation', url: 'https://next.example/' });
+    await runtime.shutdown();
+  });
+
+  it('keeps the session queue slot until an accepted composite operation settles', async () => {
+    const { runtime, engine } = testRuntime();
+    const created = await runtime.createSession();
+    const target = { sessionId: created.sessionId, pageId: created.pageId };
+    let releaseComposite: (() => void) | undefined;
+    engine.compositeGate = new Promise<void>((resolve) => {
+      releaseComposite = resolve;
+    });
+    let startedComposite: (() => void) | undefined;
+    const started = new Promise<void>((resolve) => {
+      startedComposite = resolve;
+    });
+    engine.onCompositeStart = startedComposite;
+    const composite = runtime.actionAndWait(
+      target,
+      { kind: 'press', locator: { strategy: 'testId', value: 'submit' }, key: 'Enter' },
+      { kind: 'response', matcher: { kind: 'exact', value: 'https://api.example/result' } },
+    );
+    await started;
+    let readSettled = false;
+    const read = runtime.getUrl(target).finally(() => {
+      readSettled = true;
+    });
+    await Promise.resolve();
+    expect(readSettled).toBe(false);
+    releaseComposite?.();
+    await composite;
+    await read;
+    await runtime.shutdown();
+  });
 });

@@ -36,14 +36,14 @@ pending and does not retroactively make the baseline incomplete.
 
 ## Professional MCP improvement program
 
-| Milestone                                              | Status                                                                                               | Contract |
-| ------------------------------------------------------ | ---------------------------------------------------------------------------------------------------- | -------- |
-| Version chain, headless config, runtime info, doctor   | Complete: exact version chain, validated config, non-launching runtime info, and bounded doctor      | ADR 0007 |
-| Structured MCP output, annotations, cancellation       | Partial: structured output and annotations complete; cancellation awaits cancellable long operations | ADR 0008 |
-| Passive waits and atomic action/wait                   | Accepted; pending implementation                                                                     | ADR 0009 |
-| Bounded redacted browser observability                 | Accepted; pending implementation                                                                     | ADR 0010 |
-| Bounded snapshots, context options, typed interactions | Accepted; pending implementation                                                                     | ADR 0011 |
-| Filesystem-backed artifacts                            | Design gate accepted; capability ADR and implementation deferred                                     | ADR 0012 |
+| Milestone                                              | Status                                                                                                 | Contract |
+| ------------------------------------------------------ | ------------------------------------------------------------------------------------------------------ | -------- |
+| Version chain, headless config, runtime info, doctor   | Complete: exact version chain, validated config, non-launching runtime info, and bounded doctor        | ADR 0007 |
+| Structured MCP output, annotations, cancellation       | Partial: structured output and annotations complete; wait cancellation pending                         | ADR 0008 |
+| Passive waits and atomic action/wait                   | Partial: passive conditions and click/press + navigation/response complete; popup/cancellation pending | ADR 0009 |
+| Bounded redacted browser observability                 | Accepted; pending implementation                                                                       | ADR 0010 |
+| Bounded snapshots, context options, typed interactions | Accepted; pending implementation                                                                       | ADR 0011 |
+| Filesystem-backed artifacts                            | Design gate accepted; capability ADR and implementation deferred                                       | ADR 0012 |
 
 Remote HTTP/multi-client security and internal agent orchestration are not part of the accepted
 implementation program. The latter remains a separate external layer.
@@ -51,9 +51,10 @@ implementation program. The latter remains a separate external layer.
 ## Acceptance evidence
 
 - Real-Chromium integration covers isolated cookies, localStorage, pages, URLs, password redaction, exact/ambiguous role locators, DOM reads, screenshots, page lifecycle, history, interactions, persistence, ordering, parallelism, timeout recovery, shutdown, disconnect, and cleanup.
+- Real-Chromium wait coverage includes URL/load/locator/text success, exact-case text timeout and queue recovery, same-session read-after-navigation ordering, cross-session independence, waiter-first navigation/response composites, and redacted response URLs.
 - Unit tests cover lifecycle/limits, terminal-record bounds, operation correlation, queue recovery, navigation policy, persistence naming/atomic concurrency, configuration, structured logging, and architecture dependency rules.
 - MCP tests cover the exact public tool set, descriptions, schema rejection, safe structured errors, successful calls, explicit routing, subprocess stdio negotiation, and exit.
-- All 24 current MCP tools publish object-root output schemas, direct structured success fields,
+- All 26 current MCP tools publish object-root output schemas, direct structured success fields,
   human titles, and exact reviewed risk annotations. Contract tests execute every success schema;
   stdio/package tests verify installed discovery. Application errors are bounded JSON-only results
   with typed runtime `operationId` correlation, while SDK input-validation errors remain distinct.
@@ -127,7 +128,7 @@ Latest post-v0.1 slice verification:
 - `npm run verify`: passed (17 files, 63 tests, coverage thresholds, build).
 - `BROWSERMESH_HEADLESS=true npm run verify:package`: passed, including installed-tarball MCP and
   Chromium smoke.
-- ADR 0008 structured-output slice: all 24 current tools now expose direct structured results,
+- ADR 0008 structured-output slice: all 26 current tools now expose direct structured results,
   object-root output schemas, titles, and reviewed annotations; application errors retain bounded
   safe JSON and accepted-operation correlation without exposing causes.
 - `npm run verify`: passed (17 files, 65 tests, coverage thresholds, lint, format, typecheck, build).

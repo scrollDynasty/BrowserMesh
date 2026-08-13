@@ -501,6 +501,8 @@ Tool-description semantics must instead be covered through contract review/tests
 - `browser_get_title`
 - `browser_snapshot`
 - `browser_visible_text`
+- `browser_wait`
+- `browser_action_and_wait`
 - `browser_click`
 - `browser_fill`
 - `browser_press`
@@ -1031,6 +1033,13 @@ A passive wait cannot depend on a later same-session queued action. `browser_act
 atomically registers one typed navigation/response/popup waiter, executes one typed click/press
 action, then awaits both under one shared deadline in one queue slot. All outcomes detach the
 waiter. No implementation may bypass the session queue to compose these operations.
+
+The initial composite implementation covers navigation and response events. Popup support remains
+deferred until popup creation can atomically enforce the session page limit, register the engine
+page in the runtime page registry, and return a BrowserMesh `pageId` without leaking an unmanaged
+page on failure. Passive text matching is a case-sensitive substring check against a bounded
+1,000,000-character rendered body-text observation; `absent` means the substring is not present in
+that bounded observation.
 
 ### 22.4 Bounded observability
 

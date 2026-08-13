@@ -1,4 +1,11 @@
-import type { BrowserStorageState, Locator } from '../../domain/models.js';
+import type {
+  ActionAndWaitResult,
+  ActionWaitCondition,
+  BrowserAction,
+  BrowserStorageState,
+  Locator,
+  WaitCondition,
+} from '../../domain/models.js';
 import type { OperationControl } from '../operation-control.js';
 
 export interface BrowserPageHandle {
@@ -67,5 +74,12 @@ export interface BrowserEnginePort {
     control: OperationControl,
   ): Promise<string>;
   screenshot(page: BrowserPageHandle, control: OperationControl): Promise<Uint8Array>;
+  wait(page: BrowserPageHandle, condition: WaitCondition, control: OperationControl): Promise<void>;
+  actionAndWait(
+    page: BrowserPageHandle,
+    action: BrowserAction,
+    wait: ActionWaitCondition,
+    control: OperationControl,
+  ): Promise<ActionAndWaitResult['event']>;
   storageState(context: BrowserContextHandle): Promise<BrowserStorageState>;
 }

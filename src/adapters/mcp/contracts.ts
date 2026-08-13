@@ -30,6 +30,69 @@ export const savedStateViewSchema = z.object({
 });
 
 const pageOperation = { operationId, sessionId, pageId } as const;
+const locatorSchema = z.discriminatedUnion('strategy', [
+  z.object({
+    strategy: z.literal('role'),
+    value: z.enum([
+      'button',
+      'link',
+      'textbox',
+      'checkbox',
+      'radio',
+      'combobox',
+      'heading',
+      'listitem',
+      'option',
+      'tab',
+    ]),
+    name: z.string().optional(),
+    exact: z.boolean().optional(),
+  }),
+  z.object({
+    strategy: z.enum(['text', 'label', 'placeholder', 'testId', 'css']),
+    value: z.string(),
+  }),
+]);
+const urlMatcherSchema = z.discriminatedUnion('kind', [
+  z.object({ kind: z.literal('exact'), value: z.string() }),
+  z.object({ kind: z.literal('glob'), value: z.string() }),
+]);
+const waitConditionSchema = z.discriminatedUnion('kind', [
+  z.object({ kind: z.literal('url'), matcher: urlMatcherSchema }),
+  z.object({ kind: z.literal('load'), state: z.enum(['domcontentloaded', 'load']) }),
+  z.object({
+    kind: z.literal('locator'),
+    locator: locatorSchema,
+    state: z.enum(['visible', 'hidden', 'attached', 'detached', 'enabled', 'disabled']),
+  }),
+  z.object({ kind: z.literal('text'), text: z.string(), state: z.enum(['present', 'absent']) }),
+]);
+const browserActionSchema = z.discriminatedUnion('kind', [
+  z.object({ kind: z.literal('click'), locator: locatorSchema }),
+  z.object({ kind: z.literal('press'), locator: locatorSchema, key: z.string() }),
+]);
+const actionWaitSchema = z.discriminatedUnion('kind', [
+  z.object({
+    kind: z.literal('navigation'),
+    matcher: urlMatcherSchema.optional(),
+    loadState: z.enum(['domcontentloaded', 'load']).optional(),
+  }),
+  z.object({
+    kind: z.literal('response'),
+    matcher: urlMatcherSchema,
+    method: z.string().optional(),
+    status: z.number().int().optional(),
+  }),
+]);
+const waitedEventSchema = z.discriminatedUnion('kind', [
+  z.object({ kind: z.literal('navigation'), url: z.string() }),
+  z.object({
+    kind: z.literal('response'),
+    url: z.string(),
+    method: z.string().optional(),
+    status: z.number().int().optional(),
+  }),
+]);
 
 export const outputSchemas = {
   browser_runtime_info: z.object({
@@ -73,6 +136,13 @@ export const outputSchemas = {
   browser_screenshot: z.object({
     ...pageOperation,
     mimeType: z.literal('image/png'),
+  }),
+  browser_wait: z.object({ ...pageOperation, condition: waitConditionSchema }),
+  browser_action_and_wait: z.object({
+    ...pageOperation,
+    action: browserActionSchema,
+    wait: actionWaitSchema,
+    event: waitedEventSchema,
   }),
   browser_state_save: z.object({ operationId, sessionId, state: savedStateViewSchema }),
   browser_state_list: z.object({ operationId, states: z.array(savedStateViewSchema) }),
@@ -134,6 +204,14 @@ export const toolPresentation: Readonly<Record<ToolName, ToolPresentation>> = {
   browser_press: presentation('Press key on page element', false, true, false, true),
   browser_select_option: presentation('Select page option', false, false, false, true),
   browser_screenshot: presentation('Capture page screenshot', true, false, true, true),
+  browser_wait: presentation('Wait for browser condition', true, false, true, true),
+  browser_action_and_wait: presentation(
+    'Perform browser action and wait',
+    false,
+    true,
+    false,
+    true,
+  ),
   browser_state_save: presentation('Save browser state', false, true, false, false),
   browser_state_list: presentation('List saved browser states', true, false, true, false),
   browser_state_remove: presentation('Remove saved browser state', false, true, false, false),

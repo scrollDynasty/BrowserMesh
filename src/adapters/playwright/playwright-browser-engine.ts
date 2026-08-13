@@ -2,8 +2,10 @@ import {
   chromium,
   type Browser,
   type BrowserContext,
+  type Frame,
   type Locator as PwLocator,
   type Page,
+  type Response,
 } from 'playwright';
 import { constants } from 'node:fs';
 import { access } from 'node:fs/promises';
@@ -14,9 +16,21 @@ import type {
   BrowserEnginePort,
   BrowserPageHandle,
 } from '../../application/ports/browser-engine.js';
-import { throwIfCancelled, type OperationControl } from '../../application/operation-control.js';
+import {
+  isCancellation,
+  throwIfCancelled,
+  type OperationControl,
+} from '../../application/operation-control.js';
 import { BrowserMeshError } from '../../domain/errors.js';
-import type { BrowserStorageState, Locator } from '../../domain/models.js';
+import type {
+  ActionAndWaitResult,
+  ActionWaitCondition,
+  BrowserAction,
+  BrowserStorageState,
+  Locator,
+  UrlMatcher,
+  WaitCondition,
+} from '../../domain/models.js';
 
 interface ContextHandle extends BrowserContextHandle {
   readonly kind: 'context';
@@ -344,11 +358,121 @@ export class PlaywrightBrowserEngine implements BrowserEnginePort {
     );
   }
 
+  async wait(
+    handle: BrowserPageHandle,
+    condition: WaitCondition,
+    control: OperationControl,
+  ): Promise<void> {
+    throwIfCancelled(control.signal);
+    const page = this.getPage(handle);
+    await this.wrapAction(
+      async () => {
+        switch (condition.kind) {
+          case 'url':
+            await pollUntil(
+              () => Promise.resolve(matchesUrl(page.url(), condition.matcher)),
+              control,
+            );
+            return;
+          case 'load':
+            await pollUntil(async () => {
+              const readyState = await page.evaluate(() => document.readyState);
+              return condition.state === 'load'
+                ? readyState === 'complete'
+                : readyState === 'interactive' || readyState === 'complete';
+            }, control);
+            return;
+          case 'locator': {
+            const locator = this.locate(page, condition.locator);
+            await pollUntil(async (remaining) => {
+              const count = await locator.count();
+              if (count > 1) throw ambiguousLocator(condition.locator);
+              if (condition.state === 'detached') return count === 0;
+              if (condition.state === 'hidden')
+                return count === 0 || (await locator.isHidden({ timeout: remaining }));
+              if (count === 0) return false;
+              if (condition.state === 'attached') return true;
+              if (condition.state === 'visible')
+                return locator.isVisible({ timeout: remaining });
+              const enabled = await locator.isEnabled({ timeout: remaining });
+              return condition.state === 'enabled' ? enabled : !enabled;
+            }, control);
+            return;
+          }
+          case 'text':
+            await pollUntil(async (remaining) => {
+              const body = page.locator('body');
+              if ((await body.count()) === 0) return condition.state === 'absent';
+              const bodyText = await body.evaluate(
+                (element, maximum) => (element as HTMLElement).innerText.slice(0, maximum),
+                MAX_OBSERVED_TEXT,
+                { timeout: remaining },
+              );
+              const present = bodyText.includes(condition.text);
+              return condition.state === 'present' ? present : !present;
+            }, control);
+        }
+      },
+      'BROWSER_ERROR',
+      'Wait condition failed',
+      control.timeoutMs,
+      { condition },
+    );
+  }
+
+  async actionAndWait(
+    handle: BrowserPageHandle,
+    action: BrowserAction,
+    wait: ActionWaitCondition,
+    control: OperationControl,
+  ): Promise<ActionAndWaitResult['event']> {
+    throwIfCancelled(control.signal);
+    const page = this.getPage(handle);
+    const waiter = createEventWaiter(page, wait, control);
+    const actionPromise = this.performCompositeAction(page, action, remainingMs(control.deadlineAt)).catch(
+      (error: unknown) => {
+        waiter.cancel(error);
+        throw error;
+      },
+    );
+    const settled = await Promise.allSettled([actionPromise, waiter.promise]);
+    waiter.dispose();
+    const actionResult = settled[0];
+    const waitResult = settled[1];
+    if (actionResult.status === 'rejected') throw actionResult.reason;
+    if (waitResult.status === 'rejected') throw waitResult.reason;
+    return waitResult.value;
+  }
+
   async storageState(handle: BrowserContextHandle): Promise<BrowserStorageState> {
     return this.wrapBrowserAction(
       () => this.getContext(handle).storageState(),
       'Failed to capture browser storage state',
     );
+  }
+
+  private async performCompositeAction(
+    page: Page,
+    action: BrowserAction,
+    timeoutMs: number,
+  ): Promise<void> {
+    switch (action.kind) {
+      case 'click':
+        await this.wrapElement(
+          () => this.locate(page, action.locator).click({ timeout: timeoutMs }),
+          'click',
+          action.locator,
+          timeoutMs,
+        );
+        return;
+      case 'press':
+        await this.wrapElement(
+          () => this.locate(page, action.locator).press(action.key, { timeout: timeoutMs }),
+          'press',
+          action.locator,
+          timeoutMs,
+        );
+    }
   }
 
   private getContext(handle: BrowserContextHandle): BrowserContext {
@@ -415,6 +539,7 @@ export class PlaywrightBrowserEngine implements BrowserEnginePort {
     } catch (error) {
       if (error instanceof BrowserMeshError) throw error;
       const timedOut = error instanceof Error && error.name === 'TimeoutError';
+      if (isCancellation(error)) throw error;
       const cause = errorMessage(error);
       throw new BrowserMeshError(
         timedOut ? 'OPERATION_TIMEOUT' : code,
@@ -456,6 +581,167 @@ export class PlaywrightBrowserEngine implements BrowserEnginePort {
       if (error instanceof BrowserMeshError) throw error;
       throw new BrowserMeshError('BROWSER_ERROR', message, { cause: error });
     }
+  }
+}
+
+const MAX_OBSERVED_TEXT = 1_000_000;
+
+function matchesUrl(url: string, matcher: UrlMatcher): boolean {
+  if (matcher.kind === 'exact') return url === matcher.value;
+  const expression = matcher.value
+    .split('**')
+    .map((part) => part.split('*').map(escapeRegex).join('[^/]*'))
+    .join('.*');
+  return new RegExp(`^${expression}$`, 'u').test(url);
+}
+
+function escapeRegex(value: string): string {
+  return value.replaceAll(/[\\^$.*+?()[\]{}|]/g, '\\$&');
+}
+
+function remainingMs(deadline: number): number {
+  return Math.max(1, deadline - Date.now());
+}
+
+async function pollUntil(
+  check: (remainingMs: number) => Promise<boolean>,
+  control: OperationControl,
+): Promise<void> {
+  let satisfied = false;
+  while (!satisfied) {
+    throwIfCancelled(control.signal);
+    const remaining = Math.max(1, control.deadlineAt - Date.now());
+    satisfied = await check(remaining);
+    throwIfCancelled(control.signal);
+    if (satisfied) continue;
+    const remainingAfterCheck = control.deadlineAt - Date.now();
+    if (remainingAfterCheck <= 0) throw operationTimeout(control.timeoutMs);
+    await cancellableDelay(Math.min(25, remainingAfterCheck), control.signal);
+  }
+}
+
+function cancellableDelay(delayMs: number, signal?: AbortSignal): Promise<void> {
+  throwIfCancelled(signal);
+  return new Promise<void>((resolve, reject) => {
+    const onAbort = (): void => {
+      clearTimeout(timer);
+      signal?.removeEventListener('abort', onAbort);
+      try {
+        throwIfCancelled(signal);
+      } catch (error) {
+        reject(error);
+      }
+    };
+    const timer = setTimeout(() => {
+      signal?.removeEventListener('abort', onAbort);
+      resolve();
+    }, delayMs);
+    signal?.addEventListener('abort', onAbort, { once: true });
+  });
+}
+
+function operationTimeout(timeoutMs: number): BrowserMeshError {
+  return new BrowserMeshError('OPERATION_TIMEOUT', `Operation exceeded ${String(timeoutMs)}ms`, {
+    details: { timeoutMs },
+  });
+}
+
+function ambiguousLocator(locator: Locator): BrowserMeshError {
+  return new BrowserMeshError('LOCATOR_AMBIGUOUS', 'Locator matched multiple elements', {
+    details: { locator },
+  });
+}
+
+interface EventWaiter {
+  readonly promise: Promise<ActionAndWaitResult['event']>;
+  cancel(error: unknown): void;
+  dispose(): void;
+}
+
+function createEventWaiter(
+  page: Page,
+  wait: ActionWaitCondition,
+  control: OperationControl,
+): EventWaiter {
+  let settled = false;
+  let resolvePromise!: (value: ActionAndWaitResult['event']) => void;
+  let rejectPromise!: (reason: unknown) => void;
+  const promise = new Promise<ActionAndWaitResult['event']>((resolve, reject) => {
+    resolvePromise = resolve;
+    rejectPromise = reject;
+  });
+  const finish = (event: ActionAndWaitResult['event']): void => {
+    if (settled) return;
+    settled = true;
+    resolvePromise(event);
+  };
+  const fail = (error: unknown): void => {
+    if (settled) return;
+    settled = true;
+    rejectPromise(error);
+  };
+  const onNavigation = (frame: Frame): void => {
+    if (frame !== page.mainFrame()) return;
+    const url = frame.url();
+    if (
+      wait.kind !== 'navigation' ||
+      (wait.matcher !== undefined && !matchesUrl(url, wait.matcher))
+    )
+      return;
+    void (async () => {
+      if (wait.loadState !== undefined)
+        await page.waitForLoadState(wait.loadState, { timeout: remainingMs(control.deadlineAt) });
+      finish({ kind: 'navigation', url: safeObservedUrl(url) });
+    })().catch(fail);
+  };
+  const onResponse = (response: Response): void => {
+    if (wait.kind !== 'response') return;
+    const request = response.request();
+    if (!matchesUrl(response.url(), wait.matcher)) return;
+    if (wait.method !== undefined && request.method() !== wait.method) return;
+    if (wait.status !== undefined && response.status() !== wait.status) return;
+    finish({
+      kind: 'response',
+      url: safeObservedUrl(response.url()),
+      method: request.method(),
+      status: response.status(),
+    });
+  };
+  page.on('framenavigated', onNavigation);
+  page.on('response', onResponse);
+  const onAbort = (): void => {
+    try {
+      throwIfCancelled(control.signal);
+    } catch (error) {
+      fail(error);
+    }
+  };
+  control.signal?.addEventListener('abort', onAbort, { once: true });
+  const timeoutMs = remainingMs(control.deadlineAt);
+  const timer = setTimeout(() => fail(operationTimeout(timeoutMs)), timeoutMs);
+  const dispose = (): void => {
+    clearTimeout(timer);
+    control.signal?.removeEventListener('abort', onAbort);
+    page.off('framenavigated', onNavigation);
+    page.off('response', onResponse);
+  };
+  if (control.signal?.aborted === true) onAbort();
+  void promise.finally(dispose).catch(() => undefined);
+  return { promise, cancel: fail, dispose };
+}
+
+function safeObservedUrl(value: string): string {
+  try {
+    const url = new URL(value);
+    url.username = '';
+    url.password = '';
+    url.hash = '';
+    for (const key of [...url.searchParams.keys()]) {
+      if (/token|secret|password|auth|key|code/i.test(key)) url.searchParams.set(key, '[REDACTED]');
+    }
+    return url.href.slice(0, 2_000);
+  } catch {
+    return value.slice(0, 2_000);
   }
 }
 
