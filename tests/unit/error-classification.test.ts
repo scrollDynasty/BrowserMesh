@@ -29,4 +29,12 @@ describe('browser failure classification', () => {
     expect(classifyBrowserFailure(hostile)).toBe('other');
     expect(classifyBrowserFailure('ECONNRESET')).toBe('connection');
   });
+
+  it('does not let URL text override a more specific network reason', () => {
+    expect(
+      classifyBrowserFailure(
+        new Error('page.goto: net::ERR_NAME_NOT_RESOLVED at https://timeout.example'),
+      ),
+    ).toBe('dns');
+  });
 });

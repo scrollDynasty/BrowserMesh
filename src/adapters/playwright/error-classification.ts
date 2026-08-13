@@ -20,7 +20,7 @@ export function classifyBrowserFailure(
   const message = safeErrorField(error, 'message').toLowerCase();
   const text = `${name} ${message}`;
 
-  if (name === 'timeouterror' || /\b(?:timed? out|timeout)\b/u.test(text)) return 'timeout';
+  if (name === 'timeouterror') return 'timeout';
   if (
     /err_(?:invalid_url|invalid_argument)|invalid url|cannot navigate to invalid url/u.test(text)
   ) {
@@ -44,6 +44,7 @@ export function classifyBrowserFailure(
     return 'tls';
   }
   if (/strict mode violation/u.test(text)) return 'locator_ambiguous';
+  if (/\b(?:timed? out|timeout)\b/u.test(text)) return 'timeout';
   return fallback;
 }
 
