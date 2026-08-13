@@ -1083,6 +1083,13 @@ optional bounding boxes, and explicit applied-bound/truncation metadata. Element
 separate later slice: bounded, session/page scoped, invalidated on navigation/page close/DOM
 replacement, and failed with `STALE_ELEMENT_REFERENCE`; engine handles never cross a port.
 
+The completed first snapshot slice provides semantic `scope`, `maxDepth`,
+`includeBoundingBoxes`, `maxChars`, and `maxBytes`. Every result reports normalized
+`appliedBounds`, `partial`, `contentFormat`, and detailed character/byte truncation counts.
+Truncation is Unicode-safe and byte-safe; partial content is an `aria-yaml-fragment`, not a complete
+snapshot. `interactiveOnly`, `maxChildren`, pagination/cursors, and element references remain later
+slices and must not be emulated with undocumented browser-engine references.
+
 Session creation may add validated viewport, device scale, locale, timezone, color scheme, reduced
 motion, user agent, and geolocation with explicit permissions. The normalized effective context is
 returned and tested for cross-session isolation.

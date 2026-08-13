@@ -22,10 +22,13 @@ import type {
   PageView,
   SessionStatus,
   SessionView,
+  SnapshotOptions,
+  SnapshotResult,
   UrlMatcher,
   WaitCondition,
   WaitResult,
 } from '../domain/models.js';
+import { boundSnapshot, normalizeSnapshotOptions } from '../domain/snapshots.js';
 import type { IdGenerator } from '../infrastructure/id.js';
 import { SerialQueue } from './serial-queue.js';
 import {
@@ -437,10 +440,23 @@ export class BrowserMeshRuntime {
     return this.pageOperation(target, (page, control) => this.options.engine.title(page, control));
   }
 
-  snapshot(target: OperationTarget): Promise<PageAddressedOperationResult<string>> {
-    return this.pageOperation(target, (page, control) =>
-      this.options.engine.snapshot(page, control),
-    );
+  snapshot(
+    target: OperationTarget,
+    options: SnapshotOptions = {},
+  ): Promise<PageAddressedOperationResult<SnapshotResult>> {
+    const normalized = normalizeSnapshotOptions(options);
+    return this.pageOperation(target, async (page, control) => {
+      const snapshot = await this.options.engine.snapshot(
+        page,
+        {
+          ...(normalized.scope === undefined ? {} : { scope: normalized.scope }),
+          ...(normalized.maxDepth === undefined ? {} : { maxDepth: normalized.maxDepth }),
+          includeBoundingBoxes: normalized.includeBoundingBoxes,
+        },
+        control,
+      );
+      return boundSnapshot(snapshot, normalized);
+    });
   }
 
   visibleText(

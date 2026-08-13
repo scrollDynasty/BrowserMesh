@@ -557,7 +557,10 @@ and duration; terminal events remove entries and teardown clears the map. Redire
 separate correlated request pairs. Only page-owned HTTP(S) metadata enters the port, including
 EventSource but excluding service-worker traffic, WebSockets, `data:` and `blob:` URLs.
 
-Snapshot bounds, context settings, and new actions are engine-independent value contracts.
+Snapshot bounds, context settings, and new actions are engine-independent value contracts. The
+runtime owns snapshot-content character/UTF-8 limits and explicit partial metadata; the adapter
+uses only documented engine controls for semantic scope, depth, bounding boxes, timeout, and
+cancellation. Truncated ARIA YAML is identified as a fragment rather than a complete document.
 Typed hover, focus, check, uncheck, double-click, and scroll-into-view follow that boundary: MCP
 validates a semantic locator, runtime routes through the addressed session queue, and only the
 Playwright adapter resolves and acts on the concrete locator. Queued cancellation never reaches the

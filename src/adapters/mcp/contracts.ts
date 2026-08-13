@@ -53,6 +53,7 @@ const locatorSchema = z.discriminatedUnion('strategy', [
     value: z.string(),
   }),
 ]);
+const nullableLocatorSchema = locatorSchema.nullable();
 const urlMatcherSchema = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('exact'), value: z.string() }),
   z.object({ kind: z.literal('glob'), value: z.string() }),
@@ -178,7 +179,28 @@ export const outputSchemas = {
   browser_reload: z.object({ ...pageOperation, url: z.string() }),
   browser_get_url: z.object({ ...pageOperation, url: z.string() }),
   browser_get_title: z.object({ ...pageOperation, title: z.string() }),
-  browser_snapshot: z.object({ ...pageOperation, snapshot: z.string() }),
+  browser_snapshot: z.object({
+    ...pageOperation,
+    snapshot: z.string(),
+    contentFormat: z.enum(['aria-yaml', 'aria-yaml-fragment']),
+    partial: z.boolean(),
+    appliedBounds: z.object({
+      scope: nullableLocatorSchema,
+      maxDepth: z.number().int().nonnegative().nullable(),
+      includeBoundingBoxes: z.boolean(),
+      maxChars: z.number().int().positive(),
+      maxBytes: z.number().int().positive(),
+    }),
+    truncation: z.object({
+      truncated: z.boolean(),
+      byMaxChars: z.boolean(),
+      byMaxBytes: z.boolean(),
+      originalChars: z.number().int().nonnegative(),
+      originalBytes: z.number().int().nonnegative(),
+      returnedChars: z.number().int().nonnegative(),
+      returnedBytes: z.number().int().nonnegative(),
+    }),
+  }),
   browser_visible_text: z.object({ ...pageOperation, text: z.string() }),
   browser_console_list: z.object(observationList),
   browser_page_errors_list: z.object(observationList),

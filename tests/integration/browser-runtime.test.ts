@@ -105,7 +105,7 @@ describe('real Chromium runtime', () => {
     expect((await runtime.visibleText(target, { strategy: 'testId', value: 'status' })).value).toBe(
       'clicked',
     );
-    expect((await runtime.snapshot(target)).value).toContain('Submit');
+    expect((await runtime.snapshot(target)).value.snapshot).toContain('Submit');
     expect((await runtime.screenshot(target)).value.startsWith('iVBOR')).toBe(true);
   });
 
@@ -145,6 +145,45 @@ describe('real Chromium runtime', () => {
       ),
     ).rejects.toMatchObject({ code: 'OPERATION_TIMEOUT' });
     await expect(runtime.getTitle(target)).resolves.toMatchObject({ value: 'Typed interactions' });
+  });
+
+  it('captures scoped, depth-limited snapshots with boxes and explicit response bounds', async () => {
+    const target = await createTarget();
+    await runtime.navigate(target, web.baseUrl);
+    const captured = (
+      await runtime.snapshot(target, {
+        scope: { strategy: 'role', value: 'button', name: 'Submit' },
+        maxDepth: 1,
+        includeBoundingBoxes: true,
+        maxChars: 80,
+        maxBytes: 100,
+      })
+    ).value;
+
+    expect(captured.appliedBounds).toEqual({
+      scope: { strategy: 'role', value: 'button', name: 'Submit' },
+      maxDepth: 1,
+      includeBoundingBoxes: true,
+      maxChars: 80,
+      maxBytes: 100,
+    });
+    expect(captured.snapshot).toContain('[box=');
+    expect(captured.snapshot).not.toContain('Choice');
+    expect(captured.truncation.returnedChars).toBeLessThanOrEqual(80);
+    expect(captured.truncation.returnedBytes).toBeLessThanOrEqual(100);
+    expect(captured.contentFormat).toBe(captured.partial ? 'aria-yaml-fragment' : 'aria-yaml');
+  });
+
+  it('cancels snapshot capture and leaves its session queue usable', async () => {
+    const target = await createTarget();
+    await runtime.navigate(target, web.baseUrl);
+    const controller = new AbortController();
+    controller.abort(new DOMException('cancelled by test', 'AbortError'));
+
+    await expect(runtime.snapshot({ ...target, signal: controller.signal })).rejects.toMatchObject({
+      name: 'AbortError',
+    });
+    await expect(runtime.getTitle(target)).resolves.toMatchObject({ value: 'BrowserMesh Test' });
   });
 
   it('collects bounded redacted console and page-error evidence from real Chromium', async () => {
@@ -215,7 +254,7 @@ describe('real Chromium runtime', () => {
     await runtime.fill(target, { strategy: 'label', value: 'Password' }, secretPrefix);
     await runtime.fill(target, { strategy: 'label', value: 'Confirm password' }, secret);
 
-    const captured = (await runtime.snapshot(target)).value;
+    const captured = (await runtime.snapshot(target)).value.snapshot;
 
     expect(captured).not.toContain(secretPrefix);
     expect(captured).not.toContain(secret);

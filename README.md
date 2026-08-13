@@ -318,6 +318,13 @@ A completely unknown session ID still returns `SESSION_NOT_FOUND`.
 - `browser_snapshot`
 - `browser_visible_text`
 
+`browser_snapshot` is bounded by default and may be restricted with a semantic/CSS `scope`,
+`maxDepth`, `includeBoundingBoxes`, `maxChars`, and `maxBytes`. Its structured result reports every
+applied bound plus character/UTF-8 byte counts. When either response cap is reached,
+`partial=true`, `truncation.truncated=true`, and `contentFormat=aria-yaml-fragment`; do not parse
+that fragment as a complete ARIA YAML document. Password values remain redacted. Element refs,
+snapshot cursors/pagination, `interactiveOnly`, and `maxChildren` are not yet public capabilities.
+
 ### Observability
 
 - `browser_console_list`

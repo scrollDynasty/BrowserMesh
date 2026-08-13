@@ -4,8 +4,10 @@ import type {
   ActionWaitCondition,
   BrowserAction,
   Locator,
+  SnapshotOptions,
   WaitCondition,
 } from '../../domain/models.js';
+import { SNAPSHOT_LIMITS } from '../../domain/snapshots.js';
 import { BROWSERMESH_VERSION } from '../../infrastructure/generated/version.js';
 import type { BrowserMeshRuntime, OperationTarget } from '../../runtime/browsermesh-runtime.js';
 import { contractFor } from './contracts.js';
@@ -90,6 +92,14 @@ const networkObservationInputSchema = {
   ...targetSchema,
   sinceEventId: z.string().min(1).max(128).optional(),
   limit: z.number().int().positive().max(200).optional(),
+};
+const snapshotInputSchema = {
+  ...targetSchema,
+  scope: locatorSchema.optional(),
+  maxDepth: z.number().int().min(0).max(SNAPSHOT_LIMITS.maxDepth).optional(),
+  includeBoundingBoxes: z.boolean().optional().default(false),
+  maxChars: z.number().int().positive().max(SNAPSHOT_LIMITS.maxChars).optional(),
+  maxBytes: z.number().int().positive().max(SNAPSHOT_LIMITS.maxBytes).optional(),
 };
 
 function target(
@@ -313,10 +323,26 @@ export function createMcpServer(runtime: BrowserMeshRuntime): McpServer {
     {
       ...contractFor('browser_snapshot'),
       description:
-        'Inspect an accessibility-oriented snapshot of one explicitly addressed page. Non-empty password-input values are redacted before content crosses MCP. Use the snapshot to understand page structure before semantic interaction while preserving session isolation.',
-      inputSchema: targetSchema,
+        'Inspect a bounded accessibility-oriented snapshot of one explicitly addressed page, optionally scoped by a locator, depth-limited, and annotated with viewport bounding boxes. Non-empty password-input values are redacted before content crosses MCP. Results always report applied bounds and truncation; partial content is explicitly aria-yaml-fragment, not a parseable complete snapshot. Element refs and pagination are not provided.',
+      inputSchema: snapshotInputSchema,
     },
-    (input, extra) => pageValue(runtime.snapshot(target(input, extra.signal)), 'snapshot'),
+    (input, extra) =>
+      structuredResult(async () => {
+        const options: SnapshotOptions = {
+          ...(input.scope === undefined ? {} : { scope: input.scope as Locator }),
+          ...(input.maxDepth === undefined ? {} : { maxDepth: input.maxDepth }),
+          includeBoundingBoxes: input.includeBoundingBoxes,
+          ...(input.maxChars === undefined ? {} : { maxChars: input.maxChars }),
+          ...(input.maxBytes === undefined ? {} : { maxBytes: input.maxBytes }),
+        };
+        const captured = await runtime.snapshot(target(input, extra.signal), options);
+        return {
+          operationId: captured.operationId,
+          sessionId: captured.sessionId,
+          pageId: captured.pageId,
+          ...captured.value,
+        };
+      }),
   );
   server.registerTool(
     'browser_visible_text',

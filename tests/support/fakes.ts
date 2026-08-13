@@ -10,7 +10,7 @@ import type {
   StateRepositoryPort,
 } from '../../src/application/ports/state-repository.js';
 import { BrowserMeshError } from '../../src/domain/errors.js';
-import type { BrowserStorageState, Locator } from '../../src/domain/models.js';
+import type { BrowserStorageState, Locator, SnapshotOptions } from '../../src/domain/models.js';
 import type {
   ActionAndWaitResult,
   ActionWaitCondition,
@@ -45,6 +45,9 @@ export class FakeEngine implements BrowserEnginePort {
   onNavigationStart: (() => void) | undefined;
   waitGate: Promise<void> | undefined;
   failNextWait = false;
+  snapshotText = '- document';
+  lastSnapshotOptions:
+    Pick<SnapshotOptions, 'scope' | 'maxDepth' | 'includeBoundingBoxes'> | undefined;
   readonly compositeOrder: string[] = [];
   compositeGate: Promise<void> | undefined;
   onCompositeStart: (() => void) | undefined;
@@ -197,8 +200,12 @@ export class FakeEngine implements BrowserEnginePort {
   async fill(): Promise<void> {}
   async press(): Promise<void> {}
   async selectOption(): Promise<void> {}
-  async snapshot(): Promise<string> {
-    return '- document';
+  async snapshot(
+    _page: BrowserPageHandle,
+    options: Pick<SnapshotOptions, 'scope' | 'maxDepth' | 'includeBoundingBoxes'>,
+  ): Promise<string> {
+    this.lastSnapshotOptions = options;
+    return this.snapshotText;
   }
   async visibleText(_page: BrowserPageHandle, locator: Locator): Promise<string> {
     return locator.value;
