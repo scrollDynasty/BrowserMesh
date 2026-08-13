@@ -36,3 +36,10 @@ New interactions are typed capabilities: hover/focus, check/uncheck, double-clic
 into view, drag/drop, dialog handling, popup wait, iframe-scoped semantic targeting, and full-page or
 element screenshot. Arbitrary JavaScript and arbitrary filesystem paths remain forbidden. Uploads
 and downloads require ADR 0012 first.
+
+The implemented popup/dialog slice extends ADR 0009's atomic action-and-wait family. Popup events
+never return Playwright objects: the runtime assigns a same-session, non-default `pageId`, attaches
+owned lifecycle/observability, enforces `maxPages`, and closes an overflow or failed-registration
+popup. Dialogs are listener-first typed accept/dismiss operations with an expected type, optional
+bounded prompt input, bounded returned metadata, unexpected-dialog dismissal, and no later inspect
+handle. Both remain cancellation-aware and serialized by the owning session queue.

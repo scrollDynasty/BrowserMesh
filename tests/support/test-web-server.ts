@@ -77,6 +77,23 @@ export async function startTestWebServer(): Promise<TestWebServer> {
       );
       return;
     }
+    if (url.pathname === '/popup-dialog-actions') {
+      response.end(
+        page(
+          'Popup and dialog actions',
+          `<button data-testid="popup" onclick="window.open('/popup-destination', '_blank')">Popup</button>
+          <button data-testid="prompt" onclick="document.querySelector('[data-testid=status]').textContent=prompt('Prompt message', 'seed') ?? 'dismissed'">Prompt</button>
+          <button data-testid="confirm" onclick="document.querySelector('[data-testid=status]').textContent=confirm('Confirm message') ? 'accepted' : 'dismissed'">Confirm</button>
+          <button data-testid="alert" onclick="alert('Alert message'); document.querySelector('[data-testid=status]').textContent='handled'">Alert</button>
+          <div data-testid="status">ready</div>`,
+        ),
+      );
+      return;
+    }
+    if (url.pathname === '/popup-destination') {
+      response.end(page('Popup destination', '<div data-testid="status">popup-ready</div>'));
+      return;
+    }
     if (url.pathname === '/action-destination') {
       response.end(page('Action destination', '<div data-testid="status">arrived</div>'));
       return;
