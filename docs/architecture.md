@@ -389,9 +389,15 @@ Operation IDs do not grant permissions and are not secrets.
 - safe message;
 - optional safe details.
 
-Raw Playwright stacks are not part of the public MCP contract. A bounded cause summary and safe
+Raw Playwright stacks/messages are not part of the public MCP contract. A stable reason and safe
 operation context are returned for browser and locator failures. Rejected operations leave the MCP
 transport, runtime, and unrelated sessions available.
+
+The Playwright adapter classifies engine failures into the stable reason enum `timeout`, `dns`,
+`connection`, `tls`, `invalid_url`, `locator_ambiguous`, `element_not_found`, or `other`. The MCP
+adapter independently reads only allowlisted details, strips HTTP(S) URL credentials/query/fragment,
+bounds locator context, and treats getters/proxies as hostile. Raw engine messages and causes remain
+adapter-private.
 
 Important lifecycle/concurrency errors include:
 

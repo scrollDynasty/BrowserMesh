@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { createServer } from 'node:net';
 import type { Browser, BrowserContext } from 'playwright';
 import { PlaywrightBrowserEngine } from '../../src/adapters/playwright/playwright-browser-engine.js';
 import { createOperationControl } from '../../src/application/operation-control.js';
@@ -890,6 +891,7 @@ describe('real Chromium runtime', () => {
     expect(pressError.details).toMatchObject({
       operation: 'press',
       locator: missing,
+      reason: 'timeout',
       timeoutMs: 100,
     });
     expect(pressError.details?.cause).toContain('#missing-select');
@@ -921,16 +923,23 @@ describe('real Chromium runtime', () => {
     });
   });
 
-  it('includes the underlying Chromium failure in navigation errors', async () => {
+  it('classifies a real connection navigation failure without breaking the session', async () => {
     const target = await createTarget();
-    const url = 'http://127.0.0.1:1/';
+    const refusalServer = createServer();
+    await new Promise<void>((resolve) => refusalServer.listen(0, '127.0.0.1', resolve));
+    const address = refusalServer.address();
+    if (address === null || typeof address === 'string') throw new Error('Expected TCP address');
+    await new Promise<void>((resolve, reject) =>
+      refusalServer.close((error) => (error === undefined ? resolve() : reject(error))),
+    );
+    const url = `http://127.0.0.1:${String(address.port)}/`;
 
     const error = await captureBrowserMeshError(
-      runtime.navigate({ ...target, timeoutMs: 1_000 }, url),
+      runtime.navigate({ ...target, timeoutMs: 5_000 }, url),
       'NAVIGATION_FAILED',
     );
     expect(error.message).toContain('ERR_');
-    expect(error.details).toMatchObject({ url, timeoutMs: 1_000 });
+    expect(error.details).toMatchObject({ url, timeoutMs: 5_000, reason: 'connection' });
     expect(error.details?.cause).toContain('ERR_');
     await expect(runtime.getTitle(target)).resolves.toMatchObject({ value: '' });
   });

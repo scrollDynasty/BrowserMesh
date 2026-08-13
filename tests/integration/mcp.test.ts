@@ -521,6 +521,50 @@ describe('MCP adapter', () => {
         ),
       ),
     ).not.toThrow();
+
+    const partlyHostile = Object.create(null) as Record<string, unknown>;
+    Object.defineProperty(partlyHostile, 'timeoutMs', {
+      get: () => {
+        throw new Error('timeout getter secret');
+      },
+    });
+    partlyHostile.reason = 'connection';
+    partlyHostile.url = 'https://user:password@example.test/safe/path?token=secret#private';
+    partlyHostile.locator = new Proxy(
+      { strategy: 'testId', exact: true },
+      {
+        get: (target, property, receiver) => {
+          if (property === 'value') throw new Error('locator getter secret');
+          return Reflect.get(target, property, receiver) as unknown;
+        },
+      },
+    );
+    const hardened = publicErrorSchema.parse(
+      JSON.parse(
+        readText(
+          requireCallResult(
+            applicationErrorResult(
+              new BrowserMeshError('NAVIGATION_FAILED', 'unsafe raw failure', {
+                details: partlyHostile,
+                operationId: 'operation_hardened',
+              }),
+            ),
+          ),
+        ),
+      ),
+    ).error;
+    expect(hardened).toMatchObject({
+      code: 'NAVIGATION_FAILED',
+      operationId: 'operation_hardened',
+      details: {
+        reason: 'connection',
+        url: 'https://example.test/safe/path',
+        locator: { strategy: 'testId', exact: true },
+      },
+    });
+    expect(JSON.stringify(hardened)).not.toContain('password');
+    expect(JSON.stringify(hardened)).not.toContain('token');
+    expect(JSON.stringify(hardened)).not.toContain('secret');
   });
 
   it('maps unexpected runtime-info failures through the safe application error contract', async () => {

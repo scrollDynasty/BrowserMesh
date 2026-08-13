@@ -1,6 +1,6 @@
 # BrowserMesh Professional MCP Improvement Plan
 
-Status: accepted post-v0.1 improvement roadmap; implementation in progress
+Status: accepted post-v0.1 improvement roadmap; source milestones complete, final audit pending
 
 Prepared: 2026-08-13
 
@@ -19,7 +19,8 @@ as a small vertical slice with regression coverage.
 ### 1.1 Accepted and deferred scope
 
 The accepted implementation scope is the ordered milestones in section 13 through bounded context
-options and interactions. The artifact milestone is accepted as **design before code**: its storage,
+options and interactions. Those source milestones are complete. The artifact milestone remains
+accepted as **design before code**: ADR 0012 defines the gate, and a capability-specific storage,
 quota, retention, and redaction ADR must be reviewed before an artifact implementation PR starts.
 
 The following remain deferred and are not completion requirements for this program:
@@ -56,6 +57,11 @@ milestone” mean sequencing and responsibility, not impossibility.
 
 ## 3. Audit baseline
 
+This section is the historical pre-implementation audit. Counts and defects below describe that
+baseline, not the current runtime. Current completion evidence is maintained in
+`docs/IMPLEMENTATION_STATUS.md` and executable contract tests derive the exact tool set from
+`outputSchemas`.
+
 ### 3.1 Confirmed working behavior
 
 A direct MCP client successfully started the locally installed BrowserMesh runtime, discovered 23
@@ -86,10 +92,10 @@ blocker, or implementation milestone. Operators should select an exact BrowserMe
 then run that installed package's documented Playwright browser-install command so the resolved
 Playwright package installs a compatible Chromium binary.
 
-### 3.3 Confirmed server-version defect
+### 3.3 Resolved server-version defect
 
-`src/adapters/mcp/server.ts` constructs `McpServer` with a hard-coded `version: '0.1.0'` while the
-package is `0.1.3`. MCP initialization therefore cannot reliably identify the running artifact.
+The audit found a hard-coded server version. ADR 0007 resolved it with a generated build-time
+version chain verified in source, stdio, manifest, and installed-tarball tests.
 
 Required fix:
 
@@ -105,18 +111,13 @@ Acceptance:
 installed package version == serverInfo.version == server.json version
 ```
 
-### 3.4 Confirmed local no-op and accepted headless configuration
+### 3.4 Resolved local no-op and accepted headless configuration
 
-The local MCP configuration sets `BROWSERMESH_HEADLESS=true`, but `loadConfig()` does not declare
-that variable and `createRuntime()` constructs `new PlaywrightBrowserEngine()` without passing a
-headless value. The current public v0.1 contract intentionally launches headed Chromium, so this is
-not evidence that `master` violates its documented contract. It is a local integration
-misconfiguration: an unsupported environment variable was assumed to exist.
+The audit found that a local configuration assumed an unsupported `BROWSERMESH_HEADLESS` variable.
+ADR 0007 now defines and implements strict `true|false` parsing and adapter propagation while
+preserving the documented default of `false`.
 
-Immediate local fix: remove the unsupported variable instead of relying on it.
-
-Headless operation is accepted as a new public configuration while the default remains `false` to
-preserve the existing headed contract. Implement it as follows:
+The completed headless implementation satisfies the following contract:
 
 - add a centrally validated `BROWSERMESH_HEADLESS` boolean;
 - include `headless` in `BrowserMeshConfig`;
@@ -147,9 +148,9 @@ Improve installation documentation with a deterministic post-install check:
 Do not classify client-side stale discovery as a BrowserMesh defect without a fresh-client
 reproduction.
 
-## 4. P0: runtime diagnostics and operability
+## 4. P0: runtime diagnostics and operability — complete
 
-Add a bounded, read-only `browser_runtime_info` tool. It should return safe structured data:
+The bounded, read-only `browser_runtime_info` tool returns safe structured data:
 
 ```json
 {
@@ -175,7 +176,7 @@ browser, not an inferred Playwright download revision. `playwrightVersion` is th
 version. Do not return absolute private paths, cookies, storage state, tokens, environment dumps,
 launch arguments containing secrets, or full error stacks.
 
-Add a separate `--doctor --json` CLI command for installation diagnosis. It validates:
+The separate `--doctor --json` CLI command validates:
 
 - Node version;
 - package/runtime version consistency;
@@ -189,10 +190,10 @@ Add a separate `--doctor --json` CLI command for installation diagnosis. It vali
 The MCP server must retain lazy browser startup so tool discovery remains available when Chromium is
 missing.
 
-## 5. P0: deterministic waits
+## 5. P0: deterministic waits — complete
 
-Professional agents should never depend on arbitrary sleeps. Add one composable `browser_wait`
-operation routed through the owning session queue.
+Professional clients do not need arbitrary sleeps. The composable `browser_wait` operation is
+routed through the owning session queue.
 
 Initial passive conditions:
 
@@ -224,13 +225,13 @@ adapter must register the response/popup/navigation waiter first, perform the ty
 and await both under one shared deadline. Do not solve this with parallel calls that bypass the
 session queue.
 
-Add real-browser tests for success, timeout, queue recovery, same-session ordering, and
-cross-session parallelism.
+Real-browser tests cover success, timeout, queue recovery, same-session ordering, and cross-session
+parallelism.
 
-## 6. P0: console, page-error, and network observability
+## 6. P0: console, page-error, and network observability — complete
 
-The current tool set cannot independently prove frontend exceptions, failed HTTP requests,
-unexpected retries, or duplicate mutations. Add bounded per-page/per-session collectors.
+Bounded per-page collectors let clients independently inspect frontend exceptions, failed HTTP
+requests, unexpected retries, and duplicate mutations.
 
 Accepted read tools:
 
@@ -278,10 +279,9 @@ Security and resource requirements:
 Body capture, HAR, and tracing should be separate opt-in future work with an ADR and stricter
 redaction/storage policy.
 
-## 7. P0: native structured MCP results
+## 7. P0: native structured MCP results — complete
 
-Most tools currently return JSON serialized inside a text content block. Improve machine
-reliability with MCP-native typed output:
+Every registered tool now uses MCP-native typed output for machine reliability:
 
 - define `outputSchema` for every tool;
 - return `structuredContent` matching it;
@@ -293,10 +293,10 @@ reliability with MCP-native typed output:
 Use a common envelope only where it adds value. Avoid deeply nested `value.value` shapes. A session
 creation response should expose `operationId`, `session`, and `initialPage` directly.
 
-Add contract tests that validate every successful tool result against its output schema and ensure
-error results cannot accidentally contain non-serializable causes or sensitive values.
+Contract tests validate every successful tool result against its output schema and ensure error
+results cannot accidentally contain non-serializable causes or sensitive values.
 
-Add accurate MCP tool annotations (`readOnlyHint`, `destructiveHint`, `idempotentHint`, and
+All tools publish accurate MCP annotations (`readOnlyHint`, `destructiveHint`, `idempotentHint`, and
 `openWorldHint`) and human-readable titles. Treat annotations only as client UX/risk hints, never as
 authorization. Examples:
 
@@ -308,6 +308,14 @@ authorization. Examples:
 - annotations must be verified by contract tests so behavior changes cannot silently make them
   false.
 
+The final error-contract hardening classifies browser failures with the bounded stable reason enum
+`timeout | dns | connection | tls | invalid_url | locator_ambiguous | element_not_found | other`.
+MCP results preserve the accepted operation's `operationId`, but expose only allowlisted bounded
+context. HTTP(S) URL context is reduced to origin and path; credentials, query, and fragment are
+removed. Locator context is limited to strategy, bounded value/name, and exactness. Every detail
+read is independently guarded against throwing getters and proxies. Raw Playwright messages,
+stacks, and causes never cross the public boundary.
+
 Long-running waits, diagnostics, and artifact operations should honor MCP request cancellation.
 Cancellation must detach event listeners/timers, stop useful work promptly where Playwright permits,
 and leave the per-session queue usable. For an MCP request cancelled through the protocol, the
@@ -316,10 +324,10 @@ second tool result after cancellation. Use progress
 notifications only for genuinely multi-step operations with meaningful monotonic progress (for
 example `doctor` or a large artifact export), not for ordinary clicks or waits with no honest total.
 
-## 8. P1: agent-efficient snapshots and element references
+## 8. P1: agent-efficient snapshots and element references — complete
 
 The current full-body ARIA string is useful but can be large and forces repeated locator discovery.
-Add bounded snapshot controls:
+The snapshot contract includes bounded controls:
 
 - `interactiveOnly`;
 - `maxDepth`;
@@ -354,9 +362,9 @@ session/page scope, 30-second TTL, per-page quota/replacement, lifecycle and DOM
 and typed-action support. ADR 0015 completes `interactiveOnly`, per-node `maxChildren`, and stable
 pagination through an engine-neutral YAML-tree transform and bounded immutable cursor store.
 
-## 9. P1: browser-context and interaction coverage
+## 9. P1: browser-context and interaction coverage — complete
 
-Extend `browser_session_create` with validated optional context settings:
+`browser_session_create` accepts validated optional context settings:
 
 - viewport width/height;
 - device scale factor;
@@ -367,10 +375,10 @@ Extend `browser_session_create` with validated optional context settings:
 - user agent;
 - geolocation plus explicit permissions policy.
 
-Return the effective normalized context settings in the session view without secrets. Add isolation
-tests showing that different sessions can use different settings concurrently.
+The session view returns effective normalized context settings without secrets. Isolation tests
+show that different sessions can use different settings concurrently.
 
-Add high-value interactions as separate typed operations or a small coherent action family:
+The completed high-value typed interaction family includes:
 
 - hover and focus;
 - check/uncheck;
@@ -532,20 +540,20 @@ Suggested checkpoint payload:
 BrowserMesh session `name`/metadata may carry neutral correlation labels, but must not become the
 mailbox, source of authorization, or shared task database.
 
-## 13. Delivery sequence
+## 13. Delivered sequence
 
-Implement in independently reviewable milestones:
+The source work was delivered in independently reviewable milestones:
 
 1. Fix runtime version reporting and tests.
 2. Implement and verify `BROWSERMESH_HEADLESS`.
-3. Add `browser_runtime_info` and CLI `--doctor --json`.
+3. Added `browser_runtime_info` and CLI `--doctor --json`.
 4. Convert one representative tool to output schema/structured content, settle the pattern, then
    migrate the remaining tools.
-5. Add deterministic wait conditions.
-6. Add bounded console/page-error collectors.
-7. Add bounded network metadata collectors and redaction.
-8. Add bounded snapshots; introduce refs only with complete stale-ref semantics.
-9. Add context options and high-value interactions.
+5. Added deterministic wait conditions.
+6. Added bounded console/page-error collectors.
+7. Added bounded network metadata collectors and redaction.
+8. Added bounded snapshots and refs with complete stale-ref semantics.
+9. Added context options and high-value interactions.
 10. Review and accept the artifact storage ADR before adding any
     HAR/trace/upload/download implementation; implementation remains a separate, explicitly scoped
     milestone.
