@@ -2,8 +2,9 @@
 
 Updated: 2026-08-13
 
-BrowserMesh v0.1 and the accepted professional MCP improvement program are implemented. A final
-repository-wide adversarial audit is still required before release completion is declared.
+BrowserMesh v0.1 and the accepted professional MCP improvement program are implemented. The final
+repository-wide adversarial audit and clean-environment release gate are complete, with no known
+blocker, critical, or high-severity defect remaining in v0.1 scope.
 
 ## Baseline phases
 
@@ -58,6 +59,9 @@ deferred scope. They are not missing parts of the accepted program.
   returned.
 - Detail sanitization treats getters and proxies as hostile and protects every allowlisted read
   independently, so one throwing field cannot reveal data or suppress other safe fields.
+- Fatal process diagnostics never serialize the rejected/thrown value, stack, message, cause, or
+  hostile object. They emit one bounded stable `INTERNAL_ERROR` diagnostic, attempt deterministic
+  shutdown, surface cleanup failure safely, and exit non-zero.
 
 ## Capability evidence
 
@@ -109,6 +113,19 @@ deferred scope. They are not missing parts of the accepted program.
 
 ## Verification checkpoint
 
+- An independent clean detached worktree audit of `origin/master` at `5470967` used Node 22.22.3
+  and npm 10.9.8. `npm ci` installed 240 packages with zero reported vulnerabilities. The exact
+  `0.1.3` package/lockfile/server/generated version chain and installed/generated Playwright
+  `1.62.1` chain matched.
+- That clean gate passed `npm run verify` with 26 test files and 161 tests (90.48% statements,
+  80.84% branches, 96.15% functions, and 92.81% lines), 50 integration tests, one real e2e test,
+  two stress tests, `BROWSERMESH_HEADLESS=true npm run verify:package`, and all five doctor checks.
+  The packed artifact contained 125 allowlisted files and no source, tests, docs, or private state.
+- MCP inspection found the exact 38-tool registry/discovery set; every tool exposes its reviewed
+  title, annotations, and object-root output schema, and README/SPEC document the complete set.
+- Final fatal-diagnostic hardening verification passes with 28 test files and 171 tests, including
+  direct and subprocess cleanup/exit regressions. Coverage remains above every enforced threshold:
+  90.08% statements, 80.61% branches, 95.11% functions, and 92.44% lines.
 - Combined final error-contract/resource-budget/lifecycle hardening `npm run verify`: passed with 26
   test files and 161 tests, coverage thresholds, strict typecheck, lint, formatting, and production
   build.
@@ -120,9 +137,6 @@ deferred scope. They are not missing parts of the accepted program.
 - Final lifecycle integration preserves stop-during-start cleanup, operation deadline accounting
   from queue acceptance, stale-ref mapping after engine failures, close/shutdown draining, and
   snapshot-cursor immutability while retaining stable public failure reasons.
-
-The parent integration task must still run the final adversarial audit and its full
-fresh-environment matrix before marking release completion.
 
 Known blockers: none.
 

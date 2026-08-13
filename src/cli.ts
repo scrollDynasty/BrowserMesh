@@ -6,6 +6,7 @@ import { PlaywrightBrowserEngine } from './adapters/playwright/playwright-browse
 import { runDoctor, type DoctorResult } from './application/doctor.js';
 import { createRuntime } from './create-runtime.js';
 import { loadConfig, type BrowserMeshConfig } from './infrastructure/config.js';
+import { installFatalProcessHandlers } from './infrastructure/fatal-process-handlers.js';
 import { BROWSERMESH_VERSION } from './infrastructure/generated/version.js';
 import { installChromium } from './install-browser.js';
 
@@ -75,16 +76,7 @@ async function serveMcp(config: BrowserMeshConfig): Promise<void> {
     });
   }
 
-  process.once('uncaughtException', (error) => {
-    process.stderr.write(`${error.stack ?? error.message}\n`);
-    void shutdown().finally(() => process.exit(1));
-  });
-  process.once('unhandledRejection', (reason) => {
-    process.stderr.write(
-      `${reason instanceof Error ? (reason.stack ?? reason.message) : String(reason)}\n`,
-    );
-    void shutdown().finally(() => process.exit(1));
-  });
+  installFatalProcessHandlers({ shutdown });
 
   // Browser startup is intentionally lazy. MCP discovery and error reporting must remain
   // available even when the Playwright-managed Chromium binary has not been installed yet.

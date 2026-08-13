@@ -1,6 +1,6 @@
 # BrowserMesh Professional MCP Improvement Plan
 
-Status: accepted post-v0.1 improvement roadmap; source milestones complete, final audit pending
+Status: complete; accepted source milestones and final clean-environment audit passed
 
 Prepared: 2026-08-13
 
@@ -33,6 +33,19 @@ The following remain deferred and are not completion requirements for this progr
 - live-session reconstruction after browser disconnect.
 
 An implementation PR must not silently expand one milestone into a deferred item.
+
+### 1.2 Final release gate
+
+The final independent audit ran from a clean detached `origin/master` worktree at `5470967` with
+Node 22.22.3 and npm 10.9.8. A clean `npm ci` reported zero vulnerabilities. Full verification
+passed with 26 test files and 161 tests, real integration/e2e/stress coverage, and statement/branch/
+function/line coverage of 90.48%/80.84%/96.15%/92.81%. The headless packed-package smoke, exact
+version chain, five-check doctor smoke, 38-tool discovery/schema review, resource/redaction and
+lifecycle adversarial review all passed. No blocker, critical, or high-severity v0.1 defect was
+found. The final defense-in-depth follow-up also replaces raw fatal-process stack/message logging
+with bounded stable diagnostics and regression coverage for hostile secret-bearing rejection
+values. Its final verification passes 28 test files and 171 tests with 90.08% statement, 80.61%
+branch, 95.11% function, and 92.44% line coverage.
 
 ## 2. Non-negotiable responsibility boundary
 
