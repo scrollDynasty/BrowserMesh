@@ -4,6 +4,13 @@ All notable changes to BrowserMesh are documented in this file.
 
 This project follows [Semantic Versioning](https://semver.org/). Release entries are maintained by [release-please](https://github.com/googleapis/release-please) from Conventional Commit pull-request titles.
 
+## [0.1.5](https://github.com/scrollDynasty/multi-agent-browser-mcp/compare/v0.1.4...v0.1.5) (2026-08-14)
+
+
+### Bug Fixes
+
+* correct GitHub Pages action SHAs ([#44](https://github.com/scrollDynasty/multi-agent-browser-mcp/issues/44)) ([7aa42cd](https://github.com/scrollDynasty/multi-agent-browser-mcp/commit/7aa42cdf27075449c5115adf57514745a61c0162))
+
 ## [0.1.4](https://github.com/scrollDynasty/multi-agent-browser-mcp/compare/v0.1.3...v0.1.4) (2026-08-13)
 
 
