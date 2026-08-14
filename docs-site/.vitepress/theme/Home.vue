@@ -1,32 +1,69 @@
 <script setup lang="ts">
-const capabilities = [
+import { onUnmounted, ref } from 'vue';
+
+const mcpConfig = `{
+  "mcpServers": {
+    "browsermesh": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "multi-agent-browser-mcp"
+      ]
+    }
+  }
+}`;
+
+const setupCommands = [
   {
-    label: 'Identity',
-    title: 'A context for every role',
-    copy: 'Buyer, seller, and admin sessions keep separate cookies, storage, pages, and permission state.',
-    code: '1 session → 1 BrowserContext',
-    accent: 'blue',
+    id: 'install',
+    title: 'Install Chromium',
+    command: 'npx -y multi-agent-browser-mcp --install-browser',
   },
   {
-    label: 'Addressing',
-    title: 'No invisible current tab',
-    copy: 'Every page action names its session and page. A page ID from another session is rejected.',
+    id: 'connect',
+    title: 'Connect your MCP client',
+    command: 'npx -y multi-agent-browser-mcp',
+  },
+  {
+    id: 'session',
+    title: 'Create a session',
+    command: 'browser_session_create',
+  },
+];
+
+const copiedId = ref<string | null>(null);
+let copyResetTimer: ReturnType<typeof setTimeout> | undefined;
+
+function markCopied(id: string): void {
+  copiedId.value = id;
+  clearTimeout(copyResetTimer);
+  copyResetTimer = setTimeout(() => {
+    copiedId.value = null;
+  }, 1800);
+}
+
+onUnmounted(() => clearTimeout(copyResetTimer));
+
+const guarantees = [
+  {
+    title: 'Separate identities',
+    copy: 'Every ready session owns a non-persistent Chromium context with its own cookies, storage, and pages.',
+    code: '1 session = 1 BrowserContext',
+  },
+  {
+    title: 'Explicit targets',
+    copy: 'Page operations name both identifiers. A page reference from another session is rejected.',
     code: '{ sessionId, pageId }',
-    accent: 'mint',
   },
   {
-    label: 'Concurrency',
-    title: 'Order within. Parallel across.',
-    copy: 'Each session has its own operation queue, so independent workflows can move at the same time.',
+    title: 'Predictable ordering',
+    copy: 'Operations serialize inside one session while independent sessions continue in parallel.',
     code: 'queue[sessionId]',
-    accent: 'coral',
   },
   {
-    label: 'Evidence',
-    title: 'Useful output, hard bounds',
-    copy: 'Snapshots, visible text, screenshots, and observations report truncation and applied limits.',
-    code: 'bounded + structured',
-    accent: 'violet',
+    title: 'Bounded results',
+    copy: 'Snapshots, text, screenshots, and observations report the limits applied to their output.',
+    code: 'structured + bounded',
   },
 ];
 </script>
@@ -35,94 +72,69 @@ const capabilities = [
   <main class="bm-home">
     <section class="bm-hero">
       <div class="bm-hero-copy">
-        <p class="bm-product-line"><span>BrowserMesh</span> Documentation</p>
-        <h1>Give every browser identity <em>its own lane.</em></h1>
+        <h1>Isolated browser sessions for MCP clients.</h1>
         <p class="bm-lead">
-          A local multi-session browser runtime for MCP clients. Explicit targets, isolated Chromium
-          contexts, predictable concurrency.
+          Run independent Chromium contexts with explicit targets, deterministic ordering, and no
+          shared current page.
         </p>
         <div class="bm-actions">
-          <a class="bm-button primary" href="./guide/getting-started">Start with one session</a>
-          <a class="bm-button quiet" href="./reference/tools">Browse all 38 tools</a>
+          <a class="bm-button primary" href="./guide/getting-started">Get started</a>
+          <a class="bm-text-link" href="./reference/tools">Explore 38 MCP tools</a>
         </div>
-        <dl class="bm-facts">
-          <div>
-            <dt>Transport</dt>
-            <dd>MCP stdio</dd>
-          </div>
-          <div>
-            <dt>Browser</dt>
-            <dd>Chromium</dd>
-          </div>
-          <div>
-            <dt>Runtime</dt>
-            <dd>Local Node.js</dd>
-          </div>
-        </dl>
       </div>
 
-      <div class="bm-map-wrap">
-        <div
-          class="bm-map"
-          aria-label="One MCP client connected to three isolated browser sessions"
+      <div class="bm-config language-json" role="group" aria-label="MCP configuration">
+        <button
+          type="button"
+          class="copy"
+          :aria-label="copiedId === 'config' ? 'Configuration copied' : 'Copy MCP configuration'"
+          aria-live="polite"
+          @click="markCopied('config')"
         >
-          <div class="bm-map-head">
-            <span>session topology</span>
-            <span class="bm-live"><i></i> runtime ready</span>
-          </div>
-          <div class="bm-client">
-            <span>MCP client</span>
-            <small>plans the workflow</small>
-          </div>
-          <div class="bm-trunk"><span>MCP</span></div>
-          <div class="bm-branch" aria-hidden="true"></div>
-          <div class="bm-contexts">
-            <article class="buyer">
-              <header><i></i><span>buyer</span><b>A</b></header>
-              <p>BrowserContext</p>
-              <small>cookies · storage · pages</small>
-            </article>
-            <article class="seller">
-              <header><i></i><span>seller</span><b>B</b></header>
-              <p>BrowserContext</p>
-              <small>cookies · storage · pages</small>
-            </article>
-            <article class="admin">
-              <header><i></i><span>admin</span><b>C</b></header>
-              <p>BrowserContext</p>
-              <small>cookies · storage · pages</small>
-            </article>
-          </div>
-          <p class="bm-map-note">No shared current page. No identity crossover.</p>
-        </div>
+          {{ copiedId === 'config' ? 'Copied' : 'Copy' }}
+        </button>
+        <span class="lang">stdio</span>
+        <pre><code>{{ mcpConfig }}</code></pre>
+        <div class="bm-config-title">MCP configuration</div>
       </div>
     </section>
 
-    <div class="bm-principles" aria-label="BrowserMesh principles">
-      <span>Explicit addresses</span><i></i><span>Context isolation</span><i></i
-      ><span>Per-session queues</span><i></i><span>Bounded results</span>
-    </div>
-
-    <section class="bm-thesis">
-      <div class="bm-section-label">The runtime boundary</div>
+    <dl class="bm-facts" aria-label="Runtime facts">
       <div>
-        <h2>The client decides.<br />BrowserMesh carries it out.</h2>
+        <dt>Transport</dt>
+        <dd>MCP stdio</dd>
+      </div>
+      <div>
+        <dt>Browser engine</dt>
+        <dd>Chromium</dd>
+      </div>
+      <div>
+        <dt>Runtime</dt>
+        <dd>Local Node.js 22+</dd>
+      </div>
+    </dl>
+
+    <section class="bm-boundary">
+      <div>
+        <p class="bm-kicker">Clear responsibility boundary</p>
+        <h2>The client reasons.<br />BrowserMesh executes.</h2>
+      </div>
+      <div class="bm-boundary-copy">
         <p>
-          Reasoning stays in the external AI client. BrowserMesh owns the difficult browser
-          mechanics: lifecycle, isolation, ordering, persistence, limits, and cleanup.
+          Your AI client plans the workflow and chooses tools. BrowserMesh manages browser
+          lifecycle, isolation, operation order, persistence, limits, and cleanup.
         </p>
-        <a href="./architecture/overview">See how the layers fit together <span>↗</span></a>
+        <a class="bm-text-link" href="./architecture/overview">Read the architecture</a>
       </div>
     </section>
 
-    <section class="bm-capabilities">
-      <div class="bm-cap-head">
-        <div class="bm-section-label">What the runtime guarantees</div>
-        <p>Behavior the client can rely on, not marketing promises.</p>
-      </div>
-      <div class="bm-cap-list">
-        <article v-for="item in capabilities" :key="item.title" :class="item.accent">
-          <span class="bm-cap-label">{{ item.label }}</span>
+    <section class="bm-guarantees">
+      <header>
+        <h2>Runtime guarantees</h2>
+        <p>Contracts an MCP client can rely on during every browser workflow.</p>
+      </header>
+      <div class="bm-guarantee-list">
+        <article v-for="item in guarantees" :key="item.title">
           <h3>{{ item.title }}</h3>
           <p>{{ item.copy }}</p>
           <code>{{ item.code }}</code>
@@ -130,70 +142,40 @@ const capabilities = [
       </div>
     </section>
 
-    <section class="bm-quick">
-      <div class="bm-quick-copy">
-        <div class="bm-section-label light">First connection</div>
-        <h2>Install Chromium.<br />Let your client connect.</h2>
-        <p>Node.js 22 or newer. No hosted control plane and no separate backend.</p>
-        <a href="./guide/getting-started">Open the complete setup guide <span>→</span></a>
+    <section class="bm-setup">
+      <div class="bm-setup-intro">
+        <p class="bm-kicker">First connection</p>
+        <h2>From install to an isolated session.</h2>
+        <p>BrowserMesh stays local. No hosted control plane or separate backend is required.</p>
+        <a class="bm-text-link" href="./guide/getting-started">Open the setup guide</a>
       </div>
-      <ol class="bm-terminal">
-        <li>
-          <span>01</span>
-          <div>
-            <small>Install the managed browser</small
-            ><code>npx -y multi-agent-browser-mcp --install-browser</code>
+      <ol class="bm-setup-list">
+        <li v-for="item in setupCommands" :key="item.id">
+          <strong>{{ item.title }}</strong>
+          <div class="bm-command language-bash">
+            <button
+              type="button"
+              class="copy"
+              :aria-label="
+                copiedId === item.id ? `${item.title} command copied` : `Copy ${item.title} command`
+              "
+              aria-live="polite"
+              @click="markCopied(item.id)"
+            >
+              {{ copiedId === item.id ? 'Copied' : 'Copy' }}
+            </button>
+            <span class="lang">bash</span>
+            <pre><code>{{ item.command }}</code></pre>
           </div>
-        </li>
-        <li>
-          <span>02</span>
-          <div>
-            <small>Configure the stdio command</small><code>npx -y multi-agent-browser-mcp</code>
-          </div>
-        </li>
-        <li>
-          <span>03</span>
-          <div><small>Create an isolated identity</small><code>browser_session_create</code></div>
         </li>
       </ol>
     </section>
 
-    <section class="bm-workflow">
-      <div class="bm-workflow-copy">
-        <div class="bm-section-label">Multi-session by design</div>
-        <h2>Compare roles without mixing them.</h2>
-        <p>
-          Place an order as a buyer while the admin session verifies it. Each lane keeps its own
-          authentication state and can move independently.
-        </p>
-      </div>
-      <div class="bm-lanes">
-        <div class="bm-lane-head">
-          <span>workflow</span><span>isolated session</span><span>context</span>
-        </div>
-        <div class="bm-lane buyer">
-          <strong>Place order</strong><span>buyer</span><code>Context A</code>
-        </div>
-        <div class="bm-lane seller">
-          <strong>Prepare order</strong><span>seller</span><code>Context B</code>
-        </div>
-        <div class="bm-lane admin">
-          <strong>Verify order</strong><span>admin</span><code>Context C</code>
-        </div>
-      </div>
-    </section>
-
-    <section class="bm-cta">
-      <div>
-        <span>Browser runtime for external MCP clients</span>
-        <h2>Keep identities separate.<br />Keep every target explicit.</h2>
-      </div>
-      <div class="bm-actions">
-        <a class="bm-button primary" href="./guide/getting-started">Get started</a>
-        <a class="bm-button quiet" href="https://github.com/scrollDynasty/multi-agent-browser-mcp"
-          >View on GitHub</a
-        >
-      </div>
-    </section>
+    <nav class="bm-next" aria-label="Continue reading">
+      <span>Continue reading</span>
+      <a href="./concepts/sessions">Sessions and pages</a>
+      <a href="./examples/multi-session">Multi-session example</a>
+      <a href="https://github.com/scrollDynasty/multi-agent-browser-mcp">GitHub repository</a>
+    </nav>
   </main>
 </template>

@@ -41,7 +41,27 @@ body {
 
 .VPDoc div[class*='language-'] {
   border: 1px solid var(--bm-line);
-  box-shadow: 0 14px 40px rgb(25 50 105 / 8%);
+  border-radius: var(--bm-radius);
+  box-shadow: none;
+}
+
+.VPDoc div[class*='language-'] > button.copy {
+  opacity: 1;
+}
+
+.VPDoc div[class*='language-'] > span.lang {
+  right: 64px;
+}
+
+@media (max-width: 640px) {
+  .VPDoc div[class*='language-'] > button.copy {
+    width: 44px;
+    height: 44px;
+  }
+
+  .VPDoc div[class*='language-'] > span.lang {
+    right: 68px;
+  }
 }
 
 .VPContent.is-home {
