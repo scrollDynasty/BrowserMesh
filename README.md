@@ -2,6 +2,8 @@
 
 BrowserMesh is a local, open-source browser runtime for external AI clients.
 
+**[Documentation](https://scrolldynasty.github.io/multi-agent-browser-mcp/)** · [Getting started](https://scrolldynasty.github.io/multi-agent-browser-mcp/guide/getting-started) · [MCP tool reference](https://scrolldynasty.github.io/multi-agent-browser-mcp/reference/tools)
+
 It lets Claude Code, Codex, Cursor, Qwen, and other MCP-compatible clients control multiple isolated browser sessions through one MCP server.
 
 BrowserMesh replaces an implicit "current page" model with explicit `sessionId` + `pageId` addressing.

@@ -35,6 +35,9 @@
     "build": "tsc -p tsconfig.build.json",
     "dev": "tsx src/cli.ts",
     "start": "node dist/cli.js",
+    "docs:dev": "vitepress dev docs-site",
+    "docs:build": "vitepress build docs-site",
+    "docs:preview": "vitepress preview docs-site",
     "pretypecheck": "npm run check:version",
     "typecheck": "tsc --noEmit",
     "lint": "eslint .",
@@ -58,6 +61,9 @@
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
+    "@fontsource-variable/jetbrains-mono": "^5.3.0",
+    "@fontsource-variable/outfit": "^5.3.0",
+    "@fontsource-variable/work-sans": "^5.3.0",
     "@types/escape-html": "^1.0.4",
     "@types/node": "^22.20.1",
     "@vitest/coverage-v8": "^4.1.10",
@@ -67,6 +73,8 @@
     "tsx": "^4.23.0",
     "typescript": "^6.0.3",
     "typescript-eslint": "^8.56.1",
+    "vite": "^8.2.1",
+    "vitepress": "2.0.0-alpha.19",
     "vitest": "^4.1.0"
   },
   "repository": {
