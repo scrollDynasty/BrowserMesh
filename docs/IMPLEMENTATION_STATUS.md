@@ -156,11 +156,14 @@ Known blockers: none.
 - Local search, theme switching, responsive navigation, custom accessible home content, the GitHub
   Pages repository base path, and source/edit links are configured.
 - The custom theme is split into token, documentation-shell, home, and responsive CSS modules. It
-  uses locally bundled Outfit, Work Sans, and JetBrains Mono variable fonts with no font CDN call.
+  uses locally bundled Geist and Geist Mono variable fonts with no font CDN call. The home page and
+  README use a restrained developer-documentation system with one accent, real configuration
+  examples, compact responsive layouts, and no product logo or decorative mock interface.
 - `.github/workflows/docs.yml` builds documentation on pull requests and deploys only from `master`
   (or manual dispatch) through GitHub Pages Actions.
-- Documentation validation passed `npm run docs:build`; the repository-wide `npm run verify` passed
-  28 files / 175 tests, and the clean installed-tarball smoke passed with headless Chromium.
+- Documentation redesign validation passed `npm run docs:build`, `npm run typecheck`, `npm run lint`,
+  and `npm run format:check`; the earlier repository-wide verification and installed-tarball smoke
+  remain recorded above.
 
 ## Responsibility boundary and intentional non-scope
 

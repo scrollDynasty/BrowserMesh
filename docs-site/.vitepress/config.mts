@@ -10,7 +10,7 @@ export default defineConfig({
   cleanUrls: true,
   lastUpdated: true,
   head: [
-    ['meta', { name: 'theme-color', content: '#5b5bd6' }],
+    ['meta', { name: 'theme-color', content: '#2457d6' }],
     ['meta', { property: 'og:title', content: 'BrowserMesh documentation' }],
     [
       'meta',
