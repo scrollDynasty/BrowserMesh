@@ -1,0 +1,53 @@
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  background: var(--bm-paper);
+  font-family: var(--bm-body);
+  letter-spacing: -0.01em;
+}
+
+.VPNavBarTitle .title {
+  font-family: var(--bm-display);
+  font-size: 19px;
+  font-weight: 680;
+  letter-spacing: -0.025em;
+}
+
+.VPNavBarTitle .logo {
+  display: none;
+}
+
+.VPNavBarMenuLink,
+.VPNavBarMenuGroup .text {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.VPDoc :is(h1, h2, h3) {
+  font-family: var(--bm-display);
+  letter-spacing: -0.035em;
+}
+
+.VPDoc h1 {
+  font-size: 42px;
+  line-height: 1.06;
+}
+
+.VPDoc table {
+  font-size: 14px;
+}
+
+.VPDoc div[class*='language-'] {
+  border: 1px solid var(--bm-line);
+  box-shadow: 0 14px 40px rgb(25 50 105 / 8%);
+}
+
+.VPContent.is-home {
+  padding: 0 !important;
+}
+
+.VPHome {
+  margin-bottom: 0 !important;
+}

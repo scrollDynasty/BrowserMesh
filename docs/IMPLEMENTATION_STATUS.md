@@ -1,6 +1,6 @@
 # BrowserMesh v0.1 Implementation Status
 
-Updated: 2026-08-13
+Updated: 2026-08-14
 
 BrowserMesh v0.1 and the accepted professional MCP improvement program are implemented. The final
 repository-wide adversarial audit and clean-environment release gate are complete, with no known
@@ -147,6 +147,20 @@ deferred scope. They are not missing parts of the accepted program.
   snapshot-cursor immutability while retaining stable public failure reasons.
 
 Known blockers: none.
+
+## Public documentation website
+
+- A separate VitePress site in `docs-site/` presents the verified v0.1 runtime, all 38 MCP tools,
+  installation/client setup, concepts, architecture, examples, configuration, CLI/errors/results,
+  troubleshooting, development, security/privacy, FAQ, canonical changelog links, and license.
+- Local search, theme switching, responsive navigation, custom accessible home content, the GitHub
+  Pages repository base path, and source/edit links are configured.
+- The custom theme is split into token, documentation-shell, home, and responsive CSS modules. It
+  uses locally bundled Outfit, Work Sans, and JetBrains Mono variable fonts with no font CDN call.
+- `.github/workflows/docs.yml` builds documentation on pull requests and deploys only from `master`
+  (or manual dispatch) through GitHub Pages Actions.
+- Documentation validation passed `npm run docs:build`; the repository-wide `npm run verify` passed
+  28 files / 175 tests, and the clean installed-tarball smoke passed with headless Chromium.
 
 ## Responsibility boundary and intentional non-scope
 
