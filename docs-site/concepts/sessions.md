@@ -4,7 +4,7 @@
 
 A session is BrowserMesh's unit of browser identity and serialization. Each ready session owns one separate, non-persistent Chromium `BrowserContext`.
 
-`browser_session_create` returns both the session view and an initial default page address:
+`browser_session_create` returns both the session view and an initial page reference:
 
 ```json
 {

@@ -74,13 +74,8 @@
     "typescript": "^6.0.3",
     "typescript-eslint": "^8.56.1",
     "vite": "^8.2.1",
-    "vitepress": "^1.6.4",
+    "vitepress": "2.0.0-alpha.19",
     "vitest": "^4.1.0"
-  },
-  "overrides": {
-    "vitepress": {
-      "vite": "6.4.3"
-    }
   },
   "repository": {
     "type": "git",

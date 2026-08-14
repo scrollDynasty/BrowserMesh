@@ -20,7 +20,7 @@ BrowserMesh does not silently retry navigation. Failures are classified into saf
 
 Capture controls include `scope`, `maxDepth`, `includeBoundingBoxes`, `maxChars`, `maxBytes`, `includeRefs`, `maxRefs` (maximum 100), `interactiveOnly`, and `maxChildren` (maximum 1,000). Defaults for booleans are `false`.
 
-If content continues, pass only the returned `cursor` with the page address. Pagination reads an immutable captured serialization; it does not inspect the mutated DOM again. Cursors expire after 30 seconds, are scoped to the page, and become stale on navigation or close.
+If content continues, pass only the returned `pagination.nextCursor` with the page address. Pagination reads an immutable captured serialization; it does not inspect the mutated DOM again. Cursors expire after 30 seconds, are scoped to the page, and become stale on navigation or close.
 
 ```json
 {

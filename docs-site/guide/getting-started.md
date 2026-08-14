@@ -8,7 +8,7 @@ This walkthrough installs Chromium, connects BrowserMesh to an MCP client, and d
 node --version
 ```
 
-Use Node.js 22 or newer.
+Node.js 22 is the minimum supported major version. Node.js 24 is recommended for development.
 
 ## 2. Install Chromium
 
