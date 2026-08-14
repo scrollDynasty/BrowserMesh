@@ -1,111 +1,40 @@
-# BrowserMesh — Multi-Session Browser MCP Runtime
+# BrowserMesh
 
-BrowserMesh is a local, open-source browser runtime for external AI clients.
+Local browser execution for MCP clients, with isolated sessions and explicit page addressing.
 
-**[Documentation](https://scrolldynasty.github.io/multi-agent-browser-mcp/)** · [Getting started](https://scrolldynasty.github.io/multi-agent-browser-mcp/guide/getting-started) · [MCP tool reference](https://scrolldynasty.github.io/multi-agent-browser-mcp/reference/tools)
+- [Documentation](https://scrolldynasty.github.io/multi-agent-browser-mcp/)
+- [Getting started](https://scrolldynasty.github.io/multi-agent-browser-mcp/guide/getting-started)
+- [MCP tool reference](https://scrolldynasty.github.io/multi-agent-browser-mcp/reference/tools)
 
-It lets Claude Code, Codex, Cursor, Qwen, and other MCP-compatible clients control multiple isolated browser sessions through one MCP server.
-
-BrowserMesh replaces an implicit "current page" model with explicit `sessionId` + `pageId` addressing.
-
-Each session runs in its own Chromium `BrowserContext`, so independent users, accounts, roles, and authentication states do not accidentally share cookies, storage, pages, or browser state.
+BrowserMesh lets Claude Code, Codex, Cursor, Qwen, and other MCP-compatible clients operate
+independent Chromium sessions through one local MCP server. Each ready session owns a separate
+`BrowserContext`; every page operation names its `sessionId` and `pageId`.
 
 ```text
-User
-  ↓
 External AI client
-  ↓ MCP
-BrowserMesh
-  ├── Session buyer  → isolated BrowserContext
-  ├── Session seller → isolated BrowserContext
-  └── Session admin  → isolated BrowserContext
+        |
+     MCP stdio
+        |
+BrowserMesh runtime
+   |         |         |
+Session A  Session B  Session C
+Context A  Context B  Context C
 ```
 
-BrowserMesh does not perform LLM reasoning.
+The external client reasons and plans. BrowserMesh executes browser operations, enforces isolation,
+orders work within each session, and returns structured results.
 
-The external MCP client decides what to do. BrowserMesh provides deterministic browser capabilities.
-
-A normal user configures BrowserMesh once and then asks their AI client things like:
-
-> Test the checkout flow as a customer while simultaneously verifying the order from the admin account.
-
-The AI client can discover BrowserMesh tools through MCP, create separate sessions for the required identities, operate them independently, and report the result.
-
-BrowserMesh is not:
-
-- an internal AI-agent framework;
-- an LLM orchestrator;
-- a message bus;
-- a Playwright fork;
-- a browser GUI;
-- an interactive shell that users must operate manually.
-
-## v0.1 architecture
-
-Version 0.1 is intentionally small:
-
-```text
-one Node.js process
-        │
-        ▼
-one Chromium process
-        │
-        ├── BrowserContext A
-        ├── BrowserContext B
-        ├── BrowserContext C
-        └── ...
-```
-
-BrowserMesh v0.1 includes:
-
-- explicit session/page addressing;
-- isolated Chromium contexts;
-- session/page lifecycle;
-- browser navigation and interaction;
-- semantic locators;
-- per-session operation serialization;
-- parallel execution across independent sessions;
-- bounded operation timeouts;
-- structured application errors;
-- Playwright storage-state persistence;
-- MCP stdio integration;
-- deterministic local integration/e2e testing;
-- graceful shutdown and resource cleanup.
-
-Reasoning and workflow orchestration remain in the external MCP client.
-
-## How it is normally used
-
-You normally do **not** call BrowserMesh tools manually.
-
-The intended flow is:
-
-1. Configure BrowserMesh once in your MCP-compatible AI client.
-2. The client starts BrowserMesh as an MCP stdio process.
-3. The client discovers BrowserMesh tools.
-4. You describe the browser task in natural language.
-5. The AI client chooses and invokes the appropriate BrowserMesh tools.
-6. BrowserMesh executes the browser operations and returns structured results.
-
-For tasks involving multiple users, accounts, roles, or authentication states, the external AI client should create a separate BrowserMesh session for each identity.
+> Example: test checkout as a customer while a separate admin session verifies the order.
 
 ## Quick start after npm publication
 
-Once the npm package is published, the expected MCP configuration will use the package executable directly.
-
-Install the Playwright-managed Chromium build once before starting BrowserMesh. This command uses
-the exact Playwright dependency pinned by the selected BrowserMesh package:
+Install the Playwright-managed Chromium build used by BrowserMesh:
 
 ```sh
 npx -y multi-agent-browser-mcp --install-browser
 ```
 
-Playwright browser binaries are versioned separately from the npm package and may need to be
-installed again after a BrowserMesh/Playwright update. If Chromium is missing, BrowserMesh keeps
-MCP discovery available and `browser_session_create` returns an actionable `BROWSER_ERROR` instead
-of terminating the stdio connection.
-
-Example:
+Add BrowserMesh to your MCP client configuration:
 
 ```json
 {
@@ -118,27 +47,46 @@ Example:
 }
 ```
 
-The exact configuration format depends on the MCP client.
+The exact configuration shape depends on the client. BrowserMesh reports its installed package
+version in `serverInfo.version` during MCP initialization.
 
-During MCP initialization, BrowserMesh reports the exact installed package version in
-`serverInfo.version`. This value is generated from package metadata before build/pack and is kept
-in sync with the MCP Registry manifest, so clients can detect stale local installations without
-BrowserMesh reading repository files at runtime.
-
-To diagnose a local installation without starting the MCP transport, run:
+Check a local installation without starting the MCP transport:
 
 ```sh
 npx -y multi-agent-browser-mcp --doctor --json
 ```
 
-The command performs bounded Node/version, private data-directory access, Chromium executable,
-and real launch/context/page/cleanup checks. It emits one schema-versioned JSON result and exits
-non-zero when a required check fails. Messages and remediation never include directory contents,
-executable paths, browser arguments, environment dumps, or raw browser errors.
+Chromium and BrowserMesh remain on the user's machine. No hosted BrowserMesh service is required.
+If Chromium is missing, MCP discovery remains available and `browser_session_create` returns an
+actionable `BROWSER_ERROR`.
 
-BrowserMesh itself remains local: Chromium and BrowserMesh run on the user's machine.
+## v0.1 architecture
 
-No BrowserMesh cloud server is required for the open-source local mode.
+BrowserMesh v0.1 is intentionally small: one local Node.js process, one Chromium process, and one
+non-persistent `BrowserContext` for every ready session.
+
+It provides:
+
+- explicit session and page addressing;
+- isolated browser contexts and page ownership checks;
+- navigation, inspection, interaction, waits, capture, and persistence;
+- per-session serialization with parallel execution across independent sessions;
+- bounded timeouts, structured errors, graceful shutdown, and resource cleanup;
+- MCP stdio integration with deterministic integration and end-to-end tests.
+
+BrowserMesh is a browser runtime, not an internal agent framework, LLM orchestrator, message bus,
+Playwright fork, browser GUI, or interactive shell.
+
+## How it is normally used
+
+1. Configure BrowserMesh once in an MCP-compatible AI client.
+2. The client starts BrowserMesh over stdio and discovers its tools.
+3. Describe the browser task in natural language.
+4. The client creates the required sessions and chooses the tools to invoke.
+5. BrowserMesh executes the operations and returns structured results.
+
+Use a separate session for each user, account, role, authentication state, or independent parallel
+workflow. BrowserMesh tools are normally selected by the external client rather than called by hand.
 
 ## Build from source
 

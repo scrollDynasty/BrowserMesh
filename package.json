@@ -61,9 +61,8 @@
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
-    "@fontsource-variable/jetbrains-mono": "^5.3.0",
-    "@fontsource-variable/outfit": "^5.3.0",
-    "@fontsource-variable/work-sans": "^5.3.0",
+    "@fontsource-variable/geist": "^5.3.0",
+    "@fontsource-variable/geist-mono": "^5.3.0",
     "@types/escape-html": "^1.0.4",
     "@types/node": "^22.20.1",
     "@vitest/coverage-v8": "^4.1.10",
