@@ -1353,13 +1353,12 @@ function normalizeWaitCondition(condition: WaitCondition): WaitCondition {
 }
 
 function normalizeAction(action: BrowserAction): BrowserAction {
-  const target = action.target ?? action.locator;
   if (action.kind === 'press') {
     if (action.key.length === 0 || action.key.length > 64)
       throw new BrowserMeshError('INVALID_ARGUMENT', 'Action key must contain 1 to 64 characters');
-    return { kind: 'press', target, key: action.key };
+    return { kind: 'press', target: action.target, key: action.key };
   }
-  return { kind: 'click', target };
+  return { kind: 'click', target: action.target };
 }
 
 function normalizeActionWait(wait: ActionWaitCondition): ActionWaitCondition {

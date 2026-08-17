@@ -1,5 +1,10 @@
+import { resolve, sep } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { loadConfig } from '../../src/infrastructure/config.js';
+import {
+  ConfigurationError,
+  defaultDataDirectory,
+  loadConfig,
+} from '../../src/infrastructure/config.js';
 
 describe('loadConfig', () => {
   it('applies documented defaults and parses explicit values', () => {
@@ -64,5 +69,52 @@ describe('loadConfig', () => {
     for (const invalid of ['', 'TRUE', '1', 'yes']) {
       expect(() => loadConfig({ BROWSERMESH_HEADLESS: invalid })).toThrow();
     }
+  });
+
+  it('names the rejected variable without leaking a stack or the value', () => {
+    // Configuration is resolved before the fatal-process handlers exist, so an
+    // unformatted throw reached the terminal as a raw stack trace naming
+    // absolute paths. The message has to be readable and say nothing else.
+    let thrown: unknown;
+    try {
+      loadConfig({ BROWSERMESH_MAX_SESSIONS: 'abc' });
+    } catch (error) {
+      thrown = error;
+    }
+
+    expect(thrown).toBeInstanceOf(ConfigurationError);
+    const message = (thrown as ConfigurationError).message;
+    expect(message).toContain('BROWSERMESH_MAX_SESSIONS');
+    expect(message).not.toContain('abc');
+    expect(message).not.toContain('.ts');
+    expect(message).not.toContain(sep);
+    expect(message.split('\n')).toHaveLength(2);
+  });
+
+  it('reports every rejected variable at once', () => {
+    // One variable per run would make fixing a broken configuration a
+    // restart-per-mistake loop.
+    let message = '';
+    try {
+      loadConfig({ BROWSERMESH_MAX_SESSIONS: 'abc', BROWSERMESH_LOG_LEVEL: 'chatty' });
+    } catch (error) {
+      message = (error as ConfigurationError).message;
+    }
+
+    expect(message).toContain('BROWSERMESH_MAX_SESSIONS');
+    expect(message).toContain('BROWSERMESH_LOG_LEVEL');
+  });
+
+  it('keeps saved state in one place regardless of the working directory', () => {
+    // An MCP client spawns BrowserMesh from whichever directory it happens to
+    // be in, so resolving the default against the working directory scattered
+    // saved authentication state across unrelated folders.
+    const defaults = loadConfig({});
+
+    expect(defaults.dataDirectory).toBe(resolve(defaultDataDirectory()));
+    expect(defaults.dataDirectory).not.toBe(resolve('.browsermesh'));
+    expect(loadConfig({ BROWSERMESH_DATA_DIR: '.browsermesh' }).dataDirectory).toBe(
+      resolve('.browsermesh'),
+    );
   });
 });

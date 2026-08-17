@@ -154,21 +154,16 @@ export type WaitCondition =
       readonly state: 'present' | 'absent';
     };
 
+/**
+ * One composite action. `target` is either a semantic/CSS locator or a
+ * short-lived snapshot ref, exactly as the standalone interaction tools accept
+ * (ADR 0013). There is deliberately no second spelling of the same field: a
+ * contract that accepts both `target` and `locator` doubles the largest
+ * published schema and leaves a model choosing between identical options.
+ */
 export type BrowserAction =
-  | { readonly kind: 'click'; readonly target: ElementTarget; readonly locator?: never }
-  | { readonly kind: 'click'; readonly locator: Locator; readonly target?: never }
-  | {
-      readonly kind: 'press';
-      readonly target: ElementTarget;
-      readonly locator?: never;
-      readonly key: string;
-    }
-  | {
-      readonly kind: 'press';
-      readonly locator: Locator;
-      readonly target?: never;
-      readonly key: string;
-    };
+  | { readonly kind: 'click'; readonly target: ElementTarget }
+  | { readonly kind: 'press'; readonly target: ElementTarget; readonly key: string };
 
 export type ActionWaitCondition =
   | {

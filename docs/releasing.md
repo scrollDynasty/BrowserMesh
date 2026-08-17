@@ -80,7 +80,7 @@ After the package exists on npm:
 1. Open the package's npm settings.
 2. Add a GitHub Actions Trusted Publisher:
    - organization/user: `scrollDynasty`;
-   - repository: `multi-agent-browser-mcp`;
+   - repository: `browsermesh`;
    - workflow: `publish.yml`;
    - environment: `npm`.
 3. In GitHub, create the `npm` environment and restrict deployment to protected `v*` tags/maintainers as desired.
@@ -116,9 +116,9 @@ Enable Dependabot alerts/security updates and private vulnerability reporting. `
 
 ```sh
 PACKAGE_VERSION="$(node -p "require('./package.json').version")"
-npm view "multi-agent-browser-mcp@$PACKAGE_VERSION" version dist-tags --json
+npm view "browsermesh@$PACKAGE_VERSION" version dist-tags --json
 curl "https://registry.modelcontextprotocol.io/v0.1/servers?search=io.github.scrollDynasty/browsermesh"
-npx -y "multi-agent-browser-mcp@$PACKAGE_VERSION"
+npx -y "browsermesh@$PACKAGE_VERSION"
 ```
 
 The npm package declares the official Registry identity

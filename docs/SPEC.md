@@ -1103,12 +1103,12 @@ redacted console/error text is caller-requested evidence and must also support m
 Listeners attach once and are detached on page/context close, failed creation, disconnect, and
 shutdown. Ownership checks prevent cross-page or cross-session evidence access.
 
-The console/page-error vertical slice is exposed as `browser_console_list` and
-`browser_page_errors_list`. Both are read-only, execute through the owning session queue, default to
+The console/page-error vertical slice is exposed as `browser_observe` with `source` of `console` or
+`pageError`. Both are read-only, execute through the owning session queue, default to
 metadata-only results, and accept `includeText`, `limit`, and `sinceEventId`.
 
-The completed network slice exposes `browser_network_list` for correlated request/response metadata
-and `browser_failed_requests_list` for transport-level request failures. Both execute through the
+The completed network slice exposes `browser_observe` with `source` of `network` for correlated
+request/response metadata and `requestFailed` for transport-level request failures. Both execute through the
 owning session queue and accept `limit` and `sinceEventId`. A bounded adapter-private in-flight map
 correlates request IDs and durations and discards late terminal events after eviction or teardown.
 Redirect hops are independent request/terminal pairs. Only page-owned HTTP(S) requests are included;

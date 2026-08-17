@@ -120,8 +120,8 @@ describe('BrowserMeshRuntime', () => {
       await runtime.actionAndWait(
         target,
         kind === 'click'
-          ? { kind, locator: { strategy: 'testId', value: 'navigate' } }
-          : { kind, locator: { strategy: 'testId', value: 'navigate' }, key: 'Enter' },
+          ? { kind, target: { strategy: 'testId', value: 'navigate' } }
+          : { kind, target: { strategy: 'testId', value: 'navigate' }, key: 'Enter' },
         { kind: 'navigation', matcher: { kind: 'exact', value: 'https://next.example/' } },
       );
       await expect(runtime.snapshot(target, { cursor })).rejects.toMatchObject({
@@ -135,7 +135,7 @@ describe('BrowserMeshRuntime', () => {
     const created = await runtime.createSession();
     const opened = await runtime.actionAndWait(
       created,
-      { kind: 'click', locator: { strategy: 'testId', value: 'popup' } },
+      { kind: 'click', target: { strategy: 'testId', value: 'popup' } },
       { kind: 'popup' },
     );
     expect(opened.value.event).toMatchObject({
@@ -147,7 +147,7 @@ describe('BrowserMeshRuntime', () => {
     await expect(
       runtime.actionAndWait(
         created,
-        { kind: 'click', locator: { strategy: 'testId', value: 'popup' } },
+        { kind: 'click', target: { strategy: 'testId', value: 'popup' } },
         { kind: 'popup' },
       ),
     ).rejects.toMatchObject({ code: 'LIMIT_EXCEEDED' });
@@ -161,7 +161,7 @@ describe('BrowserMeshRuntime', () => {
     const created = await runtime.createSession();
     const handled = await runtime.actionAndWait(
       created,
-      { kind: 'press', locator: { strategy: 'testId', value: 'prompt' }, key: 'Enter' },
+      { kind: 'press', target: { strategy: 'testId', value: 'prompt' }, key: 'Enter' },
       { kind: 'dialog', dialogType: 'prompt', action: 'accept', promptText: 'answer' },
     );
     expect(handled.value.event).toEqual({
@@ -174,7 +174,7 @@ describe('BrowserMeshRuntime', () => {
     await expect(
       runtime.actionAndWait(
         created,
-        { kind: 'click', locator: { strategy: 'testId', value: 'confirm' } },
+        { kind: 'click', target: { strategy: 'testId', value: 'confirm' } },
         { kind: 'dialog', dialogType: 'confirm', action: 'dismiss', promptText: 'invalid' },
       ),
     ).rejects.toMatchObject({ code: 'INVALID_ARGUMENT' });
@@ -683,7 +683,7 @@ describe('BrowserMeshRuntime', () => {
     const created = await runtime.createSession();
     const result = await runtime.actionAndWait(
       { sessionId: created.sessionId, pageId: created.pageId },
-      { kind: 'click', locator: { strategy: 'role', value: 'button', name: 'Continue' } },
+      { kind: 'click', target: { strategy: 'role', value: 'button', name: 'Continue' } },
       { kind: 'navigation', matcher: { kind: 'exact', value: 'https://next.example/' } },
     );
     expect(engine.compositeOrder).toEqual(['waiter', 'click']);
@@ -707,7 +707,7 @@ describe('BrowserMeshRuntime', () => {
     engine.onCompositeStart = startedComposite;
     const composite = runtime.actionAndWait(
       target,
-      { kind: 'press', locator: { strategy: 'testId', value: 'submit' }, key: 'Enter' },
+      { kind: 'press', target: { strategy: 'testId', value: 'submit' }, key: 'Enter' },
       { kind: 'response', matcher: { kind: 'exact', value: 'https://api.example/result' } },
     );
     await started;

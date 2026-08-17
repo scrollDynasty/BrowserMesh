@@ -1,5 +1,5 @@
 {
-  "name": "multi-agent-browser-mcp",
+  "name": "browsermesh",
   "version": "0.1.5",
   "mcpName": "io.github.scrollDynasty/browsermesh",
   "description": "Local isolated multi-session browser runtime for external MCP clients",
@@ -66,6 +66,7 @@
     "@types/escape-html": "^1.0.4",
     "@types/node": "^22.20.1",
     "@vitest/coverage-v8": "^4.1.10",
+    "ajv": "^8.20.0",
     "escape-html": "^1.0.3",
     "eslint": "^10.0.2",
     "prettier": "^3.9.0",

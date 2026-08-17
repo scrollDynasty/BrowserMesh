@@ -1,6 +1,3 @@
-import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
-import type { Transport } from '@modelcontextprotocol/sdk/shared/transport.js';
-
 /**
  * `tools/list` schemas must declare the JSON Schema dialect that MCP clients
  * actually validate against.
@@ -16,24 +13,15 @@ import type { Transport } from '@modelcontextprotocol/sdk/shared/transport.js';
  * `tests/unit/schema-dialect.test.ts` pins that equivalence: a future contract
  * using a construct that genuinely differs between the drafts fails there
  * instead of silently publishing a mislabelled schema.
+ *
+ * The declared dialect also has to be accurate for `schema-compaction.ts` to be
+ * sound: `$ref` alongside sibling keywords is 2020-12 behaviour.
+ * `tool-schema-publication.ts` owns the transport seam both corrections share.
  */
 export const JSON_SCHEMA_2020_12_DIALECT = 'https://json-schema.org/draft/2020-12/schema';
 
 const DRAFT_07_DIALECT = 'http://json-schema.org/draft-07/schema#';
 const SCHEMA_KEYS = ['inputSchema', 'outputSchema'] as const;
-
-/**
- * Publish every tool schema under the 2020-12 dialect by correcting the
- * outgoing `tools/list` result. Wrapping `connect` keeps the correction on the
- * single seam every transport goes through, so stdio and in-memory clients
- * observe the same contract.
- */
-export function withDraft202012ToolSchemas(server: McpServer): McpServer {
-  const connect = server.connect.bind(server);
-  server.connect = async (transport: Transport): Promise<void> =>
-    connect(draft202012Transport(transport));
-  return server;
-}
 
 /**
  * Correct a JSON-RPC message in place of the raw SDK output. Anything that is
@@ -47,29 +35,6 @@ export function normalizeToolSchemaDialect<Message>(message: Message): Message {
     ...message,
     result: { ...result, tools: result.tools.map(normalizeTool) },
   };
-}
-
-function draft202012Transport(transport: Transport): Transport {
-  // A proxy forwards the mutable `onmessage`/`onclose`/`onerror` handles and any
-  // future SDK transport member without restating the interface here.
-  return new Proxy(transport, {
-    get(target, property) {
-      if (property === 'send') {
-        return async (
-          message: Parameters<Transport['send']>[0],
-          options?: Parameters<Transport['send']>[1],
-        ): Promise<void> => target.send(normalizeToolSchemaDialect(message), options);
-      }
-      const value: unknown = Reflect.get(target, property, target);
-      // Bound to the transport so methods keep reaching their private fields.
-      return typeof value === 'function'
-        ? (value as (...args: readonly unknown[]) => unknown).bind(target)
-        : value;
-    },
-    set(target, property, value: unknown) {
-      return Reflect.set(target, property, value, target);
-    },
-  });
 }
 
 function normalizeTool(tool: unknown): unknown {

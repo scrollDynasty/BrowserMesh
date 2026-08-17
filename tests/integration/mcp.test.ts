@@ -327,13 +327,17 @@ describe('MCP adapter', () => {
         level: 'error',
         text: 'token=mcp-secret failed',
       });
-      const defaultConsole = await callSuccess(client, 'browser_console_list', target);
+      const defaultConsole = await callSuccess(client, 'browser_observe', {
+        ...target,
+        source: 'console',
+      });
       const defaultConsoleEvent = z
         .object({ events: z.array(z.object({ text: z.string().optional() })).min(1) })
         .parse(defaultConsole.structuredContent).events[0];
       expect(defaultConsoleEvent).not.toHaveProperty('text');
-      const textConsole = await callSuccess(client, 'browser_console_list', {
+      const textConsole = await callSuccess(client, 'browser_observe', {
         ...target,
+        source: 'console',
         includeText: true,
       });
       expect(
@@ -341,7 +345,11 @@ describe('MCP adapter', () => {
           .object({ events: z.array(z.object({ text: z.string() })).min(1) })
           .parse(textConsole.structuredContent).events[0]?.text,
       ).toBe('token=[REDACTED] failed');
-      await callSuccess(client, 'browser_page_errors_list', { ...target, includeText: false });
+      await callSuccess(client, 'browser_observe', {
+        ...target,
+        source: 'pageError',
+        includeText: false,
+      });
       engine.emitObservation(targetHandle, {
         kind: 'request',
         requestId: 'request_mcp',
@@ -358,10 +366,16 @@ describe('MCP adapter', () => {
         durationMs: 12,
         failure: 'token=failure-message-secret connection reset',
       });
-      const network = await callSuccess(client, 'browser_network_list', target);
+      const network = await callSuccess(client, 'browser_observe', {
+        ...target,
+        source: 'network',
+      });
       expect(JSON.stringify(network)).not.toContain('mcp-network-secret');
       expect(JSON.stringify(network)).not.toContain('password@');
-      const failures = await callSuccess(client, 'browser_failed_requests_list', target);
+      const failures = await callSuccess(client, 'browser_observe', {
+        ...target,
+        source: 'requestFailed',
+      });
       expect(JSON.stringify(failures)).not.toContain('failure-message-secret');
       expect(JSON.stringify(failures)).not.toContain('mcp-failure-secret');
       await callSuccess(client, 'browser_click', {
@@ -434,7 +448,7 @@ describe('MCP adapter', () => {
       });
       const popupResult = await callSuccess(client, 'browser_action_and_wait', {
         ...target,
-        action: { kind: 'click', locator: { strategy: 'testId', value: 'popup' } },
+        action: { kind: 'click', target: { strategy: 'testId', value: 'popup' } },
         wait: { kind: 'popup' },
       });
       expect(popupResult.structuredContent).toMatchObject({
@@ -442,7 +456,7 @@ describe('MCP adapter', () => {
       });
       const dialogResult = await callSuccess(client, 'browser_action_and_wait', {
         ...target,
-        action: { kind: 'click', locator: { strategy: 'testId', value: 'prompt' } },
+        action: { kind: 'click', target: { strategy: 'testId', value: 'prompt' } },
         wait: {
           kind: 'dialog',
           dialogType: 'prompt',
@@ -490,6 +504,149 @@ describe('MCP adapter', () => {
       await server.close();
       await runtime.shutdown();
     }
+  });
+
+  it('reads every observation source through one contract and refuses text it cannot carry', async () => {
+    const { runtime, engine } = testRuntime();
+    const server = createMcpServer(runtime);
+    const client = new Client({ name: 'observe-client', version: '1.0.0' });
+    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+    await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
+    try {
+      const created = await callSuccess(client, 'browser_session_create', {});
+      const page = z
+        .object({ initialPage: z.object({ sessionId: z.string(), pageId: z.string() }) })
+        .parse(created.structuredContent).initialPage;
+      const handle = requiredValue(Array.from(engine.pages.values())[0]);
+      engine.emitObservation(handle, { kind: 'console', level: 'error', text: 'boom' });
+      engine.emitObservation(handle, {
+        kind: 'request_failed',
+        requestId: 'r1',
+        method: 'GET',
+        url: 'https://example.test/x',
+        resourceType: 'fetch',
+        durationMs: 3,
+        failure: 'connection reset',
+      });
+
+      for (const source of ['console', 'pageError', 'network', 'requestFailed'] as const) {
+        const listed = await callSuccess(client, 'browser_observe', { ...page, source });
+        // The source is echoed because a caller reading several sources into
+        // one buffer cannot otherwise tell the pages of results apart.
+        expect(outputSchemas.browser_observe.parse(listed.structuredContent).source).toBe(source);
+      }
+
+      const consoleEvents = outputSchemas.browser_observe.parse(
+        (await callSuccess(client, 'browser_observe', { ...page, source: 'console' }))
+          .structuredContent,
+      ).events;
+      expect(consoleEvents[0]).not.toHaveProperty('text');
+
+      for (const source of ['network', 'requestFailed'] as const) {
+        // Silently ignoring includeText would hand back a metadata-only answer
+        // that looks like complete evidence.
+        const refused = requireCallResult(
+          await client.callTool({
+            name: 'browser_observe',
+            arguments: { ...page, source, includeText: true },
+          }),
+        );
+        expect(refused.isError, source).toBe(true);
+        // Reported as MCP input validation so the message can name the field;
+        // a BrowserMeshError would arrive as the fixed INVALID_ARGUMENT text.
+        expect(readText(refused)).toContain('Input validation error');
+        expect(readText(refused)).toContain('includeText');
+      }
+    } finally {
+      await client.close();
+      await server.close();
+      await runtime.shutdown();
+    }
+  });
+
+  it('publishes only the profiles the configuration selects', async () => {
+    const { runtime } = testRuntime();
+    const server = createMcpServer(runtime, { tools: 'core' });
+    const client = new Client({ name: 'profile-client', version: '1.0.0' });
+    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+    await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
+    try {
+      const names = (await client.listTools()).tools.map(({ name }) => name);
+
+      expect(names).toContain('browser_navigate');
+      expect(names).not.toContain('browser_observe');
+      expect(names).not.toContain('browser_state_save');
+
+      // A withdrawn tool must be uncallable, not merely undiscoverable.
+      const withdrawn = requireCallResult(
+        await client.callTool({ name: 'browser_state_list', arguments: {} }),
+      );
+      expect(withdrawn.isError).toBe(true);
+      expect(readText(withdrawn)).toContain('browser_state_list');
+    } finally {
+      await client.close();
+      await server.close();
+      await runtime.shutdown();
+    }
+  });
+
+  it('publishes exactly one way to address a composite action target', async () => {
+    const { runtime } = testRuntime();
+    const server = createMcpServer(runtime);
+    const client = new Client({ name: 'action-client', version: '1.0.0' });
+    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+    await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
+    try {
+      const created = await callSuccess(client, 'browser_session_create', {});
+      const page = z
+        .object({ initialPage: z.object({ sessionId: z.string(), pageId: z.string() }) })
+        .parse(created.structuredContent).initialPage;
+
+      // `locator` used to be accepted alongside `target` for the same action.
+      // It doubled the largest published contract and left a model choosing
+      // between two spellings of one field, so only `target` remains.
+      const rejected = requireCallResult(
+        await client.callTool({
+          name: 'browser_action_and_wait',
+          arguments: {
+            ...page,
+            action: { kind: 'click', locator: { strategy: 'testId', value: 'submit' } },
+            wait: { kind: 'popup' },
+          },
+        }),
+      );
+      expect(rejected.isError).toBe(true);
+      // The SDK reports this as MCP input validation, which stays
+      // distinguishable from a BrowserMesh application error.
+      expect(readText(rejected)).toContain('Input validation error');
+      expect(readText(rejected)).toContain('action.target');
+
+      const schema = (await client.listTools()).tools.find(
+        ({ name }) => name === 'browser_action_and_wait',
+      )?.inputSchema;
+      expect(JSON.stringify(schema)).not.toContain('"locator"');
+    } finally {
+      await client.close();
+      await server.close();
+      await runtime.shutdown();
+    }
+  });
+
+  it('publishes a tool surface small enough to share a client context window', async () => {
+    // Discovery is paid once per session, in context, by every client. A client
+    // that has to fit several MCP servers in one window drops the most
+    // expensive one, so the size of this payload is an adoption property and is
+    // budgeted here rather than left to drift with the contracts.
+    const compact = await discoveredToolPayload({});
+    const expanded = await discoveredToolPayload({
+      toolSchemas: { shareRepeatedSubschemas: false },
+    });
+
+    expect(compact.bytes).toBeLessThan(expanded.bytes * 0.85);
+    expect(compact.bytes).toBeLessThan(TOOL_DISCOVERY_BYTE_BUDGET);
+    // Every reference a client receives has to resolve inside the schema that
+    // carries it, or the tool is undiscoverable rather than merely large.
+    expect(compact.danglingReferences).toEqual([]);
   });
 
   it('bounds application errors and removes causes, cycles, bigint, and secret fields', () => {
@@ -776,4 +933,55 @@ function draftSevenOnlyKeywords(schema: unknown): string[] {
 function requiredValue<T>(value: T | null | undefined): T {
   if (value === undefined || value === null) throw new Error('Expected test value');
   return value;
+}
+
+/**
+ * Serialized size of `tools/list` as a client receives it. The ceiling is set
+ * above the current payload with room for ordinary contract work; crossing it
+ * should be a deliberate decision, not a surprise.
+ */
+const TOOL_DISCOVERY_BYTE_BUDGET = 115_000;
+
+async function discoveredToolPayload(
+  options: Parameters<typeof createMcpServer>[1],
+): Promise<{ bytes: number; danglingReferences: string[] }> {
+  const { runtime } = testRuntime();
+  const server = createMcpServer(runtime, options);
+  const client = new Client({ name: 'size-client', version: '1.0.0' });
+  const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+  await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
+  try {
+    const discovered = await client.listTools();
+    return {
+      bytes: JSON.stringify(discovered.tools).length,
+      danglingReferences: discovered.tools.flatMap((tool) => [
+        ...unresolvedReferences(tool.inputSchema),
+        ...unresolvedReferences(tool.outputSchema),
+      ]),
+    };
+  } finally {
+    await client.close();
+    await server.close();
+    await runtime.shutdown();
+  }
+}
+
+/** Every `$ref` in one schema that does not name a definition the schema carries. */
+function unresolvedReferences(schema: unknown): string[] {
+  if (typeof schema !== 'object' || schema === null) return [];
+  const definitions = (schema as { $defs?: Record<string, unknown> }).$defs ?? {};
+  const collect = (node: unknown): string[] => {
+    if (Array.isArray(node)) return node.flatMap(collect);
+    if (typeof node !== 'object' || node === null) return [];
+    const found: string[] = [];
+    for (const [keyword, value] of Object.entries(node)) {
+      if (keyword === '$ref' && typeof value === 'string') {
+        const name = value.replace('#/$defs/', '');
+        if (!Object.prototype.hasOwnProperty.call(definitions, name)) found.push(value);
+      }
+      found.push(...collect(value));
+    }
+    return found;
+  };
+  return collect(schema);
 }

@@ -130,48 +130,6 @@ const locatorSchema = z.discriminatedUnion('strategy', [
   }),
 ]);
 const nullableLocatorSchema = locatorSchema.nullable();
-const elementTargetSchema = z.union([
-  locatorSchema,
-  z.object({ ref: z.string().regex(/^@e[a-f0-9]{32}$/u) }),
-]);
-const urlMatcherSchema = z.discriminatedUnion('kind', [
-  z.object({ kind: z.literal('exact'), value: z.string() }),
-  z.object({ kind: z.literal('glob'), value: z.string() }),
-]);
-const waitConditionSchema = z.discriminatedUnion('kind', [
-  z.object({ kind: z.literal('url'), matcher: urlMatcherSchema }),
-  z.object({ kind: z.literal('load'), state: z.enum(['domcontentloaded', 'load']) }),
-  z.object({
-    kind: z.literal('locator'),
-    locator: locatorSchema,
-    state: z.enum(['visible', 'hidden', 'attached', 'detached', 'enabled', 'disabled']),
-  }),
-  z.object({ kind: z.literal('text'), text: z.string(), state: z.enum(['present', 'absent']) }),
-]);
-const browserActionSchema = z.discriminatedUnion('kind', [
-  z.object({ kind: z.literal('click'), target: elementTargetSchema }),
-  z.object({ kind: z.literal('press'), target: elementTargetSchema, key: z.string() }),
-]);
-const actionWaitSchema = z.discriminatedUnion('kind', [
-  z.object({
-    kind: z.literal('navigation'),
-    matcher: urlMatcherSchema.optional(),
-    loadState: z.enum(['domcontentloaded', 'load']).optional(),
-  }),
-  z.object({
-    kind: z.literal('response'),
-    matcher: urlMatcherSchema,
-    method: z.string().optional(),
-    status: z.number().int().optional(),
-  }),
-  z.object({ kind: z.literal('popup') }),
-  z.object({
-    kind: z.literal('dialog'),
-    dialogType: z.enum(['alert', 'beforeunload', 'confirm', 'prompt']),
-    action: z.enum(['accept', 'dismiss']),
-    promptText: z.string().optional(),
-  }),
-]);
 const waitedEventSchema = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('navigation'), url: z.string() }),
   z.object({
@@ -233,8 +191,17 @@ const observationEventSchema = z.discriminatedUnion('kind', [
     failure: z.string(),
   }),
 ]);
+/**
+ * The four observation sources a page records. They differ only in which
+ * events they select, so they are selected by argument rather than by four
+ * tools carrying four copies of one contract (ADR 0020).
+ */
+export const observationSources = ['console', 'pageError', 'network', 'requestFailed'] as const;
+export type ObservationSource = (typeof observationSources)[number];
+
 const observationList = {
   ...pageOperation,
+  source: z.enum(observationSources),
   events: z.array(observationEventSchema),
   nextCursor: z.string().nullable(),
   droppedCount: z.number().int().nonnegative(),
@@ -358,10 +325,7 @@ export const outputSchemas = {
       maxBytes: z.number().int().positive(),
     }),
   }),
-  browser_console_list: z.object(observationList),
-  browser_page_errors_list: z.object(observationList),
-  browser_network_list: z.object(observationList),
-  browser_failed_requests_list: z.object(observationList),
+  browser_observe: z.object(observationList),
   browser_click: z.object({ ...pageOperation, completed: z.literal(true) }),
   browser_double_click: z.object({ ...pageOperation, completed: z.literal(true) }),
   browser_hover: z.object({ ...pageOperation, completed: z.literal(true) }),
@@ -381,13 +345,14 @@ export const outputSchemas = {
     height: z.number().int().positive(),
     bytes: z.number().int().positive(),
   }),
-  browser_wait: z.object({ ...pageOperation, condition: waitConditionSchema }),
-  browser_action_and_wait: z.object({
-    ...pageOperation,
-    action: browserActionSchema,
-    wait: actionWaitSchema,
-    event: waitedEventSchema,
-  }),
+  // Neither result restates the request. The caller already holds the
+  // condition, action, and wait it sent, and `operationId` correlates the
+  // result without them; `event` reports what was actually observed, which is
+  // the only part the caller could not already know. Echoing the arguments back
+  // put the whole locator union on the result side of the two largest
+  // contracts for no information (ADR 0020).
+  browser_wait: z.object({ ...pageOperation, satisfied: z.literal(true) }),
+  browser_action_and_wait: z.object({ ...pageOperation, event: waitedEventSchema }),
   browser_state_save: z.object({ operationId, sessionId, state: savedStateViewSchema }),
   browser_state_list: z.object({ operationId, states: z.array(savedStateViewSchema) }),
   browser_state_remove: z.object({
@@ -443,16 +408,7 @@ export const toolPresentation: Readonly<Record<ToolName, ToolPresentation>> = {
   browser_get_title: presentation('Get browser page title', true, false, true, true),
   browser_snapshot: presentation('Get accessibility snapshot', true, false, true, true),
   browser_visible_text: presentation('Get visible page text', true, false, true, true),
-  browser_console_list: presentation('List browser console events', true, false, true, true),
-  browser_page_errors_list: presentation('List browser page errors', true, false, true, true),
-  browser_network_list: presentation('List browser network events', true, false, true, true),
-  browser_failed_requests_list: presentation(
-    'List failed browser requests',
-    true,
-    false,
-    true,
-    true,
-  ),
+  browser_observe: presentation('Read page observations', true, false, true, true),
   browser_click: presentation('Click page element', false, true, false, true),
   browser_double_click: presentation('Double-click page element', false, true, false, true),
   browser_hover: presentation('Hover over page element', false, false, true, true),

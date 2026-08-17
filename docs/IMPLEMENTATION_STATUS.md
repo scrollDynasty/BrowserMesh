@@ -1,6 +1,38 @@
 # BrowserMesh v0.1 Implementation Status
 
-Updated: 2026-08-14
+Updated: 2026-08-17
+
+## Adoption program (ADR 0019, ADR 0020)
+
+Measured against a competitive review of `@playwright/mcp` and `chrome-devtools-mcp`, the runtime
+was sound but expensive and awkward to adopt. Discovery cost 134,839 bytes — 7.3× the official
+Playwright MCP server — `--help` exited with status 2, and a first run failed on a missing browser.
+The following are complete.
+
+| Change                                                        | Result                                                      | Contract |
+| ------------------------------------------------------------- | ----------------------------------------------------------- | -------- |
+| Share repeated subschemas through `$defs`/`$ref`              | Argument schemas −37.4%, result schemas −12.7%              | ADR 0019 |
+| One `browser_observe` replacing four list tools               | Four copies of one contract removed                         | ADR 0020 |
+| Results stop restating their requests                         | `browser_action_and_wait` 4,828 → 1,565 bytes               | ADR 0020 |
+| One spelling of the composite action target                   | `locator` removed from domain, runtime, engine, and schema  | ADR 0020 |
+| Tool profiles via `--tools`                                   | `core` publishes 31 of 35 tools                             | ADR 0020 |
+| Real argument parser: `--help`, `--version`, per-option flags | Help and version exit `0`; every variable has an option     | —        |
+| Chromium downloaded on first start                            | `--no-auto-install` keeps the previous behaviour            | —        |
+| Readable configuration failures                               | Names the variable; no stack, path, or value                | —        |
+| Saved state under the home directory                          | No longer scattered by the client's working directory       | —        |
+| MCP prompts and a session resource                            | `parallel_roles`, `diagnose_page`, `browsermesh://sessions` | —        |
+| npm package renamed to `browsermesh`                          | Matches the name docs and the registry already used         | —        |
+
+`tools/list` is 87,367 bytes across 35 tools, or 79,479 with `--tools=core`: 35.2% and 41.1% below
+the starting point. The remaining floor is the semantic locator union that roughly twenty tools
+embed, which is the feature rather than waste; ADR 0020 records why collapsing the interaction tools
+to reach Playwright MCP's number is rejected.
+
+Verification: 154 unit, 63 integration, 3 e2e, and 3 stress tests pass, with typecheck, lint, and
+format clean.
+
+Not done, and requiring the maintainer rather than code: publishing under the new npm name,
+deprecating `multi-agent-browser-mcp` with `npm deprecate`, and setting GitHub repository topics.
 
 BrowserMesh v0.1 and the accepted professional MCP improvement program are implemented. The final
 repository-wide adversarial audit and clean-environment release gate are complete, with no known
@@ -113,6 +145,10 @@ deferred scope. They are not missing parts of the accepted program.
   coverage, CodeQL/dependency review, and Linux/Windows installed-package smoke.
 
 ## Verification checkpoint
+
+The records below are dated evidence from the v0.1 release gate, before the adoption program above.
+Counts they cite — 38 tools, four observability tools, 161 tests — describe that state, not the
+current one.
 
 - ADR 0018 final-audit hardening passes `npm run verify` with 28 test files and 175 tests
   (90.44% statements, 80.75% branches, 95.85% functions, 92.67% lines), including real-Chromium

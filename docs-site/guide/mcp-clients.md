@@ -3,7 +3,7 @@
 BrowserMesh is an MCP stdio server. Configure your client to start this process:
 
 ```text
-npx -y multi-agent-browser-mcp
+npx -y browsermesh
 ```
 
 Client configuration keys and file locations differ. Use your client's current MCP-server documentation for the exact location. A common JSON shape is:
@@ -13,7 +13,7 @@ Client configuration keys and file locations differ. Use your client's current M
   "mcpServers": {
     "browsermesh": {
       "command": "npx",
-      "args": ["-y", "multi-agent-browser-mcp"],
+      "args": ["-y", "browsermesh"],
       "env": {
         "BROWSERMESH_HEADLESS": "true"
       }
@@ -27,7 +27,7 @@ On a source checkout, replace the command and arguments with an absolute path ap
 ```json
 {
   "command": "node",
-  "args": ["/absolute/path/to/multi-agent-browser-mcp/dist/cli.js"]
+  "args": ["/absolute/path/to/browsermesh/dist/cli.js"]
 }
 ```
 

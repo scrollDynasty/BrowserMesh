@@ -1,12 +1,9 @@
-import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
-import type { Transport } from '@modelcontextprotocol/sdk/shared/transport.js';
 import { describe, expect, it } from 'vitest';
 import * as z4mini from 'zod/v4-mini';
 import { outputSchemas } from '../../src/adapters/mcp/contracts.js';
 import {
   JSON_SCHEMA_2020_12_DIALECT,
   normalizeToolSchemaDialect,
-  withDraft202012ToolSchemas,
 } from '../../src/adapters/mcp/schema-dialect.js';
 
 const DRAFT_07_DIALECT = 'http://json-schema.org/draft-07/schema#';
@@ -63,47 +60,6 @@ describe('tool schema dialect', () => {
     });
     expect(normalizeToolSchemaDialect(null)).toBeNull();
   });
-
-  it('corrects the dialect on whichever transport the server is connected to', async () => {
-    const sent: unknown[] = [];
-    const transport = fakeTransport(sent);
-    let connected: Transport | undefined;
-    const server = withDraft202012ToolSchemas({
-      connect: (candidate: Transport) => {
-        connected = candidate;
-        return Promise.resolve();
-      },
-    } as unknown as McpServer);
-
-    await server.connect(transport);
-    await connected?.send(toolListMessage(DRAFT_07_DIALECT, DRAFT_07_DIALECT) as never);
-
-    expect(sent).toHaveLength(1);
-    expect(schemaDialectOf(sent[0])).toBe(JSON_SCHEMA_2020_12_DIALECT);
-  });
-
-  it('keeps transport members reachable through the wrapper', async () => {
-    const sent: unknown[] = [];
-    const transport = fakeTransport(sent);
-    let connected: Transport | undefined;
-    const server = withDraft202012ToolSchemas({
-      connect: (candidate: Transport) => {
-        connected = candidate;
-        return Promise.resolve();
-      },
-    } as unknown as McpServer);
-
-    await server.connect(transport);
-    const handler = (): void => undefined;
-    if (connected) connected.onclose = handler;
-    await connected?.start();
-
-    // The SDK assigns handlers and calls methods on the transport it received;
-    // both have to reach the real transport, not the wrapper.
-    expect(transport.onclose).toBe(handler);
-    expect(transport.started).toBe(true);
-    expect(connected?.sessionId).toBe('fake-session');
-  });
 });
 
 function withoutDialect(schema: Record<string, unknown>): Record<string, unknown> {
@@ -141,30 +97,6 @@ function toolListMessage(
           outputSchema: { $schema: outputDialect, type: 'object' },
         },
       ],
-    },
-  };
-}
-
-function schemaDialectOf(message: unknown): unknown {
-  const result = (message as { result: { tools: { outputSchema: { $schema: unknown } }[] } })
-    .result;
-  return result.tools[0]?.outputSchema.$schema;
-}
-
-function fakeTransport(sent: unknown[]): Transport & { started: boolean } {
-  return {
-    started: false,
-    sessionId: 'fake-session',
-    start(): Promise<void> {
-      this.started = true;
-      return Promise.resolve();
-    },
-    send(message: unknown): Promise<void> {
-      sent.push(message);
-      return Promise.resolve();
-    },
-    close(): Promise<void> {
-      return Promise.resolve();
     },
   };
 }

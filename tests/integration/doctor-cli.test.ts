@@ -65,4 +65,52 @@ describe('doctor CLI', () => {
       expect(failure.stderr).toContain('Usage:');
     }
   });
+
+  it('answers help and version on stdout and exits cleanly', async () => {
+    for (const [flag, expected] of [
+      ['--help', 'Usage:'],
+      ['--version', '.'],
+    ] as const) {
+      const { stdout, stderr } = await execFileAsync(
+        process.execPath,
+        ['--import', 'tsx', 'src/cli.ts', flag],
+        { cwd: process.cwd() },
+      );
+
+      // Exiting non-zero on `--help` is the most common reason a first-time
+      // user concludes a CLI is broken; `execFileAsync` rejects on non-zero.
+      expect(stdout, flag).toContain(expected);
+      expect(stderr, flag).toBe('');
+    }
+  });
+
+  it.each([
+    [
+      'a rejected environment value',
+      { BROWSERMESH_MAX_SESSIONS: 'abc' },
+      [],
+      'BROWSERMESH_MAX_SESSIONS',
+    ],
+    ['an unknown tool profile', {}, ['--tools', 'typo'], 'Unknown tool profile'],
+  ])('reports %s without a stack trace', async (_case, environment, argv, expected) => {
+    // Startup failures are resolved before the fatal-process handlers exist, so
+    // each one has to be caught where it is raised. An uncaught throw reaches
+    // the terminal as a stack trace naming absolute paths, which is both
+    // unreadable and the diagnostic leak the runtime otherwise avoids.
+    try {
+      await execFileAsync(process.execPath, ['--import', 'tsx', 'src/cli.ts', ...argv], {
+        cwd: process.cwd(),
+        env: { ...process.env, ...environment },
+      });
+      throw new Error('Invalid startup configuration unexpectedly succeeded');
+    } catch (error) {
+      const failure = z
+        .object({ code: z.number(), stdout: z.string(), stderr: z.string() })
+        .parse(error);
+      expect(failure.code).toBe(2);
+      expect(failure.stderr).toContain(expected);
+      expect(failure.stderr).not.toContain('    at ');
+      expect(failure.stderr).not.toContain('.ts:');
+    }
+  });
 });

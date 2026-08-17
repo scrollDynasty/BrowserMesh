@@ -1,14 +1,15 @@
 # BrowserMesh
 
-Local browser execution for MCP clients, with isolated sessions and explicit page addressing.
+**Run many browser sessions at once, fully isolated from each other, from one MCP server.**
+
+Every other browser MCP server gives your AI client one browser with a current tab. BrowserMesh
+gives it as many independent sessions as the task needs — each with its own cookies, storage, and
+authentication — running in parallel. Test checkout as a customer while an admin session verifies
+the order, in one conversation, without either seeing the other's state.
 
 - [Documentation](https://scrolldynasty.github.io/multi-agent-browser-mcp/)
 - [Getting started](https://scrolldynasty.github.io/multi-agent-browser-mcp/guide/getting-started)
 - [MCP tool reference](https://scrolldynasty.github.io/multi-agent-browser-mcp/reference/tools)
-
-BrowserMesh lets Claude Code, Codex, Cursor, Qwen, and other MCP-compatible clients operate
-independent Chromium sessions through one local MCP server. Each ready session owns a separate
-`BrowserContext`; every page operation names its `sessionId` and `pageId`.
 
 ```text
 External AI client
@@ -24,41 +25,53 @@ Context A  Context B  Context C
 The external client reasons and plans. BrowserMesh executes browser operations, enforces isolation,
 orders work within each session, and returns structured results.
 
-> Example: test checkout as a customer while a separate admin session verifies the order.
+Works with Claude Code, Claude Desktop, Codex, Cursor, Windsurf, Qwen, and any other MCP-compatible
+client.
 
-## Quick start after npm publication
+## Quick start
 
-Install the Playwright-managed Chromium build used by BrowserMesh:
+Claude Code:
 
 ```sh
-npx -y multi-agent-browser-mcp --install-browser
+claude mcp add browsermesh -- npx -y browsermesh
 ```
 
-Add BrowserMesh to your MCP client configuration:
+Any other client, in its MCP configuration file:
 
 ```json
 {
   "mcpServers": {
     "browsermesh": {
       "command": "npx",
-      "args": ["-y", "multi-agent-browser-mcp"]
+      "args": ["-y", "browsermesh"]
     }
   }
 }
 ```
 
-The exact configuration shape depends on the client. BrowserMesh reports its installed package
-version in `serverInfo.version` during MCP initialization.
+That is the whole setup. On its first start BrowserMesh downloads the Chromium build it uses, so
+there is no separate install step. Pass `--no-auto-install` to manage the browser yourself, in
+which case MCP discovery still works and `browser_session_create` returns an actionable
+`BROWSER_ERROR` explaining what to run.
 
-Check a local installation without starting the MCP transport:
+Then ask for the work in plain language:
+
+> Test the checkout flow as a buyer and confirm the order appeared, as an admin, at the same time.
+
+The client creates one session per role on its own. BrowserMesh also publishes a `parallel_roles`
+prompt that spells the workflow out, so a client can offer it directly.
+
+Check an installation without starting the protocol:
 
 ```sh
-npx -y multi-agent-browser-mcp --doctor --json
+npx -y browsermesh --doctor
 ```
 
-Chromium and BrowserMesh remain on the user's machine. No hosted BrowserMesh service is required.
-If Chromium is missing, MCP discovery remains available and `browser_session_create` returns an
-actionable `BROWSER_ERROR`.
+Chromium and BrowserMesh remain on your machine. There is no hosted BrowserMesh service.
+
+> **Renamed in 0.2.** The npm package was `multi-agent-browser-mcp` and is now `browsermesh`,
+> matching the name everything else already used. Change `args` to `["-y", "browsermesh"]`;
+> nothing else moves.
 
 ## v0.1 architecture
 
@@ -291,14 +304,15 @@ the smaller per-response and retained-cursor bounds.
 
 ### Observability
 
-- `browser_console_list`
-- `browser_page_errors_list`
-- `browser_network_list`
-- `browser_failed_requests_list`
+- `browser_observe`
 
-All tools require an explicit `sessionId` and `pageId`. Console and page-error reads are
-metadata-only by default; set
-`includeText=true` for bounded, best-effort-redacted evidence. Use `nextCursor` as the next
+One tool reads all four recorded sources, selected by `source`: `console`, `pageError`, `network`,
+or `requestFailed`. It requires an explicit `sessionId` and `pageId`, and echoes `source` so results
+read into one buffer stay distinguishable.
+
+Console and page-error reads are metadata-only by default; set `includeText=true` for bounded,
+best-effort-redacted evidence. The two network sources carry no text and reject that flag rather
+than returning a metadata-only answer that looks complete. Use `nextCursor` as the next
 non-destructive `sinceEventId` checkpoint. Always inspect `gap` and `droppedCount` before concluding
 that an event was absent. Text may be truncated further to satisfy the total response-byte limit;
 the event and its cursor are still returned so pagination cannot stall. BrowserMesh never captures
@@ -309,8 +323,12 @@ ID, method, sanitized URL, resource type, status, duration, and safe failure cla
 applicable. Credentials and fragments are removed and sensitive query values are redacted before
 storage. Headers, bodies, cookies, storage, service-worker traffic, WebSockets, `data:` URLs, and
 `blob:` URLs are excluded. Page-originated HTTP(S) EventSource requests are included as ordinary
-network metadata. HTTP error responses such as 500 appear in `browser_network_list`; only
-transport-level failures appear in `browser_failed_requests_list`.
+network metadata. HTTP error responses such as 500 appear under `source: "network"`; only
+transport-level failures appear under `source: "requestFailed"`.
+
+> Before 0.2 these were four tools — `browser_console_list`, `browser_page_errors_list`,
+> `browser_network_list`, and `browser_failed_requests_list` — publishing four copies of one
+> contract. Pass the matching `source` instead.
 
 ### Interaction
 
@@ -354,6 +372,11 @@ managed `pageId` in the same session with `isDefault=false`; overflow popups are
 `LIMIT_EXCEEDED` is returned. Dialogs are handled atomically with an expected type and accept/dismiss
 choice because a blocking dialog cannot be safely inspected later. Prompt input and returned dialog
 metadata are bounded.
+
+`browser_action_and_wait` addresses its action with `target`, taking a semantic/CSS locator or a
+snapshot `ref` exactly like the standalone interaction tools. Neither result restates the request:
+`browser_wait` returns `satisfied`, and `browser_action_and_wait` returns the observed `event`. The
+caller already holds the condition and action it sent, and `operationId` correlates the result.
 
 ### Capture
 
@@ -552,29 +575,77 @@ BrowserMesh never attempts to serialize a live `BrowserContext`, open pages, pen
 
 ## Configuration
 
-| Environment variable                       |        Default | Meaning                                        |
-| ------------------------------------------ | -------------: | ---------------------------------------------- |
-| `BROWSERMESH_TIMEOUT_MS`                   |        `10000` | Default bounded operation timeout              |
-| `BROWSERMESH_DATA_DIR`                     | `.browsermesh` | Private local data directory                   |
-| `BROWSERMESH_LOG_LEVEL`                    |         `info` | `debug`, `info`, `warn`, `error`, or `silent`  |
-| `BROWSERMESH_MAX_SESSIONS`                 |           `50` | Active session limit                           |
-| `BROWSERMESH_MAX_PAGES`                    |           `20` | Managed pages per session                      |
-| `BROWSERMESH_PERSISTENCE`                  |         `true` | Enable saved browser state                     |
-| `BROWSERMESH_HEADLESS`                     |        `false` | Launch Chromium without a visible window       |
-| `BROWSERMESH_OBSERVABILITY_EVENTS`         |          `200` | Retained mixed observability events per page   |
-| `BROWSERMESH_OBSERVABILITY_STRING_CHARS`   |         `2048` | Maximum exposed event string length            |
-| `BROWSERMESH_OBSERVABILITY_PAGE_SIZE`      |          `100` | Maximum events returned by one read            |
-| `BROWSERMESH_OBSERVABILITY_RESPONSE_BYTES` |        `65536` | Maximum serialized observability response size |
-| `BROWSERMESH_SCREENSHOT_MAX_DIMENSION`     |        `10000` | Maximum PNG width or height in CSS pixels      |
-| `BROWSERMESH_SCREENSHOT_MAX_PIXELS`        |     `40000000` | Maximum total PNG pixels                       |
-| `BROWSERMESH_SCREENSHOT_MAX_BYTES`         |     `16777216` | Maximum encoded PNG bytes                      |
-| `BROWSERMESH_VISIBLE_TEXT_MAX_CHARS`       |        `20000` | Maximum returned Unicode code points           |
-| `BROWSERMESH_VISIBLE_TEXT_MAX_BYTES`       |        `65536` | Maximum returned visible-text UTF-8 bytes      |
-| `BROWSERMESH_MAX_SAVED_STATES`             |          `100` | Maximum persisted logical states               |
-| `BROWSERMESH_MAX_STATE_BYTES`              |      `1048576` | Maximum bytes in one persisted state           |
-| `BROWSERMESH_MAX_STATE_TOTAL_BYTES`        |     `16777216` | Maximum aggregate persisted-state bytes        |
+| Environment variable                       |          Default | Meaning                                        |
+| ------------------------------------------ | ---------------: | ---------------------------------------------- |
+| `BROWSERMESH_TIMEOUT_MS`                   |          `10000` | Default bounded operation timeout              |
+| `BROWSERMESH_DATA_DIR`                     | `~/.browsermesh` | Private local data directory                   |
+| `BROWSERMESH_LOG_LEVEL`                    |           `info` | `debug`, `info`, `warn`, `error`, or `silent`  |
+| `BROWSERMESH_MAX_SESSIONS`                 |             `50` | Active session limit                           |
+| `BROWSERMESH_MAX_PAGES`                    |             `20` | Managed pages per session                      |
+| `BROWSERMESH_PERSISTENCE`                  |           `true` | Enable saved browser state                     |
+| `BROWSERMESH_HEADLESS`                     |          `false` | Launch Chromium without a visible window       |
+| `BROWSERMESH_SCHEMA_REFS`                  |           `true` | Share repeated subschemas via `$defs`/`$ref`   |
+| `BROWSERMESH_AUTO_INSTALL`                 |           `true` | Download Chromium on first start if missing    |
+| `BROWSERMESH_TOOLS`                        |            (all) | Tool profiles to publish, comma-separated      |
+| `BROWSERMESH_OBSERVABILITY_EVENTS`         |            `200` | Retained mixed observability events per page   |
+| `BROWSERMESH_OBSERVABILITY_STRING_CHARS`   |           `2048` | Maximum exposed event string length            |
+| `BROWSERMESH_OBSERVABILITY_PAGE_SIZE`      |            `100` | Maximum events returned by one read            |
+| `BROWSERMESH_OBSERVABILITY_RESPONSE_BYTES` |          `65536` | Maximum serialized observability response size |
+| `BROWSERMESH_SCREENSHOT_MAX_DIMENSION`     |          `10000` | Maximum PNG width or height in CSS pixels      |
+| `BROWSERMESH_SCREENSHOT_MAX_PIXELS`        |       `40000000` | Maximum total PNG pixels                       |
+| `BROWSERMESH_SCREENSHOT_MAX_BYTES`         |       `16777216` | Maximum encoded PNG bytes                      |
+| `BROWSERMESH_VISIBLE_TEXT_MAX_CHARS`       |          `20000` | Maximum returned Unicode code points           |
+| `BROWSERMESH_VISIBLE_TEXT_MAX_BYTES`       |          `65536` | Maximum returned visible-text UTF-8 bytes      |
+| `BROWSERMESH_MAX_SAVED_STATES`             |            `100` | Maximum persisted logical states               |
+| `BROWSERMESH_MAX_STATE_BYTES`              |        `1048576` | Maximum bytes in one persisted state           |
+| `BROWSERMESH_MAX_STATE_TOTAL_BYTES`        |       `16777216` | Maximum aggregate persisted-state bytes        |
+
+Every variable has a matching command-line option, and the command line wins. Run
+`browsermesh --help` for the full list; `--headless`, `--timeout`, `--data-dir`, `--tools`,
+`--log-level`, `--max-sessions`, `--max-pages`, `--no-persistence`, `--no-schema-refs`, and
+`--no-auto-install` are all accepted. A rejected value names the variable it came from and exits
+with status 2 instead of printing a stack trace.
+
+Saved state lives under the user's home directory rather than the working directory. An MCP client
+starts BrowserMesh from whichever directory it happens to be in, so a relative default scattered
+saved authentication across unrelated folders and made `browser_state_list` come back empty for no
+visible reason. Pass `--data-dir .browsermesh` for the previous project-scoped behaviour.
 
 Configuration is read and validated centrally.
+
+## Publishing fewer tools
+
+Discovery costs context, once per session, in every client. `--tools` narrows what BrowserMesh
+publishes to the profiles a workflow actually needs:
+
+| Profile         | Tools | Contents                                                           |
+| --------------- | ----: | ------------------------------------------------------------------ |
+| `core`          |    31 | Sessions, pages, navigation, reading, interaction, waits, capture  |
+| `observability` |     1 | `browser_observe`                                                  |
+| `persistence`   |     3 | `browser_state_save`, `browser_state_list`, `browser_state_remove` |
+
+Omitting `--tools` publishes every profile, so an existing configuration keeps the tools it had.
+
+```sh
+npx -y browsermesh --tools core,persistence
+```
+
+Published schemas share their repeated subschemas through `$defs`/`$ref`, which every JSON Schema
+2020-12 validator resolves. Set `--no-schema-refs` for a client whose validator does not.
+
+## Prompts and resources
+
+BrowserMesh publishes two MCP prompts, so a client can offer the workflow rather than having to
+infer it:
+
+- `parallel_roles` — carry one task out as several roles at once, one isolated session each.
+- `diagnose_page` — load a page and collect console, page-error, and network evidence about it.
+
+It also publishes one read-only resource, `browsermesh://sessions`, listing the sessions the runtime
+currently holds with their status and labels.
+
+Both are static templates. BrowserMesh renders text and returns it; it makes no LLM call and keeps
+no per-client state. The client still reasons and decides which tools to call.
 
 BrowserMesh launches Chromium in headed mode by default so the user can observe browser automation.
 Set `BROWSERMESH_HEADLESS=true` for CI, servers, and other environments without a display. Only the

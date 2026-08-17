@@ -13,12 +13,12 @@ Node.js 22 is the minimum supported major version. Node.js 24 is recommended for
 ## 2. Install Chromium
 
 ```bash
-npx -y multi-agent-browser-mcp --install-browser
+npx -y browsermesh --install-browser
 ```
 
 ## 3. Configure your client
 
-Set the MCP server command to `npx` and its arguments to `-y`, `multi-agent-browser-mcp`. See [MCP client configuration](./mcp-clients).
+Set the MCP server command to `npx` and its arguments to `-y`, `browsermesh`. See [MCP client configuration](./mcp-clients).
 
 For unattended use, set `BROWSERMESH_HEADLESS=true`. The runtime default is `false`, so Chromium is visible unless configured otherwise.
 

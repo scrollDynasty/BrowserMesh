@@ -25,6 +25,21 @@ describe('Chromium installer command', () => {
     );
   });
 
+  it('keeps installer output away from the stream the MCP protocol owns', async () => {
+    // The automatic install runs inside the `browsermesh` process while it is
+    // about to serve MCP over stdio. A Playwright progress bar written to
+    // stdout would be parsed as protocol traffic and break the session, so the
+    // child gets no stdout at all and reports on stderr instead.
+    const child = new EventEmitter();
+    const spawnProcess = vi.fn<InstallerSpawn>(() => child);
+
+    const installation = installChromium({ spawnProcess, output: 'stderr' });
+    child.emit('exit', 0, null);
+    await installation;
+
+    expect(spawnProcess.mock.calls[0]?.[2]).toEqual({ stdio: ['ignore', 'ignore', 'inherit'] });
+  });
+
   it('rejects failed and interrupted Playwright installations', async () => {
     const failedChild = new EventEmitter();
     const failed = installChromium({ spawnProcess: () => failedChild });
