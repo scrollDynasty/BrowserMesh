@@ -42,6 +42,10 @@ export function registerPrompts(server: McpServer, runtime: BrowserMeshRuntime):
     ({ task, roles }) => {
       const named = splitRoles(roles);
       const count = String(named.length);
+      // A prompt that reads "as 1 independent roles" undermines the instruction
+      // it is trying to give, and one role is a legitimate way to invoke this.
+      const subject = named.length === 1 ? 'one independent role' : `${count} independent roles`;
+      const repetition = named.length === 1 ? 'once' : `${count} times`;
       return {
         messages: [
           {
@@ -51,10 +55,10 @@ export function registerPrompts(server: McpServer, runtime: BrowserMeshRuntime):
               text: [
                 `Task: ${task}`,
                 '',
-                `Carry it out as ${count} independent roles: ${named.join(', ')}.`,
+                `Carry it out as ${subject}: ${named.join(', ')}.`,
                 '',
                 'Use BrowserMesh as follows:',
-                `- Call browser_session_create once per role (${count} times), naming each session after its role. Separate sessions is what keeps their cookies, storage, and authentication apart; reusing one session would let the roles see each other's state.`,
+                `- Call browser_session_create once per role (${repetition}), naming each session after its role. Separate sessions is what keeps their cookies, storage, and authentication apart; reusing one session would let the roles see each other's state.`,
                 '- Keep each role on the sessionId and pageId its own creation returned. There is no current or active session, so every call names the pair it addresses.',
                 '- Run the roles concurrently. Operations on different sessions execute in parallel; operations within one session run in the order they were accepted.',
                 '- Read the page with browser_snapshot before acting, and prefer semantic locators (role, label, test ID) over CSS so the steps survive markup changes.',

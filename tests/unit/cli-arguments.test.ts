@@ -71,7 +71,16 @@ describe('command-line arguments', () => {
       kind: 'usage-error',
       message: '--headless does not take a value',
     });
-    expect(parseArguments(['--json'])).toMatchObject({ kind: 'usage-error' });
+    expect(parseArguments(['--json'])).toEqual({
+      kind: 'usage-error',
+      message: '--json is only meaningful with --doctor',
+    });
+    // `--install-browser` has no JSON form, so accepting the flag and dropping
+    // it would leave a script parsing plain installer output as JSON.
+    expect(parseArguments(['--install-browser', '--json'])).toEqual({
+      kind: 'usage-error',
+      message: '--json is only meaningful with --doctor',
+    });
     expect(parseArguments(['--install-browser', '--doctor'])).toMatchObject({
       kind: 'usage-error',
     });

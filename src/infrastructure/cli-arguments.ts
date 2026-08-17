@@ -138,9 +138,11 @@ export function parseArguments(argv: readonly string[]): CliCommand {
 
   if (installBrowser && doctor)
     return usageError('--install-browser and --doctor cannot be combined');
+  // Checked before the install branch returns, so `--install-browser --json`
+  // is rejected rather than silently dropping the flag it cannot honour.
+  if (json && !doctor) return usageError('--json is only meaningful with --doctor');
   if (installBrowser) return { kind: 'install-browser' };
   if (doctor) return { kind: 'doctor', json, overrides };
-  if (json) return usageError('--json is only meaningful with --doctor');
   return { kind: 'serve', overrides };
 }
 

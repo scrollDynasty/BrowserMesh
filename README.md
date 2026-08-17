@@ -600,11 +600,13 @@ BrowserMesh never attempts to serialize a live `BrowserContext`, open pages, pen
 | `BROWSERMESH_MAX_STATE_BYTES`              |        `1048576` | Maximum bytes in one persisted state           |
 | `BROWSERMESH_MAX_STATE_TOTAL_BYTES`        |       `16777216` | Maximum aggregate persisted-state bytes        |
 
-Every variable has a matching command-line option, and the command line wins. Run
-`browsermesh --help` for the full list; `--headless`, `--timeout`, `--data-dir`, `--tools`,
-`--log-level`, `--max-sessions`, `--max-pages`, `--no-persistence`, `--no-schema-refs`, and
-`--no-auto-install` are all accepted. A rejected value names the variable it came from and exits
-with status 2 instead of printing a stack trace.
+The options the command line accepts are `--headless`, `--headed`, `--timeout`, `--data-dir`,
+`--log-level`, `--max-sessions`, `--max-pages`, `--tools`, `--no-persistence`, `--no-schema-refs`,
+and `--no-auto-install`. Each sets the variable above that already configures it, and the command
+line wins. The remaining variables — the observability, screenshot, visible-text, and persistence
+budgets — are set through the environment only. Run `browsermesh --help` for the current list. A
+rejected value names the variable it came from and exits with status 2 instead of printing a stack
+trace.
 
 Saved state lives under the user's home directory rather than the working directory. An MCP client
 starts BrowserMesh from whichever directory it happens to be in, so a relative default scattered

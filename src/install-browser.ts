@@ -5,7 +5,11 @@ import { fileURLToPath } from 'node:url';
 interface InstallerChildProcess {
   once(event: 'error', listener: (error: Error) => void): this;
   once(event: 'exit', listener: (code: number | null, signal: NodeJS.Signals | null) => void): this;
+  kill(signal?: NodeJS.Signals): boolean;
 }
+
+/** How long a terminated installer is given to exit before it is killed outright. */
+const TERMINATION_GRACE_MS = 5_000;
 
 /**
  * Where the installer's own output goes.
@@ -29,6 +33,15 @@ interface InstallChromiumOptions {
   readonly playwrightPackageJsonUrl?: string;
   readonly spawnProcess?: InstallerSpawn;
   readonly output?: InstallerOutput;
+  /**
+   * Give up after this long and terminate the installer.
+   *
+   * Only meaningful when something is waiting on the download. The explicit
+   * `--install-browser` command leaves this unset: a user watching a terminal
+   * can judge a slow network and interrupt it themselves, and cutting off a
+   * download they are willing to wait for would be worse than the wait.
+   */
+  readonly timeoutMs?: number;
 }
 
 const defaultSpawn: InstallerSpawn = (command, args, options) =>
@@ -47,20 +60,43 @@ export async function installChromium(options: InstallChromiumOptions = {}): Pro
     { stdio: options.output === 'stderr' ? (['ignore', 'ignore', 'inherit'] as const) : 'inherit' },
   );
 
-  await new Promise<void>((resolve, reject) => {
-    child.once('error', reject);
-    child.once('exit', (code, signal) => {
-      if (code === 0) {
-        resolve();
-        return;
-      }
-      reject(
-        new Error(
-          signal === null
-            ? `Playwright browser installation exited with code ${String(code)}`
-            : `Playwright browser installation was terminated by ${signal}`,
-        ),
-      );
+  let deadline: NodeJS.Timeout | undefined;
+  try {
+    await new Promise<void>((resolve, reject) => {
+      child.once('error', reject);
+      child.once('exit', (code, signal) => {
+        if (code === 0) {
+          resolve();
+          return;
+        }
+        reject(
+          new Error(
+            signal === null
+              ? `Playwright browser installation exited with code ${String(code)}`
+              : `Playwright browser installation was terminated by ${signal}`,
+          ),
+        );
+      });
+
+      const timeoutMs = options.timeoutMs;
+      if (timeoutMs === undefined) return;
+      deadline = setTimeout(() => {
+        // Ask first, then insist. The escalation is deliberately not cleared
+        // when this promise rejects: the caller stops waiting immediately, but
+        // the child still has to die. `unref` keeps that from holding the
+        // process open, and signalling an already-exited child is a no-op. The
+        // exit listener above stays attached, so whichever signal lands reaps
+        // the child; the promise has settled by then and it becomes a no-op.
+        child.kill('SIGTERM');
+        setTimeout(() => child.kill('SIGKILL'), TERMINATION_GRACE_MS).unref();
+        reject(
+          new Error(
+            `Playwright browser installation exceeded ${String(timeoutMs)}ms and was terminated`,
+          ),
+        );
+      }, timeoutMs);
     });
-  });
+  } finally {
+    if (deadline !== undefined) clearTimeout(deadline);
+  }
 }

@@ -31,6 +31,23 @@ describe('MCP prompts and resources', () => {
     });
   });
 
+  it('reads correctly when the workflow has a single role', async () => {
+    await withClient(async (client) => {
+      const rendered = await client.getPrompt({
+        name: 'parallel_roles',
+        arguments: { task: 'sign in', roles: 'admin' },
+      });
+
+      // One role is a legitimate way to invoke this, and a prompt that says
+      // "as 1 independent roles" undermines the instruction it is giving.
+      const text = promptText(rendered);
+      expect(text).toContain('as one independent role: admin');
+      expect(text).toContain('once per role (once)');
+      expect(text).not.toContain('1 independent roles');
+      expect(text).not.toContain('1 times');
+    });
+  });
+
   it('renders the diagnosis prompt against the merged observation contract', async () => {
     await withClient(async (client) => {
       const rendered = await client.getPrompt({

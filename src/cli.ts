@@ -117,7 +117,15 @@ async function doctor(config: BrowserMeshConfig): Promise<DoctorResult> {
  * a child process whose output must not reach stdout, where the protocol lives.
  * `--no-auto-install` restores the previous behaviour: discovery stays
  * available and the first session create returns an actionable BROWSER_ERROR.
+ *
+ * The download is bounded because a client is waiting on the other side of the
+ * transport. A stalled network would otherwise leave the server permanently
+ * short of `server.connect`, so the client sees a server that never starts
+ * rather than one that reports a missing browser. On the deadline the installer
+ * is terminated and startup continues without it.
  */
+const AUTOMATIC_INSTALL_TIMEOUT_MS = 600_000;
+
 async function ensureBrowser(config: BrowserMeshConfig): Promise<void> {
   if (!config.autoInstall) return;
   const engine = new PlaywrightBrowserEngine({
@@ -127,7 +135,7 @@ async function ensureBrowser(config: BrowserMeshConfig): Promise<void> {
   if (await engine.isExecutableAvailable()) return;
   process.stderr.write('BrowserMesh: Chromium is not installed yet; downloading it once.\n');
   try {
-    await installChromium({ output: 'stderr' });
+    await installChromium({ output: 'stderr', timeoutMs: AUTOMATIC_INSTALL_TIMEOUT_MS });
     process.stderr.write('BrowserMesh: Chromium is ready.\n');
   } catch {
     // A failed download must not stop the server: discovery still works, and

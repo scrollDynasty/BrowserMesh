@@ -35,7 +35,7 @@ browsermesh
 ## Build from source
 
 ```bash
-git clone https://github.com/scrollDynasty/multi-agent-browser-mcp.git
+git clone https://github.com/scrollDynasty/multi-agent-browser-mcp.git browsermesh
 cd browsermesh
 npm ci
 npm run build
