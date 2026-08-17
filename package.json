@@ -1,6 +1,6 @@
 {
   "name": "multi-agent-browser-mcp",
-  "version": "0.1.5",
+  "version": "0.1.6",
   "mcpName": "io.github.scrollDynasty/browsermesh",
   "description": "Local isolated multi-session browser runtime for external MCP clients",
   "type": "module",
