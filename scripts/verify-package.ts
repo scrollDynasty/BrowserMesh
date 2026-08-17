@@ -14,7 +14,7 @@ import { promisify } from 'node:util';
 import { z } from 'zod';
 
 const execFileAsync = promisify(execFile);
-const packageName = 'multi-agent-browser-mcp';
+const packageName = 'browsermesh';
 const npmCliPath = process.env.npm_execpath;
 if (npmCliPath === undefined) {
   throw new Error('verify-package must be launched through npm so npm_execpath is available');

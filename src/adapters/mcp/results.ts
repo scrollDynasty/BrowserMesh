@@ -3,7 +3,7 @@ import { asBrowserMeshError, type BrowserMeshErrorCode } from '../../domain/erro
 
 const MAX_MESSAGE_LENGTH = 512;
 const MAX_CONTEXT_LENGTH = 256;
-const installRemediation = 'Run: npx -y multi-agent-browser-mcp --install-browser';
+const installRemediation = 'Run: npx -y browsermesh --install-browser';
 const safeOperations = new Set([
   'capture screenshot',
   'capture snapshot',

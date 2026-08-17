@@ -732,7 +732,7 @@ describe('real Chromium runtime', () => {
     await expect(
       runtime.actionAndWait(
         { ...target, timeoutMs: 50 },
-        { kind: 'click', locator: { strategy: 'testId', value: 'request' } },
+        { kind: 'click', target: { strategy: 'testId', value: 'request' } },
         {
           kind: 'response',
           matcher: { kind: 'exact', value: `${web.baseUrl}/api/never` },
@@ -742,7 +742,7 @@ describe('real Chromium runtime', () => {
     await expect(runtime.getTitle(target)).resolves.toMatchObject({ value: 'Action waits' });
     const response = await runtime.actionAndWait(
       target,
-      { kind: 'click', locator: { strategy: 'testId', value: 'request' } },
+      { kind: 'click', target: { strategy: 'testId', value: 'request' } },
       {
         kind: 'response',
         matcher: { kind: 'glob', value: `${web.baseUrl}/api/*` },
@@ -760,7 +760,7 @@ describe('real Chromium runtime', () => {
 
     const pressedResponse = await runtime.actionAndWait(
       target,
-      { kind: 'press', locator: { strategy: 'testId', value: 'request' }, key: 'Enter' },
+      { kind: 'press', target: { strategy: 'testId', value: 'request' }, key: 'Enter' },
       {
         kind: 'response',
         matcher: { kind: 'glob', value: `${web.baseUrl}/api/*` },
@@ -771,7 +771,7 @@ describe('real Chromium runtime', () => {
 
     const navigation = await runtime.actionAndWait(
       target,
-      { kind: 'click', locator: { strategy: 'testId', value: 'navigate' } },
+      { kind: 'click', target: { strategy: 'testId', value: 'navigate' } },
       {
         kind: 'navigation',
         matcher: { kind: 'exact', value: `${web.baseUrl}/action-destination` },
@@ -791,7 +791,7 @@ describe('real Chromium runtime', () => {
 
     const popup = await runtime.actionAndWait(
       target,
-      { kind: 'click', locator: { strategy: 'testId', value: 'popup' } },
+      { kind: 'click', target: { strategy: 'testId', value: 'popup' } },
       { kind: 'popup' },
     );
     expect(popup.value.event.kind).toBe('popup');
@@ -821,7 +821,7 @@ describe('real Chromium runtime', () => {
 
     const prompt = await runtime.actionAndWait(
       target,
-      { kind: 'click', locator: { strategy: 'testId', value: 'prompt' } },
+      { kind: 'click', target: { strategy: 'testId', value: 'prompt' } },
       { kind: 'dialog', dialogType: 'prompt', action: 'accept', promptText: 'typed answer' },
     );
     expect(prompt.value.event).toMatchObject({
@@ -837,14 +837,14 @@ describe('real Chromium runtime', () => {
 
     const confirm = await runtime.actionAndWait(
       target,
-      { kind: 'click', locator: { strategy: 'testId', value: 'confirm' } },
+      { kind: 'click', target: { strategy: 'testId', value: 'confirm' } },
       { kind: 'dialog', dialogType: 'confirm', action: 'dismiss' },
     );
     expect(confirm.value.event).toMatchObject({ kind: 'dialog', action: 'dismiss' });
     await expect(
       runtime.actionAndWait(
         target,
-        { kind: 'click', locator: { strategy: 'testId', value: 'alert' } },
+        { kind: 'click', target: { strategy: 'testId', value: 'alert' } },
         { kind: 'dialog', dialogType: 'confirm', action: 'dismiss' },
       ),
     ).rejects.toMatchObject({ code: 'BROWSER_ERROR' });
@@ -864,7 +864,7 @@ describe('real Chromium runtime', () => {
     await expect(
       runtime.actionAndWait(
         target,
-        { kind: 'click', locator: { strategy: 'testId', value: 'unexpected-dialog' } },
+        { kind: 'click', target: { strategy: 'testId', value: 'unexpected-dialog' } },
         { kind: 'response', matcher: { kind: 'exact', value: `${web.baseUrl}/api/result` } },
       ),
     ).rejects.toMatchObject({ code: 'BROWSER_ERROR' });
@@ -877,7 +877,7 @@ describe('real Chromium runtime', () => {
     await expect(
       runtime.actionAndWait(
         target,
-        { kind: 'click', locator: { strategy: 'testId', value: 'unexpected-popup' } },
+        { kind: 'click', target: { strategy: 'testId', value: 'unexpected-popup' } },
         {
           kind: 'response',
           matcher: { kind: 'exact', value: `${web.baseUrl}/api/delayed-result` },
@@ -900,7 +900,7 @@ describe('real Chromium runtime', () => {
     await expect(
       runtime.actionAndWait(
         target,
-        { kind: 'click', locator: { strategy: 'testId', value: 'popup' } },
+        { kind: 'click', target: { strategy: 'testId', value: 'popup' } },
         { kind: 'popup' },
       ),
     ).rejects.toMatchObject({ code: 'LIMIT_EXCEEDED' });

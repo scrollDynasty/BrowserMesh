@@ -80,8 +80,8 @@ jobs:
         run: |
           echo "## Published release" >> "$GITHUB_STEP_SUMMARY"
           echo "" >> "$GITHUB_STEP_SUMMARY"
-          echo "- Package: multi-agent-browser-mcp" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Package: browsermesh" >> "$GITHUB_STEP_SUMMARY"
           echo "- Version: $GITHUB_REF_NAME" >> "$GITHUB_STEP_SUMMARY"
           echo "- Dist-tag: ${{ steps.version.outputs.npm-tag }}" >> "$GITHUB_STEP_SUMMARY"
-          echo "- npm: https://www.npmjs.com/package/multi-agent-browser-mcp" >> "$GITHUB_STEP_SUMMARY"
+          echo "- npm: https://www.npmjs.com/package/browsermesh" >> "$GITHUB_STEP_SUMMARY"
           echo "- MCP Registry: https://registry.modelcontextprotocol.io/v0.1/servers?search=io.github.scrollDynasty/browsermesh" >> "$GITHUB_STEP_SUMMARY"

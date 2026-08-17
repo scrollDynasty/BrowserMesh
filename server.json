@@ -12,7 +12,7 @@
   "packages": [
     {
       "registryType": "npm",
-      "identifier": "multi-agent-browser-mcp",
+      "identifier": "browsermesh",
       "version": "0.1.5",
       "transport": {
         "type": "stdio"

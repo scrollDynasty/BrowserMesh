@@ -17,6 +17,9 @@ describe('createRuntime', () => {
       maxPagesPerSession: 3,
       persistenceEnabled: false,
       headless: true,
+      schemaReferences: true,
+      autoInstall: false,
+      tools: '',
       observability: {
         maxEventsPerPage: 200,
         maxStringLength: 2_048,

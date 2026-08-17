@@ -132,7 +132,7 @@ export class PlaywrightBrowserEngine implements BrowserEnginePort {
         this.launchState = 'failed';
         const cause = errorMessage(error);
         const reason = classifyBrowserFailure(error);
-        const remediation = 'Run: npx -y multi-agent-browser-mcp --install-browser';
+        const remediation = 'Run: npx -y browsermesh --install-browser';
         throw new BrowserMeshError(
           'BROWSER_ERROR',
           `Failed to launch Chromium: ${cause}. ${remediation}`,
@@ -906,7 +906,7 @@ export class PlaywrightBrowserEngine implements BrowserEnginePort {
     action: BrowserAction,
     control: OperationControl,
   ): Promise<void> {
-    const target = action.target ?? action.locator;
+    const target = action.target;
     switch (action.kind) {
       case 'click':
         await this.wrapElement(
