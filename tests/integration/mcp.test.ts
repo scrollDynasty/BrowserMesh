@@ -762,7 +762,11 @@ function draftSevenOnlyKeywords(schema: unknown): string[] {
   if (typeof schema !== 'object' || schema === null) return [];
   const found: string[] = [];
   for (const [keyword, value] of Object.entries(schema)) {
-    if (keyword === 'definitions') found.push(keyword);
+    // `definitions` moved to `$defs`, `dependencies` split into
+    // `dependentSchemas`/`dependentRequired`, and tuple `items`/`additionalItems`
+    // became `prefixItems`/`items`.
+    if (keyword === 'definitions' || keyword === 'dependencies') found.push(keyword);
+    if (keyword === 'additionalItems') found.push(keyword);
     if (keyword === 'items' && Array.isArray(value)) found.push('items[]');
     found.push(...draftSevenOnlyKeywords(value));
   }
