@@ -163,7 +163,10 @@ function bestCandidate(
     if (
       best === undefined ||
       saving > best.saving ||
-      (saving === best.saving && signature.localeCompare(best.signature) < 0)
+      // Ordered by code unit rather than `localeCompare`, whose result depends
+      // on the runner's locale and ICU build. Definition names are supposed to
+      // be stable across runs, and a locale-sensitive tie-break is not.
+      (saving === best.saving && signature < best.signature)
     )
       best = { ...occurrence, signature, saving };
   }
@@ -255,10 +258,24 @@ function* subschemasOf(node: JsonObject): Generator<JsonObject> {
   }
 }
 
-function containsRelocationUnsafeKeyword(node: JsonObject): boolean {
-  if (RELOCATION_UNSAFE_KEYWORDS.some((keyword) => keyword in node)) return true;
-  for (const child of subschemasOf(node)) if (containsRelocationUnsafeKeyword(child)) return true;
-  return false;
+/**
+ * Whether anything anywhere in the document would make relocation unsound.
+ *
+ * This walks the whole tree rather than only the applicator keywords the
+ * rewriter follows. The rewriter can afford to be narrow because a position it
+ * does not visit is a position it cannot move; the guard cannot, because a
+ * keyword it fails to notice is one it fails to be warned by. draft-07
+ * `dependencies` is the concrete case: it may hold subschemas, the rewriter
+ * deliberately ignores it, and an `$id` inside one would have gone unseen.
+ *
+ * Scanning values as well as keywords can only cause a false alarm, and a false
+ * alarm costs nothing but the compaction.
+ */
+function containsRelocationUnsafeKeyword(value: unknown): boolean {
+  if (Array.isArray(value)) return value.some(containsRelocationUnsafeKeyword);
+  if (!isJsonObject(value)) return false;
+  if (RELOCATION_UNSAFE_KEYWORDS.some((keyword) => keyword in value)) return true;
+  return Object.values(value).some(containsRelocationUnsafeKeyword);
 }
 
 /**

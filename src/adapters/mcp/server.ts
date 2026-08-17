@@ -897,6 +897,11 @@ export function createMcpServer(
       }),
   );
 
+  // The profile filter applies to the tools registered above and nothing else.
+  // Left in place it would silently withdraw anything a caller registered on
+  // the returned server, which is a surprising thing for a factory to do.
+  server.registerTool = registerTool;
+
   registerPrompts(server, runtime);
 
   return withPublishedToolSchemas(server, options.toolSchemas ?? {});
@@ -932,7 +937,7 @@ function observe(
   source: ObservationSource,
   addressed: OperationTarget,
   input: { readonly sinceEventId?: string; readonly limit?: number; readonly includeText: boolean },
-) {
+): ReturnType<BrowserMeshRuntime['listConsole']> {
   switch (source) {
     case 'console':
       return runtime.listConsole(addressed, input);

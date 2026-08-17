@@ -80,7 +80,16 @@ export function registerPrompts(server: McpServer, runtime: BrowserMeshRuntime):
       description:
         'Load one page in an isolated session and collect console, page-error, and network evidence about what went wrong.',
       argsSchema: {
-        url: z.string().min(1).max(2_048).describe('Absolute HTTP(S) URL to investigate'),
+        // Validated rather than merely described: the value is interpolated
+        // into an instruction the client then acts on, and `browser_navigate`
+        // accepts absolute HTTP(S) only. Rejecting here says which argument was
+        // wrong instead of producing a prompt that cannot be carried out.
+        url: z
+          .string()
+          .min(1)
+          .max(2_048)
+          .refine(isAbsoluteHttpUrl, 'Must be an absolute http(s) URL')
+          .describe('Absolute HTTP(S) URL to investigate'),
         symptom: z.string().max(2_000).optional().describe('What looks wrong, if known'),
       },
     },
@@ -134,6 +143,15 @@ export function registerPrompts(server: McpServer, runtime: BrowserMeshRuntime):
       };
     },
   );
+}
+
+function isAbsoluteHttpUrl(value: string): boolean {
+  try {
+    const parsed = new URL(value);
+    return parsed.protocol === 'http:' || parsed.protocol === 'https:';
+  } catch {
+    return false;
+  }
 }
 
 function splitRoles(roles: string): string[] {

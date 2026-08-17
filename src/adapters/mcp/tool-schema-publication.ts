@@ -1,7 +1,7 @@
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { Transport } from '@modelcontextprotocol/sdk/shared/transport.js';
 import { compactSchema, type JsonObject } from './schema-compaction.js';
-import { normalizeToolSchemaDialect } from './schema-dialect.js';
+import { withPublishedDialect } from './schema-dialect.js';
 
 /**
  * `tools/list` is the one message whose published schemas differ from what the
@@ -39,14 +39,22 @@ export function withPublishedToolSchemas(
   return server;
 }
 
-/** Apply every published-schema correction to one outgoing JSON-RPC message. */
+/**
+ * Apply every published-schema correction to one outgoing JSON-RPC message.
+ *
+ * The corrections compose into a single transform applied during one walk of
+ * the tool list. Order matters: compaction reasons about the dialect it is
+ * publishing under, so the dialect is corrected first.
+ */
 export function publishToolSchemas<Message>(
   message: Message,
   options: ToolSchemaPublicationOptions = {},
 ): Message {
-  const withDialect = normalizeToolSchemaDialect(message);
-  if (options.shareRepeatedSubschemas === false) return withDialect;
-  return mapToolSchemas(withDialect, compactSchema);
+  const share = options.shareRepeatedSubschemas !== false;
+  return mapToolSchemas(message, (schema) => {
+    const relabelled = withPublishedDialect(schema);
+    return share ? compactSchema(relabelled) : relabelled;
+  });
 }
 
 function mapToolSchemas<Message>(

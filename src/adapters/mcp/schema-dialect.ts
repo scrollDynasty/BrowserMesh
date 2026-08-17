@@ -21,34 +21,16 @@
 export const JSON_SCHEMA_2020_12_DIALECT = 'https://json-schema.org/draft/2020-12/schema';
 
 const DRAFT_07_DIALECT = 'http://json-schema.org/draft-07/schema#';
-const SCHEMA_KEYS = ['inputSchema', 'outputSchema'] as const;
 
 /**
- * Correct a JSON-RPC message in place of the raw SDK output. Anything that is
- * not a `tools/list` result is forwarded untouched.
+ * Relabel one published schema, leaving a schema that already declares a
+ * supported dialect alone.
+ *
+ * A per-schema transform rather than a per-message one: `tool-schema-publication.ts`
+ * walks the tool list once and applies every correction to each schema it finds,
+ * so the traversal is not repeated per transform.
  */
-export function normalizeToolSchemaDialect<Message>(message: Message): Message {
-  if (!isRecord(message)) return message;
-  const result = message.result;
-  if (!isRecord(result) || !Array.isArray(result.tools)) return message;
-  return {
-    ...message,
-    result: { ...result, tools: result.tools.map(normalizeTool) },
-  };
-}
-
-function normalizeTool(tool: unknown): unknown {
-  if (!isRecord(tool)) return tool;
-  const normalized = { ...tool };
-  for (const key of SCHEMA_KEYS) {
-    const schema = normalized[key];
-    if (isRecord(schema) && schema.$schema === DRAFT_07_DIALECT) {
-      normalized[key] = { ...schema, $schema: JSON_SCHEMA_2020_12_DIALECT };
-    }
-  }
-  return normalized;
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
+export function withPublishedDialect(schema: Record<string, unknown>): Record<string, unknown> {
+  if (schema.$schema !== DRAFT_07_DIALECT) return schema;
+  return { ...schema, $schema: JSON_SCHEMA_2020_12_DIALECT };
 }

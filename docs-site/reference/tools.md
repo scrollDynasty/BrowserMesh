@@ -34,8 +34,8 @@ The exact tool registry is implemented in [`src/adapters/mcp/server.ts`](https:/
 | `browser_press`            | page address, target, `key`                                       | completed                                                 |
 | `browser_select_option`    | page address, target, `value`                                     | completed                                                 |
 | `browser_screenshot`       | page address, `capture?`                                          | PNG metadata + image content                              |
-| `browser_wait`             | page address, `condition`                                         | echoed condition                                          |
-| `browser_action_and_wait`  | page address, `action`, `wait`                                    | action, wait, captured event                              |
+| `browser_wait`             | page address, `condition`                                         | `satisfied`                                               |
+| `browser_action_and_wait`  | page address, `action`, `wait`                                    | the observed event                                        |
 | `browser_state_save`       | `sessionId`, `stateId`                                            | state metadata                                            |
 | `browser_state_list`       | none                                                              | state metadata list                                       |
 | `browser_state_remove`     | `stateId`                                                         | `removed: true`                                           |

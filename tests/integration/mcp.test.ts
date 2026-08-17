@@ -647,6 +647,17 @@ describe('MCP adapter', () => {
     // Every reference a client receives has to resolve inside the schema that
     // carries it, or the tool is undiscoverable rather than merely large.
     expect(compact.danglingReferences).toEqual([]);
+
+    // Equivalence, proven on the payload a client actually receives. The unit
+    // suite proves it for result contracts, but argument contracts are
+    // registered inline in the server and are where the sharing actually pays,
+    // so they can only be reached from here. Expanding every reference has to
+    // reproduce the uncompacted schema exactly; if it does, the two accept
+    // exactly the same arguments.
+    expect(compact.schemas.size).toBe(expanded.schemas.size);
+    for (const [key, schema] of compact.schemas) {
+      expect(dereference(schema), `${key} round trip`).toEqual(expanded.schemas.get(key));
+    }
   });
 
   it('bounds application errors and removes causes, cycles, bigint, and secret fields', () => {
@@ -942,9 +953,11 @@ function requiredValue<T>(value: T | null | undefined): T {
  */
 const TOOL_DISCOVERY_BYTE_BUDGET = 115_000;
 
-async function discoveredToolPayload(
-  options: Parameters<typeof createMcpServer>[1],
-): Promise<{ bytes: number; danglingReferences: string[] }> {
+async function discoveredToolPayload(options: Parameters<typeof createMcpServer>[1]): Promise<{
+  bytes: number;
+  danglingReferences: string[];
+  schemas: Map<string, Record<string, unknown>>;
+}> {
   const { runtime } = testRuntime();
   const server = createMcpServer(runtime, options);
   const client = new Client({ name: 'size-client', version: '1.0.0' });
@@ -952,18 +965,46 @@ async function discoveredToolPayload(
   await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
   try {
     const discovered = await client.listTools();
+    const schemas = new Map<string, Record<string, unknown>>();
+    for (const tool of discovered.tools) {
+      for (const kind of ['inputSchema', 'outputSchema'] as const) {
+        const schema = tool[kind];
+        if (schema !== undefined) schemas.set(`${tool.name}.${kind}`, schema);
+      }
+    }
     return {
       bytes: JSON.stringify(discovered.tools).length,
       danglingReferences: discovered.tools.flatMap((tool) => [
         ...unresolvedReferences(tool.inputSchema),
         ...unresolvedReferences(tool.outputSchema),
       ]),
+      schemas,
     };
   } finally {
     await client.close();
     await server.close();
     await runtime.shutdown();
   }
+}
+
+/** Expand every `$ref` back into place and drop the definitions they came from. */
+function dereference(schema: Record<string, unknown>): Record<string, unknown> {
+  const definitions = (schema.$defs ?? {}) as Record<string, Record<string, unknown>>;
+  const expand = (value: unknown): unknown => {
+    if (Array.isArray(value)) return value.map(expand);
+    if (typeof value !== 'object' || value === null) return value;
+    const node = value as Record<string, unknown>;
+    const reference = node.$ref;
+    if (typeof reference === 'string') {
+      const target = definitions[reference.replace('#/$defs/', '')];
+      if (target === undefined) throw new Error(`unresolved reference ${reference}`);
+      return expand(target);
+    }
+    return Object.fromEntries(Object.entries(node).map(([key, entry]) => [key, expand(entry)]));
+  };
+  const body = expand(schema) as Record<string, unknown>;
+  delete body.$defs;
+  return body;
 }
 
 /** Every `$ref` in one schema that does not name a definition the schema carries. */

@@ -115,7 +115,10 @@ describe('stdio executable', () => {
       await transport.close();
       await rm(dataDirectory, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 });
     }
-  });
+    // Starts the CLI as a subprocess, which compiles the project through tsx
+    // before the protocol handshake begins. The default 15s covers the run but
+    // not the compilation when the integration files execute in parallel.
+  }, 60_000);
 
   // With auto-install disabled — the configuration for an air-gapped or
   // pre-provisioned host — a missing browser must still leave the protocol
@@ -160,7 +163,10 @@ describe('stdio executable', () => {
       await transport.close();
       await rm(temporaryRoot, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 });
     }
-  });
+    // Starts the CLI as a subprocess, which compiles the project through tsx
+    // before the protocol handshake begins. The default 15s covers the run but
+    // not the compilation when the integration files execute in parallel.
+  }, 60_000);
 });
 
 const createdSchema = z.object({

@@ -37,7 +37,16 @@ async function main(argv: readonly string[]): Promise<void> {
     return;
   }
   if (command.kind === 'install-browser') {
-    await installChromium();
+    // A rejected download — no network, a non-zero exit, a terminated child —
+    // would otherwise reach the terminal as an unhandled top-level rejection
+    // with a raw stack trace and absolute paths. This command runs before
+    // `installFatalProcessHandlers` exists, so it has to catch its own failure.
+    try {
+      await installChromium();
+    } catch (error) {
+      process.stderr.write(`Chromium installation failed: ${safeMessage(error)}\n`);
+      process.exitCode = 1;
+    }
     return;
   }
 
@@ -76,6 +85,11 @@ function configure(overrides: Readonly<Record<string, string>>): BrowserMeshConf
     process.exitCode = 2;
     return undefined;
   }
+}
+
+/** The message of a failure, without the stack or the cause chain behind it. */
+function safeMessage(error: unknown): string {
+  return error instanceof Error ? error.message : 'unknown error';
 }
 
 function report(result: DoctorResult): string {

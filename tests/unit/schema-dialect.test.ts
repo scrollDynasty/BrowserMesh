@@ -3,7 +3,7 @@ import * as z4mini from 'zod/v4-mini';
 import { outputSchemas } from '../../src/adapters/mcp/contracts.js';
 import {
   JSON_SCHEMA_2020_12_DIALECT,
-  normalizeToolSchemaDialect,
+  withPublishedDialect,
 } from '../../src/adapters/mcp/schema-dialect.js';
 
 const DRAFT_07_DIALECT = 'http://json-schema.org/draft-07/schema#';
@@ -21,44 +21,31 @@ describe('tool schema dialect', () => {
     }
   });
 
-  it('relabels draft-07 input and output schemas in a tools/list result', () => {
-    const message = toolListMessage(DRAFT_07_DIALECT, DRAFT_07_DIALECT);
+  it('relabels a draft-07 schema and leaves its body alone', () => {
+    const schema = {
+      $schema: DRAFT_07_DIALECT,
+      type: 'object',
+      properties: { sessionId: { type: 'string' } },
+    };
 
-    const normalized = normalizeToolSchemaDialect(message);
+    const published = withPublishedDialect(schema);
 
-    const [tool] = normalized.result.tools;
-    expect(tool?.inputSchema.$schema).toBe(JSON_SCHEMA_2020_12_DIALECT);
-    expect(tool?.outputSchema.$schema).toBe(JSON_SCHEMA_2020_12_DIALECT);
-    expect(tool?.inputSchema.properties).toEqual({ sessionId: { type: 'string' } });
-    expect(tool?.name).toBe('browser_session_create');
+    expect(published.$schema).toBe(JSON_SCHEMA_2020_12_DIALECT);
+    expect(published.properties).toEqual({ sessionId: { type: 'string' } });
+    // The caller's object is reused on retries, so it must not be mutated.
+    expect(schema.$schema).toBe(DRAFT_07_DIALECT);
   });
 
-  it('leaves the original message untouched so retries keep the caller payload', () => {
-    const message = toolListMessage(DRAFT_07_DIALECT, DRAFT_07_DIALECT);
+  it('keeps a schema that already declares a supported dialect', () => {
+    const schema = { $schema: JSON_SCHEMA_2020_12_DIALECT, type: 'object' };
 
-    normalizeToolSchemaDialect(message);
-
-    expect(message.result.tools[0]?.inputSchema.$schema).toBe(DRAFT_07_DIALECT);
+    expect(withPublishedDialect(schema)).toBe(schema);
   });
 
-  it('keeps schemas that already declare a supported dialect', () => {
-    const message = toolListMessage(JSON_SCHEMA_2020_12_DIALECT, JSON_SCHEMA_2020_12_DIALECT);
+  it('leaves a schema that declares no dialect at all', () => {
+    const schema = { type: 'object' };
 
-    const normalized = normalizeToolSchemaDialect(message);
-
-    expect(normalized.result.tools[0]?.outputSchema.$schema).toBe(JSON_SCHEMA_2020_12_DIALECT);
-  });
-
-  it('forwards messages that carry no tool list', () => {
-    const progress = { jsonrpc: '2.0', method: 'notifications/progress', params: { progress: 1 } };
-
-    expect(normalizeToolSchemaDialect(progress)).toEqual(progress);
-    expect(normalizeToolSchemaDialect({ jsonrpc: '2.0', id: 1, result: {} })).toEqual({
-      jsonrpc: '2.0',
-      id: 1,
-      result: {},
-    });
-    expect(normalizeToolSchemaDialect(null)).toBeNull();
+    expect(withPublishedDialect(schema)).toBe(schema);
   });
 });
 
@@ -66,37 +53,4 @@ function withoutDialect(schema: Record<string, unknown>): Record<string, unknown
   const body = { ...schema };
   delete body.$schema;
   return body;
-}
-
-function toolListMessage(
-  inputDialect: string,
-  outputDialect: string,
-): {
-  jsonrpc: string;
-  id: number;
-  result: {
-    tools: {
-      name: string;
-      inputSchema: Record<string, unknown>;
-      outputSchema: Record<string, unknown>;
-    }[];
-  };
-} {
-  return {
-    jsonrpc: '2.0',
-    id: 1,
-    result: {
-      tools: [
-        {
-          name: 'browser_session_create',
-          inputSchema: {
-            $schema: inputDialect,
-            type: 'object',
-            properties: { sessionId: { type: 'string' } },
-          },
-          outputSchema: { $schema: outputDialect, type: 'object' },
-        },
-      ],
-    },
-  };
 }
