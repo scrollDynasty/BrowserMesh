@@ -36,7 +36,11 @@ describe('MCP Registry metadata', () => {
       dependencies: { playwright: string };
     };
     const packageLock = JSON.parse(await readFile('package-lock.json', 'utf8')) as {
-      packages: Record<string, { version?: string; dependencies?: { playwright?: string } }>;
+      name?: string;
+      packages: Record<
+        string,
+        { name?: string; version?: string; dependencies?: { playwright?: string } }
+      >;
     };
     const serverJson = JSON.parse(await readFile('server.json', 'utf8')) as {
       name: string;
@@ -46,6 +50,12 @@ describe('MCP Registry metadata', () => {
     const releaseConfig = await readFile('release-please-config.json', 'utf8');
 
     expect(BROWSERMESH_VERSION).toBe(packageJson.version);
+    // The lockfile records the project's own name twice, and `npm ci` accepts a
+    // stale one: it fails on a dependency-graph mismatch, not a name mismatch.
+    // That is how the 0.2.0 rename reached npm with the lockfile still naming
+    // the old package. Nothing else in the repository compares these.
+    expect(packageLock.name).toBe(packageJson.name);
+    expect(packageLock.packages['']?.name).toBe(packageJson.name);
     expect(packageJson.dependencies.playwright).toMatch(/^\d+\.\d+\.\d+$/u);
     expect(packageLock.packages['']?.dependencies?.playwright).toBe(
       packageJson.dependencies.playwright,
