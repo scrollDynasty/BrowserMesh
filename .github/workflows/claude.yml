@@ -46,6 +46,11 @@ jobs:
         uses: anthropics/claude-code-action@9d7150bc8a3dae8149739a88019d192b579ad90c # v1.0.193
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          # Mentions are usually a short question about one thing, where an
+          # answer that arrives quickly is worth more than a deeper one that
+          # does not. Ask for the review workflow's depth by pointing Claude at
+          # a specific concern rather than by changing this default.
+          claude_args: --model claude-sonnet-5
 
       - name: Report missing credentials
         if: env.CLAUDE_CODE_OAUTH_TOKEN == ''
