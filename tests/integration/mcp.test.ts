@@ -8,6 +8,7 @@ import {
   type ToolName,
 } from '../../src/adapters/mcp/contracts.js';
 import { applicationErrorResult } from '../../src/adapters/mcp/results.js';
+import { JSON_SCHEMA_2020_12_DIALECT } from '../../src/adapters/mcp/schema-dialect.js';
 import { createMcpServer } from '../../src/adapters/mcp/server.js';
 import { BrowserMeshError } from '../../src/domain/errors.js';
 import { DEFAULT_RESOURCE_LIMITS } from '../../src/domain/resource-limits.js';
@@ -42,6 +43,15 @@ describe('MCP adapter', () => {
           ...presentation.annotations,
         });
         expect(tool.outputSchema, `${name} outputSchema`).toMatchObject({ type: 'object' });
+        // Clients validating with a 2020-12-only validator reject the whole tool
+        // when discovery declares any other dialect.
+        for (const schema of [tool.inputSchema, tool.outputSchema]) {
+          const dialect = (schema as { $schema?: unknown } | undefined)?.$schema;
+          if (dialect !== undefined) {
+            expect(dialect, `${name} schema dialect`).toBe(JSON_SCHEMA_2020_12_DIALECT);
+          }
+          expect(draftSevenOnlyKeywords(schema), `${name} draft-07 keywords`).toEqual([]);
+        }
       }
 
       expect(
@@ -740,6 +750,27 @@ function requireCallResult(result: unknown): ResultLike {
 
 function isToolName(name: string): name is ToolName {
   return Object.prototype.hasOwnProperty.call(outputSchemas, name);
+}
+
+/**
+ * Constructs a 2020-12 validator reads differently than draft-07 does. Their
+ * absence is what makes publishing the 2020-12 dialect accurate rather than
+ * merely accepted.
+ */
+function draftSevenOnlyKeywords(schema: unknown): string[] {
+  if (Array.isArray(schema)) return schema.flatMap(draftSevenOnlyKeywords);
+  if (typeof schema !== 'object' || schema === null) return [];
+  const found: string[] = [];
+  for (const [keyword, value] of Object.entries(schema)) {
+    // `definitions` moved to `$defs`, `dependencies` split into
+    // `dependentSchemas`/`dependentRequired`, and tuple `items`/`additionalItems`
+    // became `prefixItems`/`items`.
+    if (keyword === 'definitions' || keyword === 'dependencies') found.push(keyword);
+    if (keyword === 'additionalItems') found.push(keyword);
+    if (keyword === 'items' && Array.isArray(value)) found.push('items[]');
+    found.push(...draftSevenOnlyKeywords(value));
+  }
+  return found;
 }
 
 function requiredValue<T>(value: T | null | undefined): T {

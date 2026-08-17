@@ -18,6 +18,7 @@ import { BROWSERMESH_VERSION } from '../../infrastructure/generated/version.js';
 import type { BrowserMeshRuntime, OperationTarget } from '../../runtime/browsermesh-runtime.js';
 import { contextSettingsSchema, contractFor } from './contracts.js';
 import { applicationErrorResult, structuredResult } from './results.js';
+import { withDraft202012ToolSchemas } from './schema-dialect.js';
 
 const role = z.enum([
   'button',
@@ -920,7 +921,7 @@ export function createMcpServer(runtime: BrowserMeshRuntime): McpServer {
       }),
   );
 
-  return server;
+  return withDraft202012ToolSchemas(server);
 }
 
 function pageValue(
