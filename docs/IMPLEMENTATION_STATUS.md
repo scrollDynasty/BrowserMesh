@@ -28,11 +28,23 @@ the starting point. The remaining floor is the semantic locator union that rough
 embed, which is the feature rather than waste; ADR 0020 records why collapsing the interaction tools
 to reach Playwright MCP's number is rejected.
 
-Verification: 154 unit, 63 integration, 3 e2e, and 3 stress tests pass, with typecheck, lint, and
+Verification: 156 unit, 72 integration, 3 e2e, and 3 stress tests pass, with typecheck, lint, and
 format clean.
 
-Not done, and requiring the maintainer rather than code: publishing under the new npm name,
-deprecating `multi-agent-browser-mcp` with `npm deprecate`, and setting GitHub repository topics.
+Released as `browsermesh@0.2.0`. Every version of `multi-agent-browser-mcp` is deprecated in favour
+of it.
+
+Outstanding, and requiring the maintainer rather than code:
+
+- **npm trusted publishing** is not configured for `browsermesh`. A package that does not yet exist
+  has nothing to attach a trusted publisher to, so the 0.2.0 release could not publish over OIDC and
+  was pushed by hand; `publish.yml` will fail the same way on 0.2.1 until a trusted publisher naming
+  this repository, `publish.yml`, and the `npm` environment is added on npmjs.com.
+- **The MCP registry still advertises the old package.** Registry publication runs after
+  `npm publish` in the same job, so it did not run either; the registry's latest entry is 0.1.5
+  pointing at `multi-agent-browser-mcp`. Configuring trusted publishing first lets the next release
+  correct this on its own.
+- GitHub repository topics are unset.
 
 BrowserMesh v0.1 and the accepted professional MCP improvement program are implemented. The final
 repository-wide adversarial audit and clean-environment release gate are complete, with no known
