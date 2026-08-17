@@ -115,8 +115,14 @@ describe('stdio executable', () => {
       await transport.close();
       await rm(dataDirectory, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 });
     }
-  });
+    // Starts the CLI as a subprocess, which compiles the project through tsx
+    // before the protocol handshake begins. The default 15s covers the run but
+    // not the compilation when the integration files execute in parallel.
+  }, 60_000);
 
+  // With auto-install disabled — the configuration for an air-gapped or
+  // pre-provisioned host — a missing browser must still leave the protocol
+  // usable and say what to do about it, rather than failing to start.
   it('keeps MCP available and reports actionable setup when Chromium is missing', async () => {
     const temporaryRoot = await mkdtemp(join(tmpdir(), 'browsermesh-no-browser-'));
     const transport = new StdioClientTransport({
@@ -128,6 +134,7 @@ describe('stdio executable', () => {
         BROWSERMESH_PERSISTENCE: 'false',
         BROWSERMESH_HEADLESS: 'true',
         BROWSERMESH_DATA_DIR: join(temporaryRoot, 'data'),
+        BROWSERMESH_AUTO_INSTALL: 'false',
         PLAYWRIGHT_BROWSERS_PATH: join(temporaryRoot, 'browsers'),
       },
       stderr: 'pipe',
@@ -144,9 +151,7 @@ describe('stdio executable', () => {
       });
       expect(creation.isError).toBe(true);
       expect(JSON.stringify(creation.content)).toContain('BROWSER_ERROR');
-      expect(JSON.stringify(creation.content)).toContain(
-        'npx -y multi-agent-browser-mcp --install-browser',
-      );
+      expect(JSON.stringify(creation.content)).toContain('npx -y browsermesh --install-browser');
       const runtimeInfo = await client.callTool({ name: 'browser_runtime_info', arguments: {} });
       expect(runtimeInfo.structuredContent).toMatchObject({
         browserLaunchState: 'failed',
@@ -158,7 +163,10 @@ describe('stdio executable', () => {
       await transport.close();
       await rm(temporaryRoot, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 });
     }
-  });
+    // Starts the CLI as a subprocess, which compiles the project through tsx
+    // before the protocol handshake begins. The default 15s covers the run but
+    // not the compilation when the integration files execute in parallel.
+  }, 60_000);
 });
 
 const createdSchema = z.object({

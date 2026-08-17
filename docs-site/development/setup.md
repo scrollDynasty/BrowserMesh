@@ -7,8 +7,8 @@
 - Playwright-supported Chromium environment
 
 ```bash
-git clone https://github.com/scrollDynasty/multi-agent-browser-mcp.git
-cd multi-agent-browser-mcp
+git clone https://github.com/scrollDynasty/multi-agent-browser-mcp.git browsermesh
+cd browsermesh
 npm ci
 npx playwright install chromium
 npm run build

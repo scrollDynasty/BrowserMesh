@@ -106,7 +106,7 @@ export async function runDoctor(options: DoctorOptions): Promise<DoctorResult> {
       [
         'CHROMIUM_MISSING',
         'The Playwright Chromium executable is unavailable.',
-        'Run: npx -y multi-agent-browser-mcp --install-browser',
+        'Run: npx -y browsermesh --install-browser',
       ],
     ),
   );
@@ -193,7 +193,7 @@ function classifySmokeFailure(error: unknown): DoctorCheck {
       'browser-smoke',
       'CHROMIUM_MISSING',
       'Chromium could not start because its executable is unavailable.',
-      'Run: npx -y multi-agent-browser-mcp --install-browser',
+      'Run: npx -y browsermesh --install-browser',
     );
   }
   return failed(

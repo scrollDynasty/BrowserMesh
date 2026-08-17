@@ -5,8 +5,8 @@
 Symptom: `BROWSER_ERROR` includes the install remediation.
 
 ```bash
-npx -y multi-agent-browser-mcp --install-browser
-npx -y multi-agent-browser-mcp --doctor --json
+npx -y browsermesh --install-browser
+npx -y browsermesh --doctor --json
 ```
 
 ## Server exits after start

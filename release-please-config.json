@@ -6,7 +6,7 @@
   "packages": {
     ".": {
       "release-type": "node",
-      "package-name": "multi-agent-browser-mcp",
+      "package-name": "browsermesh",
       "changelog-path": "CHANGELOG.md",
       "always-update": true,
       "bump-minor-pre-major": true,

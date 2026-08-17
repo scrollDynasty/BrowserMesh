@@ -16,9 +16,20 @@ import { BrowserMeshError } from '../../domain/errors.js';
 import { DEFAULT_RESOURCE_LIMITS } from '../../domain/resource-limits.js';
 import { BROWSERMESH_VERSION } from '../../infrastructure/generated/version.js';
 import type { BrowserMeshRuntime, OperationTarget } from '../../runtime/browsermesh-runtime.js';
-import { contextSettingsSchema, contractFor } from './contracts.js';
+import {
+  contextSettingsSchema,
+  contractFor,
+  observationSources,
+  type ObservationSource,
+  type ToolName,
+} from './contracts.js';
+import { registerPrompts } from './prompts.js';
+import { selectedTools } from './tool-profiles.js';
 import { applicationErrorResult, structuredResult } from './results.js';
-import { withDraft202012ToolSchemas } from './schema-dialect.js';
+import {
+  withPublishedToolSchemas,
+  type ToolSchemaPublicationOptions,
+} from './tool-schema-publication.js';
 
 const role = z.enum([
   'button',
@@ -147,17 +158,11 @@ const waitConditionSchema = z.discriminatedUnion('kind', [
     state: z.enum(['present', 'absent']),
   }),
 ]);
-const browserActionSchema = z.union([
+const browserActionSchema = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('click'), target: elementTargetSchema }),
-  z.object({ kind: z.literal('click'), locator: locatorSchema }),
   z.object({
     kind: z.literal('press'),
     target: elementTargetSchema,
-    key: z.string().min(1).max(64),
-  }),
-  z.object({
-    kind: z.literal('press'),
-    locator: locatorSchema,
     key: z.string().min(1).max(64),
   }),
 ]);
@@ -185,17 +190,31 @@ const actionWaitSchema = z.discriminatedUnion('kind', [
   }),
 ]);
 
-const observationInputSchema = {
-  ...targetSchema,
-  sinceEventId: z.string().min(1).max(128).optional(),
-  limit: z.number().int().positive().max(200).optional(),
-  includeText: z.boolean().optional().default(false),
-};
-const networkObservationInputSchema = {
-  ...targetSchema,
-  sinceEventId: z.string().min(1).max(128).optional(),
-  limit: z.number().int().positive().max(200).optional(),
-};
+/**
+ * The four observation sources share one contract. Only `console` and
+ * `pageError` carry text, so `includeText` is rejected for the network sources
+ * rather than silently ignored: a caller that asked for evidence should learn
+ * that none was available, not receive a metadata-only answer that looks
+ * complete.
+ *
+ * The check lives in the schema rather than the handler so the SDK reports it
+ * as an input-validation error naming the offending field. A BrowserMeshError
+ * would reach the client as the fixed, deliberately uninformative
+ * `INVALID_ARGUMENT` message, which cannot say which argument was wrong.
+ */
+const TEXT_BEARING_SOURCES: ReadonlySet<string> = new Set(['console', 'pageError']);
+const observationInputSchema = z
+  .object({
+    ...targetSchema,
+    source: z.enum(observationSources),
+    sinceEventId: z.string().min(1).max(128).optional(),
+    limit: z.number().int().positive().max(200).optional(),
+    includeText: z.boolean().optional().default(false),
+  })
+  .refine((input) => !input.includeText || TEXT_BEARING_SOURCES.has(input.source), {
+    error: "includeText is only available for the 'console' and 'pageError' sources",
+    path: ['includeText'],
+  });
 const snapshotInputSchema = {
   ...targetSchema,
   scope: locatorSchema.optional(),
@@ -267,8 +286,33 @@ function target(
   };
 }
 
-export function createMcpServer(runtime: BrowserMeshRuntime): McpServer {
+export interface McpServerOptions {
+  /** How published tool schemas are encoded. Defaults to the compact form. */
+  readonly toolSchemas?: ToolSchemaPublicationOptions;
+  /**
+   * Comma-separated tool profiles to publish. Empty or absent publishes every
+   * profile, so an existing configuration keeps the tools it had.
+   */
+  readonly tools?: string | undefined;
+}
+
+export function createMcpServer(
+  runtime: BrowserMeshRuntime,
+  options: McpServerOptions = {},
+): McpServer {
   const server = new McpServer({ name: 'browsermesh', version: BROWSERMESH_VERSION });
+  const published = selectedTools(options.tools);
+  const registerTool = server.registerTool.bind(server);
+
+  // Registering every tool and withdrawing the unselected ones keeps the SDK's
+  // per-call generic inference at all 35 registration sites, which a wrapper
+  // taking the arguments generically would lose. Withdrawal happens before the
+  // server is connected, so no client observes the intermediate surface.
+  server.registerTool = function publishIfSelected(name, config, callback) {
+    const registered = registerTool(name, config, callback);
+    if (!published.has(name as ToolName)) registered.remove();
+    return registered;
+  };
 
   server.registerTool(
     'browser_runtime_info',
@@ -525,16 +569,16 @@ export function createMcpServer(runtime: BrowserMeshRuntime): McpServer {
       }),
   );
   server.registerTool(
-    'browser_console_list',
+    'browser_observe',
     {
-      ...contractFor('browser_console_list'),
+      ...contractFor('browser_observe'),
       description:
-        'List bounded console events captured for one explicitly addressed page. Results are metadata-only unless includeText=true; text is best-effort redacted and bounded, console argument objects are never serialized. Use sinceEventId for a non-destructive checkpoint and inspect gap/droppedCount before treating the evidence as complete.',
+        "Read bounded observations recorded for one explicitly addressed page. Choose source: 'console' for console events, 'pageError' for uncaught page errors, 'network' for correlated request/response metadata, or 'requestFailed' for transport-level failures. HTTP error responses such as 500 are 'network' response events, not 'requestFailed'. Console and page-error results are metadata-only unless includeText=true, which the network sources reject because they carry no text; exposed text is best-effort redacted and bounded, and console argument objects and raw stacks are never captured. Network URLs remove credentials and fragments and redact sensitive query values; headers, cookies, bodies, storage, WebSockets, service-worker traffic, data URLs, and blob URLs are never captured. Use sinceEventId as a non-destructive checkpoint and inspect gap and droppedCount before treating the evidence as complete.",
       inputSchema: observationInputSchema,
     },
     (input, extra) =>
       structuredResult(async () => {
-        const listed = await runtime.listConsole(target(input, extra.signal), {
+        const listed = await observe(runtime, input.source, target(input, extra.signal), {
           ...(input.sinceEventId === undefined ? {} : { sinceEventId: input.sinceEventId }),
           ...(input.limit === undefined ? {} : { limit: input.limit }),
           includeText: input.includeText,
@@ -543,73 +587,7 @@ export function createMcpServer(runtime: BrowserMeshRuntime): McpServer {
           operationId: listed.operationId,
           sessionId: listed.sessionId,
           pageId: listed.pageId,
-          ...listed.value,
-        };
-      }),
-  );
-  server.registerTool(
-    'browser_page_errors_list',
-    {
-      ...contractFor('browser_page_errors_list'),
-      description:
-        'List bounded uncaught page errors for one explicitly addressed page. Results omit messages unless includeText=true; exposed messages are best-effort redacted and bounded and raw stacks are never captured. Cursor, gap, and droppedCount make overflow explicit.',
-      inputSchema: observationInputSchema,
-    },
-    (input, extra) =>
-      structuredResult(async () => {
-        const listed = await runtime.listPageErrors(target(input, extra.signal), {
-          ...(input.sinceEventId === undefined ? {} : { sinceEventId: input.sinceEventId }),
-          ...(input.limit === undefined ? {} : { limit: input.limit }),
-          includeText: input.includeText,
-        });
-        return {
-          operationId: listed.operationId,
-          sessionId: listed.sessionId,
-          pageId: listed.pageId,
-          ...listed.value,
-        };
-      }),
-  );
-  server.registerTool(
-    'browser_network_list',
-    {
-      ...contractFor('browser_network_list'),
-      description:
-        'List bounded request and response metadata for one explicitly addressed page. Correlated requestId and durationMs support duplicate/retry analysis. URLs remove credentials and fragments and redact sensitive query values; headers, cookies, bodies, storage, WebSockets, service-worker traffic, data URLs, and blob URLs are never captured. Inspect gap and droppedCount before treating the evidence as complete.',
-      inputSchema: networkObservationInputSchema,
-    },
-    (input, extra) =>
-      structuredResult(async () => {
-        const listed = await runtime.listNetwork(target(input, extra.signal), {
-          ...(input.sinceEventId === undefined ? {} : { sinceEventId: input.sinceEventId }),
-          ...(input.limit === undefined ? {} : { limit: input.limit }),
-        });
-        return {
-          operationId: listed.operationId,
-          sessionId: listed.sessionId,
-          pageId: listed.pageId,
-          ...listed.value,
-        };
-      }),
-  );
-  server.registerTool(
-    'browser_failed_requests_list',
-    {
-      ...contractFor('browser_failed_requests_list'),
-      description:
-        'List bounded transport-level request failures for one explicitly addressed page. HTTP error responses such as 500 remain response events in browser_network_list; this tool reports request_failed events with correlated IDs, duration, and a bounded safe failure message. No headers, cookies, or bodies are captured.',
-      inputSchema: networkObservationInputSchema,
-    },
-    (input, extra) =>
-      structuredResult(async () => {
-        const listed = await runtime.listFailedRequests(target(input, extra.signal), {
-          ...(input.sinceEventId === undefined ? {} : { sinceEventId: input.sinceEventId }),
-          ...(input.limit === undefined ? {} : { limit: input.limit }),
-        });
-        return {
-          operationId: listed.operationId,
-          sessionId: listed.sessionId,
-          pageId: listed.pageId,
+          source: input.source,
           ...listed.value,
         };
       }),
@@ -849,7 +827,7 @@ export function createMcpServer(runtime: BrowserMeshRuntime): McpServer {
           operationId: completed.operationId,
           sessionId: completed.sessionId,
           pageId: completed.pageId,
-          condition: completed.value.condition,
+          satisfied: true,
         };
       }),
   );
@@ -872,8 +850,6 @@ export function createMcpServer(runtime: BrowserMeshRuntime): McpServer {
           operationId: completed.operationId,
           sessionId: completed.sessionId,
           pageId: completed.pageId,
-          action: completed.value.action,
-          wait: completed.value.wait,
           event: completed.value.event,
         };
       }),
@@ -921,7 +897,14 @@ export function createMcpServer(runtime: BrowserMeshRuntime): McpServer {
       }),
   );
 
-  return withDraft202012ToolSchemas(server);
+  // The profile filter applies to the tools registered above and nothing else.
+  // Left in place it would silently withdraw anything a caller registered on
+  // the returned server, which is a surprising thing for a factory to do.
+  server.registerTool = registerTool;
+
+  registerPrompts(server, runtime);
+
+  return withPublishedToolSchemas(server, options.toolSchemas ?? {});
 }
 
 function pageValue(
@@ -942,6 +925,29 @@ function pageValue(
       [key]: completed.value,
     };
   });
+}
+
+/**
+ * Route one observation source to the runtime reader that selects it. The
+ * runtime keeps a reader per source because each selects a different event
+ * kind; only the published contract is shared (ADR 0020).
+ */
+function observe(
+  runtime: BrowserMeshRuntime,
+  source: ObservationSource,
+  addressed: OperationTarget,
+  input: { readonly sinceEventId?: string; readonly limit?: number; readonly includeText: boolean },
+): ReturnType<BrowserMeshRuntime['listConsole']> {
+  switch (source) {
+    case 'console':
+      return runtime.listConsole(addressed, input);
+    case 'pageError':
+      return runtime.listPageErrors(addressed, input);
+    case 'network':
+      return runtime.listNetwork(addressed, input);
+    case 'requestFailed':
+      return runtime.listFailedRequests(addressed, input);
+  }
 }
 
 function pageCompleted(
