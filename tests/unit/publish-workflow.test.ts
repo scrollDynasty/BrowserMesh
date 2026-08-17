@@ -37,6 +37,7 @@ describe('MCP Registry metadata', () => {
     };
     const packageLock = JSON.parse(await readFile('package-lock.json', 'utf8')) as {
       name?: string;
+      version?: string;
       packages: Record<
         string,
         { name?: string; version?: string; dependencies?: { playwright?: string } }
@@ -50,12 +51,18 @@ describe('MCP Registry metadata', () => {
     const releaseConfig = await readFile('release-please-config.json', 'utf8');
 
     expect(BROWSERMESH_VERSION).toBe(packageJson.version);
-    // The lockfile records the project's own name twice, and `npm ci` accepts a
-    // stale one: it fails on a dependency-graph mismatch, not a name mismatch.
-    // That is how the 0.2.0 rename reached npm with the lockfile still naming
-    // the old package. Nothing else in the repository compares these.
+    // The lockfile records the project's own identity twice over, and `npm ci`
+    // accepts a stale copy: it fails on a dependency-graph mismatch, not on
+    // name or version. That is how the 0.2.0 rename reached npm with the
+    // lockfile still naming the old package. Nothing else here compares them —
+    // `verify-package.ts` checks the packed tarball against `package.json` and
+    // never reads the lockfile. The version is asserted for the same reason
+    // even though release-please currently keeps it in step: that is a habit of
+    // the release tooling, not a guarantee this repository makes.
     expect(packageLock.name).toBe(packageJson.name);
     expect(packageLock.packages['']?.name).toBe(packageJson.name);
+    expect(packageLock.version).toBe(packageJson.version);
+    expect(packageLock.packages['']?.version).toBe(packageJson.version);
     expect(packageJson.dependencies.playwright).toMatch(/^\d+\.\d+\.\d+$/u);
     expect(packageLock.packages['']?.dependencies?.playwright).toBe(
       packageJson.dependencies.playwright,
