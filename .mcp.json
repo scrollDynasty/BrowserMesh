@@ -7,7 +7,7 @@
     },
     "playwright": {
       "command": "npx",
-      "args": ["-y", "@playwright/mcp@0.0.79"]
+      "args": ["-y", "@playwright/mcp@0.0.79", "--headless", "--isolated"]
     }
   }
 }
