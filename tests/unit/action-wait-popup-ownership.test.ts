@@ -152,6 +152,46 @@ describe('actionAndWait popup ownership', () => {
     expect(stray.closed).toBe(true);
   });
 
+  it('drains a cleanup chain that grows while it is already being awaited', async () => {
+    const { engine, page, handle } = engineWithPage();
+    const first = new FakePage();
+    const second = new FakePage();
+    // The second popup lands while the first close is in flight, so it extends
+    // `unexpectedCleanup` behind the read `unexpectedFailure()` has already made.
+    first.whileClosing = () => page.emit('popup', second);
+    stubAction(engine, async () => {
+      page.emit('dialog', dialog());
+      await flush();
+      // No flush: the close must still be running when the drain takes its
+      // first read, or the chain would already be settled and never grow.
+      page.emit('popup', first);
+    });
+
+    await expect(actionAndWait(engine, handle)).rejects.toMatchObject({ code: 'BROWSER_ERROR' });
+    expect(first.closed).toBe(true);
+    // Only true if the drain noticed the chain had been reassigned and looped.
+    expect(second.closed).toBe(true);
+  });
+
+  it('keeps an abort recognisable when a cleanup failure is also pending', async () => {
+    const { engine, page, handle } = engineWithPage();
+    const abort = new Error('operation cancelled');
+    abort.name = 'AbortError';
+    stubAction(engine, async () => {
+      // Sets unexpectedError, which is what would otherwise be aggregated into
+      // the abort and rename it.
+      page.emit('dialog', dialog());
+      await flush();
+      throw abort;
+    });
+
+    const error = await actionAndWait(engine, handle).catch((reason: unknown) => reason);
+    // `isCancellation` matches on the name, so wrapping this in a
+    // BrowserMeshError would report a cancelled operation as a browser failure.
+    expect((error as Error).name).toBe('AbortError');
+    expect(error).toBe(abort);
+  });
+
   it('neither adopts nor fails on a second popup once the wait has succeeded', async () => {
     const { engine, page, handle } = engineWithPage();
     const delivered = new FakePage();
@@ -188,8 +228,21 @@ class FakePage extends EventEmitter {
     return this;
   }
 
+  /** Runs while `close()` is still in flight, so a test can extend the chain. */
+  whileClosing: (() => void) | undefined;
+
   async close(): Promise<void> {
     if (this.closeError !== undefined) throw this.closeError;
+    if (this.whileClosing !== undefined) {
+      // Park first, so the drain has already taken its read of the chain by the
+      // time this extends it. Without the delay the chain grows before the read
+      // and a single await would cover both links.
+      await new Promise<void>((resolve) => setImmediate(resolve));
+      this.whileClosing();
+    }
+    // Never resolve within a microtask: a close the operation failed to await
+    // must still be unfinished when the assertions run.
+    await new Promise<void>((resolve) => setImmediate(resolve));
     this.closed = true;
     this.emit('close');
   }

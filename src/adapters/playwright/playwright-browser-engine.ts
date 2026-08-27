@@ -903,6 +903,17 @@ export class PlaywrightBrowserEngine implements BrowserEnginePort {
     // Aggregate instead, as the waiter's own late-popup branch does.
     const closeUndeliveredPopup = async (primary: Error): Promise<Error> => {
       if (waitResult.status !== 'fulfilled' || waitResult.value.kind !== 'popup') return primary;
+      // A cancellation is identified downstream by `name === 'AbortError'`, and
+      // rebuilding it as a BrowserMeshError would rename it, so every
+      // `isCancellation` check would see a browser failure instead of an abort.
+      // Keeping the abort intact outranks reporting the cleanup failure.
+      // `isCancellation` narrows to `Error`, which would leave `primary` as
+      // `never` afterwards, so read it as a plain boolean.
+      const cancelled: boolean = isCancellation(primary);
+      if (cancelled) {
+        await this.closePage(waitResult.value.page).catch(() => undefined);
+        return primary;
+      }
       try {
         await this.closePage(waitResult.value.page);
         return primary;
@@ -921,7 +932,8 @@ export class PlaywrightBrowserEngine implements BrowserEnginePort {
       // error would swallow that, which is the thing the branch that records it
       // exists to prevent.
       const primary = await closeUndeliveredPopup(errorObject(actionResult.reason));
-      throw unexpectedFailure === undefined || unexpectedFailure === primary
+      const cancelled: boolean = isCancellation(primary);
+      throw unexpectedFailure === undefined || unexpectedFailure === primary || cancelled
         ? primary
         : new BrowserMeshError(
             primary instanceof BrowserMeshError ? primary.code : 'BROWSER_ERROR',
