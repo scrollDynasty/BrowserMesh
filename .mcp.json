@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "browsermesh": {
+      "command": "npx",
+      "args": ["tsx", "src/cli.ts"]
+    },
+    "playwright": {
+      "command": "npx",
+      "args": ["-y", "@playwright/mcp@0.0.79"]
+    }
+  }
+}
