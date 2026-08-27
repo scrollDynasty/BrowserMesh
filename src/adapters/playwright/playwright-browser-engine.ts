@@ -880,16 +880,32 @@ export class PlaywrightBrowserEngine implements BrowserEnginePort {
       },
     );
     const settled = await Promise.allSettled([actionPromise, waiter.promise]);
-    const unexpectedFailure = await waiter.unexpectedFailure();
-    waiter.dispose();
+    // The waiter no longer disposes itself when its promise settles, so this is
+    // the only thing that unregisters its page listeners.
+    let unexpectedFailure: Error | undefined;
+    try {
+      unexpectedFailure = await waiter.unexpectedFailure();
+    } finally {
+      waiter.dispose();
+    }
     const actionResult = settled[0];
     const waitResult = settled[1];
-    if (actionResult.status === 'rejected') {
+    // A popup that satisfied the wait is registered but still owned by this
+    // operation: its pageId only reaches the caller through a successful
+    // result. Any failure discards that result, so this is the last place that
+    // can close the page.
+    const closeUndeliveredPopup = async (): Promise<void> => {
       if (waitResult.status === 'fulfilled' && waitResult.value.kind === 'popup')
         await this.closePage(waitResult.value.page);
+    };
+    if (actionResult.status === 'rejected') {
+      await closeUndeliveredPopup();
       throw errorObject(actionResult.reason);
     }
-    if (unexpectedFailure !== undefined) throw unexpectedFailure;
+    if (unexpectedFailure !== undefined) {
+      await closeUndeliveredPopup();
+      throw unexpectedFailure;
+    }
     if (waitResult.status === 'rejected') throw errorObject(waitResult.reason);
     return waitResult.value;
   }
@@ -1359,6 +1375,24 @@ function createEventWaiter(
       });
       return;
     }
+    if (settled) {
+      // The operation already failed — commonly because a dialog arrived first
+      // and rejected this waiter — so no pageId can reach the caller and
+      // nothing else owns this page. Close it, which is the same policy the
+      // unexpected branch above applies to a popup raised for another wait.
+      unexpectedCleanup = unexpectedCleanup.then(async () => {
+        try {
+          await popup.close();
+        } catch (cleanupError) {
+          unexpectedError ??= new BrowserMeshError(
+            'BROWSER_ERROR',
+            'Failed to close a popup that opened after the operation failed',
+            { cause: cleanupError },
+          );
+        }
+      });
+      return;
+    }
     finish({ kind: 'popup', page: registerPopup(popup) });
   };
   const onDialog = (dialog: Dialog): void => {
@@ -1454,7 +1488,11 @@ function createEventWaiter(
     page.off('dialog', onDialog);
   };
   if (control.signal?.aborted === true) onAbort();
-  void promise.finally(dispose).catch(() => undefined);
+  // Only guard against an unhandled rejection here. Disposing as soon as the
+  // promise settles would unregister the popup listener before the operation
+  // has finished failing, and a popup the action already requested would then
+  // open with nothing listening for it. `actionAndWait` always disposes.
+  void promise.catch(() => undefined);
   return {
     promise,
     cancel: fail,

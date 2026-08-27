@@ -910,6 +910,31 @@ describe('real Chromium runtime', () => {
     });
   });
 
+  it('closes the expected popup when an unexpected dialog fails the same operation', async () => {
+    const target = await createTarget();
+    await runtime.navigate(target, `${web.baseUrl}/popup-dialog-actions`);
+    const context = requireBrowserContext(firstPrivateValue(harness.engine, 'contexts'));
+    const managedPages = (await runtime.listPages(target.sessionId)).value.length;
+    const contextPages = context.pages().length;
+
+    // One click opens the awaited popup and raises a dialog. The popup satisfies the
+    // wait and is registered, then the dialog turns the whole operation into a failure,
+    // so the caller never receives the pageId that would let it close the popup later.
+    await expect(
+      runtime.actionAndWait(
+        target,
+        { kind: 'click', target: { strategy: 'testId', value: 'popup-and-dialog' } },
+        { kind: 'popup' },
+      ),
+    ).rejects.toMatchObject({ code: 'BROWSER_ERROR' });
+
+    expect((await runtime.listPages(target.sessionId)).value).toHaveLength(managedPages);
+    expect(context.pages()).toHaveLength(contextPages);
+    await expect(runtime.getTitle(target)).resolves.toMatchObject({
+      value: 'Popup and dialog actions',
+    });
+  });
+
   it('keeps waits ordered per session, parallel across sessions, and usable after timeout', async () => {
     const a = await createTarget();
     const b = await createTarget();
