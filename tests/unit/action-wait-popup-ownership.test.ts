@@ -192,6 +192,45 @@ describe('actionAndWait popup ownership', () => {
     expect(error).toBe(abort);
   });
 
+  it('closes a registered popup on cancellation without renaming the abort', async () => {
+    const { engine, page, handle } = engineWithPage();
+    const popup = new FakePage();
+    const abort = new Error('operation cancelled');
+    abort.name = 'AbortError';
+    stubAction(engine, async () => {
+      // The popup satisfies the wait and is registered, then the action is
+      // cancelled -- so a real page is in the registry when the abort arrives.
+      page.emit('popup', popup);
+      await flush();
+      throw abort;
+    });
+
+    const error = await actionAndWait(engine, handle).catch((reason: unknown) => reason);
+    expect(error).toBe(abort);
+    expect(popup.closed).toBe(true);
+    expect(registeredPages(engine)).toHaveLength(1);
+  });
+
+  it('still reports the abort when the popup it registered cannot be closed', async () => {
+    const { engine, page, handle } = engineWithPage();
+    const popup = new FakePage();
+    popup.closeError = new Error('target closed');
+    const abort = new Error('operation cancelled');
+    abort.name = 'AbortError';
+    stubAction(engine, async () => {
+      page.emit('popup', popup);
+      await flush();
+      throw abort;
+    });
+
+    const error = await actionAndWait(engine, handle).catch((reason: unknown) => reason);
+    // The close failure is deliberately swallowed here: reporting it would mean
+    // rebuilding the error and renaming the abort, which downstream
+    // `isCancellation` checks match on. Pinned so changing it is a decision.
+    expect(error).toBe(abort);
+    expect(popup.closed).toBe(false);
+  });
+
   it('neither adopts nor fails on a second popup once the wait has succeeded', async () => {
     const { engine, page, handle } = engineWithPage();
     const delivered = new FakePage();
