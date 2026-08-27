@@ -931,7 +931,11 @@ describe('real Chromium runtime', () => {
     ).rejects.toMatchObject({ code: 'BROWSER_ERROR' });
 
     expect((await runtime.listPages(target.sessionId)).value).toHaveLength(managedPages);
-    expect(context.pages()).toHaveLength(contextPages);
+    // Wait for the context to settle rather than sampling it: the close can still
+    // be in flight when the operation rejects, and which of the two event orders
+    // Chromium picked decides that. A tab nothing ever closes still fails here,
+    // which is the leak this guards.
+    await expect.poll(() => context.pages().length, { timeout: 5_000 }).toBe(contextPages);
     await expect(runtime.getTitle(target)).resolves.toMatchObject({
       value: 'Popup and dialog actions',
     });

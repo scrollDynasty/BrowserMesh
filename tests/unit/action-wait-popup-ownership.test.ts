@@ -70,6 +70,46 @@ describe('actionAndWait popup ownership', () => {
     expect(cause).toBeInstanceOf(AggregateError);
     expect((cause as AggregateError).errors).toHaveLength(2);
   });
+
+  it('keeps the dialog failure when the popup it opened cannot be closed', async () => {
+    const { engine, page, handle } = engineWithPage();
+    const popup = new FakePage();
+    popup.closeError = new Error('target closed');
+    stubAction(engine, async () => {
+      page.emit('popup', popup);
+      await flush();
+      page.emit('dialog', dialog());
+      await flush();
+    });
+
+    const error = await actionAndWait(engine, handle).catch((reason: unknown) => reason);
+    // Not "Failed to close browser page": a cleanup detail must not replace the
+    // reason the operation actually failed.
+    expect(error).toMatchObject({
+      code: 'BROWSER_ERROR',
+      message: 'Operation failed and the popup it opened could not be closed',
+    });
+    const errors = ((error as { cause?: unknown }).cause as AggregateError).errors;
+    expect(errors[0]).toMatchObject({ message: 'Unexpected alert dialog while waiting for popup' });
+  });
+
+  it('does not fail a successful wait because a second popup could not be closed', async () => {
+    const { engine, page, handle } = engineWithPage();
+    const delivered = new FakePage();
+    const extra = new FakePage();
+    extra.closeError = new Error('target closed');
+    stubAction(engine, async () => {
+      page.emit('popup', delivered);
+      await flush();
+      page.emit('popup', extra);
+      await flush();
+    });
+
+    // The wait succeeded. A second tab arriving afterwards is not this
+    // operation's failure, and must not destroy the page it is about to return.
+    await expect(actionAndWait(engine, handle)).resolves.toMatchObject({ kind: 'popup' });
+    expect(delivered.closed).toBe(false);
+  });
 });
 
 class FakePage extends EventEmitter {

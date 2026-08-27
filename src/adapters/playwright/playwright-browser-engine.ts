@@ -894,18 +894,27 @@ export class PlaywrightBrowserEngine implements BrowserEnginePort {
     // operation: its pageId only reaches the caller through a successful
     // result. Any failure discards that result, so this is the last place that
     // can close the page.
-    const closeUndeliveredPopup = async (): Promise<void> => {
-      if (waitResult.status === 'fulfilled' && waitResult.value.kind === 'popup')
+    // Returns the error to raise. `closePage` rejects when the page will not
+    // close, and letting that propagate would replace the real reason the
+    // operation failed with a cleanup detail -- and leave the handle in the
+    // registry, since `closePage` only forgets it after a successful close.
+    // Aggregate instead, as the waiter's own late-popup branch does.
+    const closeUndeliveredPopup = async (primary: Error): Promise<Error> => {
+      if (waitResult.status !== 'fulfilled' || waitResult.value.kind !== 'popup') return primary;
+      try {
         await this.closePage(waitResult.value.page);
+        return primary;
+      } catch (cleanupError) {
+        return new BrowserMeshError(
+          'BROWSER_ERROR',
+          'Operation failed and the popup it opened could not be closed',
+          { cause: new AggregateError([primary, cleanupError]) },
+        );
+      }
     };
-    if (actionResult.status === 'rejected') {
-      await closeUndeliveredPopup();
-      throw errorObject(actionResult.reason);
-    }
-    if (unexpectedFailure !== undefined) {
-      await closeUndeliveredPopup();
-      throw unexpectedFailure;
-    }
+    if (actionResult.status === 'rejected')
+      throw await closeUndeliveredPopup(errorObject(actionResult.reason));
+    if (unexpectedFailure !== undefined) throw await closeUndeliveredPopup(unexpectedFailure);
     if (waitResult.status === 'rejected') throw errorObject(waitResult.reason);
     return waitResult.value;
   }
@@ -1308,6 +1317,9 @@ function createEventWaiter(
   registerPopup: (popup: Page) => BrowserPageHandle,
 ): EventWaiter {
   let settled = false;
+  // Distinct from `settled`: `finish` settles a success, and a late popup must not
+  // be force-closed -- nor allowed to fail the operation -- when the wait succeeded.
+  let failed = false;
   let unexpectedError: Error | undefined;
   let unexpectedCleanup: Promise<void> = Promise.resolve();
   let resolvePromise!: (value: BrowserEngineActionWaitEvent) => void;
@@ -1324,6 +1336,7 @@ function createEventWaiter(
   const fail = (error: unknown): void => {
     if (settled) return;
     settled = true;
+    failed = true;
     rejectPromise(error instanceof Error ? error : new Error(String(error)));
   };
   const onNavigation = (frame: Frame): void => {
@@ -1375,7 +1388,7 @@ function createEventWaiter(
       });
       return;
     }
-    if (settled) {
+    if (failed) {
       // The operation already failed — commonly because a dialog arrived first
       // and rejected this waiter — so no pageId can reach the caller and
       // nothing else owns this page. Close it, which is the same policy the
