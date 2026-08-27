@@ -926,7 +926,15 @@ export class PlaywrightBrowserEngine implements BrowserEnginePort {
         : new BrowserMeshError(
             primary instanceof BrowserMeshError ? primary.code : 'BROWSER_ERROR',
             primary.message,
-            { cause: new AggregateError([primary, unexpectedFailure]) },
+            {
+              cause: new AggregateError([primary, unexpectedFailure]),
+              // Element-resolution failures carry the target descriptor here;
+              // rebuilding without it would be less informative than the plain
+              // rethrow this replaces.
+              ...(primary instanceof BrowserMeshError && primary.details !== undefined
+                ? { details: primary.details }
+                : {}),
+            },
           );
     }
     if (unexpectedFailure !== undefined) throw await closeUndeliveredPopup(unexpectedFailure);
@@ -1383,6 +1391,14 @@ function createEventWaiter(
   };
   const onPopup = (popup: Page): void => {
     if (wait.kind !== 'popup') {
+      // The popup listener outlives the settle so a page this operation asked
+      // for can still be reclaimed. That must not let a stray popup overturn a
+      // wait that already succeeded: recording `unexpectedError` here would
+      // make `actionAndWait` throw instead of returning the result it holds.
+      // Leaving the tab matches the expected-popup branch below; adopting or
+      // closing pages after a successful operation is the ownership change
+      // noted there.
+      if (settled && !failed) return;
       const error = new BrowserMeshError(
         'BROWSER_ERROR',
         `Unexpected popup while waiting for ${wait.kind}`,

@@ -111,6 +111,24 @@ describe('actionAndWait popup ownership', () => {
     expect(errors[0]).toMatchObject({ message: 'Unexpected alert dialog while waiting for popup' });
   });
 
+  it('leaves a settled non-popup wait alone when a stray popup arrives', async () => {
+    const { engine, page, handle } = engineWithPage();
+    const stray = new FakePage();
+    stubAction(engine, async () => {
+      page.emit('dialog', dialog());
+      await flush();
+      // The popup listener deliberately outlives the settle so a requested page
+      // can still be reclaimed. It must not turn this succeeded dialog wait
+      // into BROWSER_ERROR: Unexpected popup while waiting for dialog.
+      page.emit('popup', stray);
+      await flush();
+    });
+
+    await expect(
+      actionAndWait(engine, handle, { kind: 'dialog', dialogType: 'alert', action: 'accept' }),
+    ).resolves.toMatchObject({ kind: 'dialog' });
+  });
+
   it('neither adopts nor fails on a second popup once the wait has succeeded', async () => {
     const { engine, page, handle } = engineWithPage();
     const delivered = new FakePage();
@@ -182,11 +200,12 @@ function stubAction(engine: PlaywrightBrowserEngine, run: () => Promise<void>): 
 function actionAndWait(
   engine: PlaywrightBrowserEngine,
   handle: BrowserPageHandle,
+  wait: Parameters<PlaywrightBrowserEngine['actionAndWait']>[2] = { kind: 'popup' },
 ): Promise<unknown> {
   return engine.actionAndWait(
     handle,
     { kind: 'click', target: { strategy: 'testId', value: 'irrelevant' } },
-    { kind: 'popup' },
+    wait,
     createOperationControl(5_000),
   );
 }
