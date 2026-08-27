@@ -1398,7 +1398,32 @@ function createEventWaiter(
       // Leaving the tab matches the expected-popup branch below; adopting or
       // closing pages after a successful operation is the ownership change
       // noted there.
-      if (settled && !failed) return;
+      if (settled) {
+        if (!failed) return;
+        // The waiter already failed for its own reason -- a timeout, an abort, a
+        // cancelled action, a mismatched dialog -- and none of those set
+        // `unexpectedError`, so `??=` below would fire and replace that reason
+        // with a synthetic "unexpected popup". Reclaim the tab, and touch the
+        // reported error only if the close itself fails, exactly as the
+        // expected-popup branch does.
+        unexpectedCleanup = unexpectedCleanup.then(async () => {
+          try {
+            await popup.close();
+          } catch (cleanupError) {
+            unexpectedError = new BrowserMeshError(
+              'BROWSER_ERROR',
+              'Operation failed and the popup it opened could not be closed',
+              {
+                cause:
+                  unexpectedError === undefined
+                    ? cleanupError
+                    : new AggregateError([unexpectedError, cleanupError]),
+              },
+            );
+          }
+        });
+        return;
+      }
       const error = new BrowserMeshError(
         'BROWSER_ERROR',
         `Unexpected popup while waiting for ${wait.kind}`,

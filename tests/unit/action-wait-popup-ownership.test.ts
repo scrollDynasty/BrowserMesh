@@ -129,6 +129,29 @@ describe('actionAndWait popup ownership', () => {
     ).resolves.toMatchObject({ kind: 'dialog' });
   });
 
+  it('keeps the real failure when a stray popup follows an already-failed wait', async () => {
+    const { engine, page, handle } = engineWithPage();
+    const stray = new FakePage();
+    stubAction(engine, async () => {
+      // The wrong dialog type fails the waiter on its own terms, leaving
+      // `unexpectedError` unset -- which is what lets a later popup overwrite
+      // the reported reason if this branch is not guarded.
+      page.emit('dialog', dialog());
+      await flush();
+      page.emit('popup', stray);
+      await flush();
+    });
+
+    await expect(
+      actionAndWait(engine, handle, { kind: 'dialog', dialogType: 'confirm', action: 'accept' }),
+    ).rejects.toMatchObject({
+      code: 'BROWSER_ERROR',
+      message: 'Expected confirm dialog but received alert',
+    });
+    // Reclaimed all the same: the operation failed, so nobody can receive it.
+    expect(stray.closed).toBe(true);
+  });
+
   it('neither adopts nor fails on a second popup once the wait has succeeded', async () => {
     const { engine, page, handle } = engineWithPage();
     const delivered = new FakePage();
