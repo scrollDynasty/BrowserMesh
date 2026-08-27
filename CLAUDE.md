@@ -75,7 +75,9 @@ Setup from a clean clone: `npm install`, then `npx playwright install chromium`.
 
 `BROWSERMESH_HEADLESS` accepts exactly `true` or `false`; the default is `false` (headed). It is
 read only by `src/infrastructure/config.ts`, so it reaches the CLI, the stdio server, and
-`verify:package`.
+`verify:package`. The committed `.mcp.json` pins it to `true` for the `browsermesh` entry: that file
+is picked up by every contributor, including in headless Linux containers where a headed launch
+fails. Override it locally if you want to watch the browser work.
 
 It does **not** reach the in-process browser suites: `tests/support/real-runtime.ts` constructs
 `PlaywrightBrowserEngine` with `headless: true` directly, so `test:integration`, `test:e2e`,

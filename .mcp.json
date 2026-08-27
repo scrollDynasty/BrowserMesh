@@ -2,7 +2,8 @@
   "mcpServers": {
     "browsermesh": {
       "command": "npx",
-      "args": ["tsx", "src/cli.ts"]
+      "args": ["tsx", "src/cli.ts"],
+      "env": { "BROWSERMESH_HEADLESS": "true" }
     },
     "playwright": {
       "command": "npx",
