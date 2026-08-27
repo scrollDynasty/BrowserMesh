@@ -1422,6 +1422,19 @@ function createEventWaiter(
       });
       return;
     }
+    if (settled) {
+      // Reaching here means the wait already succeeded with a different popup,
+      // since a failed waiter returns above. `finish` would discard this one,
+      // but its argument is evaluated first, so registering it would leave an
+      // entry in the page registry that no caller can ever address -- the
+      // orphan this change removes elsewhere.
+      //
+      // The tab itself is left alone. Closing a page after the operation
+      // succeeded would either swallow the close failure or fail an operation
+      // that did not fail, and adopting it needs the ownership change noted
+      // above. This is the pre-existing leak, without the registry entry.
+      return;
+    }
     finish({ kind: 'popup', page: registerPopup(popup) });
   };
   const onDialog = (dialog: Dialog): void => {

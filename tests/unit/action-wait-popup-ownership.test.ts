@@ -93,11 +93,10 @@ describe('actionAndWait popup ownership', () => {
     expect(errors[0]).toMatchObject({ message: 'Unexpected alert dialog while waiting for popup' });
   });
 
-  it('does not fail a successful wait because a second popup could not be closed', async () => {
+  it('neither adopts nor fails on a second popup once the wait has succeeded', async () => {
     const { engine, page, handle } = engineWithPage();
     const delivered = new FakePage();
     const extra = new FakePage();
-    extra.closeError = new Error('target closed');
     stubAction(engine, async () => {
       page.emit('popup', delivered);
       await flush();
@@ -106,9 +105,15 @@ describe('actionAndWait popup ownership', () => {
     });
 
     // The wait succeeded. A second tab arriving afterwards is not this
-    // operation's failure, and must not destroy the page it is about to return.
+    // operation's failure and must not destroy the page it is about to return.
     await expect(actionAndWait(engine, handle)).resolves.toMatchObject({ kind: 'popup' });
     expect(delivered.closed).toBe(false);
+    // Nor may it enter the registry: no caller can ever hold an id for it, and
+    // an unaddressable entry is the orphan this change exists to remove.
+    expect(registeredPages(engine)).toEqual([page, delivered]);
+    // Deliberately still open -- see the comment on the branch. This pins the
+    // choice so a later change to close it is a decision, not an accident.
+    expect(extra.closed).toBe(false);
   });
 });
 
