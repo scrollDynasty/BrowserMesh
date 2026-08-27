@@ -81,13 +81,22 @@ describe('actionAndWait popup ownership', () => {
     });
 
     const error = await actionAndWait(engine, handle).catch((reason: unknown) => reason);
+    // The dialog is why the operation failed, so it keeps the headline. The
+    // close failure is reported rather than swallowed, but in the cause -- a
+    // cleanup detail must not become the whole story.
     expect(error).toMatchObject({
       code: 'BROWSER_ERROR',
-      message: 'Operation failed and the popup it opened could not be closed',
+      message: 'Unexpected alert dialog while waiting for popup',
     });
     const cause = (error as { cause?: unknown }).cause;
     expect(cause).toBeInstanceOf(AggregateError);
-    expect((cause as AggregateError).errors).toHaveLength(2);
+    expect(
+      (cause as AggregateError).errors.some(
+        (entry: unknown) =>
+          (entry as Error).message ===
+          'Operation failed and the popup it opened could not be closed',
+      ),
+    ).toBe(true);
   });
 
   it('keeps the dialog failure when the popup it opened cannot be closed', async () => {
@@ -229,6 +238,40 @@ describe('actionAndWait popup ownership', () => {
     // `isCancellation` checks match on. Pinned so changing it is a decision.
     expect(error).toBe(abort);
     expect(popup.closed).toBe(false);
+  });
+
+  it('keeps the wait failure when reclaiming a stray popup also fails', async () => {
+    const { engine, page, handle } = engineWithPage();
+    const stray = new FakePage();
+    stray.closeError = new Error('target closed');
+    stubAction(engine, async () => {
+      // The mismatch fails the waiter on its own terms and leaves
+      // `unexpectedError` unset, so a failing close is the only thing that
+      // writes to it -- and must not become the whole story.
+      page.emit('dialog', dialog());
+      await flush();
+      page.emit('popup', stray);
+      await flush();
+    });
+
+    const error = await actionAndWait(engine, handle, {
+      kind: 'dialog',
+      dialogType: 'confirm',
+      action: 'accept',
+    }).catch((reason: unknown) => reason);
+    expect(error).toMatchObject({
+      code: 'BROWSER_ERROR',
+      message: 'Expected confirm dialog but received alert',
+    });
+    const cause = (error as { cause?: unknown }).cause;
+    expect(cause).toBeInstanceOf(AggregateError);
+    expect(
+      (cause as AggregateError).errors.some(
+        (entry: unknown) =>
+          (entry as Error).message ===
+          'Operation failed and the popup it opened could not be closed',
+      ),
+    ).toBe(true);
   });
 
   it('neither adopts nor fails on a second popup once the wait has succeeded', async () => {

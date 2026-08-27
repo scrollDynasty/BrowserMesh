@@ -925,32 +925,36 @@ export class PlaywrightBrowserEngine implements BrowserEnginePort {
         );
       }
     };
-    if (actionResult.status === 'rejected') {
-      // `unexpectedFailure` can hold a cleanup failure raised while this path
-      // was being taken -- the action rejects, cancels the waiter, and a popup
-      // it had already requested then fails to close. Throwing only the action
-      // error would swallow that, which is the thing the branch that records it
-      // exists to prevent.
-      const primary = await closeUndeliveredPopup(errorObject(actionResult.reason));
+    // One rule for every exit: the reason the operation failed keeps the code,
+    // message and details, and anything raised while cleaning up after it is
+    // aggregated into the cause. A cleanup detail must never be the whole story
+    // -- the waiter can fail on its own terms (timeout, abort, cancelled
+    // action, mismatched dialog) without ever setting `unexpectedError`, and
+    // that reason lives only in `waitResult.reason`.
+    const reportedWith = (primary: Error, secondary: Error | undefined): Error => {
+      // `isCancellation` narrows to `Error`, which would leave `primary` as
+      // `never` afterwards, so read it as a plain boolean.
       const cancelled: boolean = isCancellation(primary);
-      throw unexpectedFailure === undefined || unexpectedFailure === primary || cancelled
-        ? primary
-        : new BrowserMeshError(
-            primary instanceof BrowserMeshError ? primary.code : 'BROWSER_ERROR',
-            primary.message,
-            {
-              cause: new AggregateError([primary, unexpectedFailure]),
-              // Element-resolution failures carry the target descriptor here;
-              // rebuilding without it would be less informative than the plain
-              // rethrow this replaces.
-              ...(primary instanceof BrowserMeshError && primary.details !== undefined
-                ? { details: primary.details }
-                : {}),
-            },
-          );
-    }
+      if (secondary === undefined || secondary === primary || cancelled) return primary;
+      return new BrowserMeshError(
+        primary instanceof BrowserMeshError ? primary.code : 'BROWSER_ERROR',
+        primary.message,
+        {
+          cause: new AggregateError([primary, secondary]),
+          ...(primary instanceof BrowserMeshError && primary.details !== undefined
+            ? { details: primary.details }
+            : {}),
+        },
+      );
+    };
+    if (actionResult.status === 'rejected')
+      throw reportedWith(
+        await closeUndeliveredPopup(errorObject(actionResult.reason)),
+        unexpectedFailure,
+      );
+    if (waitResult.status === 'rejected')
+      throw reportedWith(errorObject(waitResult.reason), unexpectedFailure);
     if (unexpectedFailure !== undefined) throw await closeUndeliveredPopup(unexpectedFailure);
-    if (waitResult.status === 'rejected') throw errorObject(waitResult.reason);
     return waitResult.value;
   }
 
