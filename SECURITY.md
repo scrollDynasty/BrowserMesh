@@ -13,7 +13,7 @@ Security fixes are applied to the latest supported release line when practical.
 
 Do not open a public issue for a suspected vulnerability.
 
-Use [GitHub private security advisories](https://github.com/scrollDynasty/multi-agent-browser-mcp/security/advisories/new). Include impact, affected versions, reproduction steps, and a proposed mitigation when available. Remove credentials, cookies, tokens, passwords, saved browser state, screenshots, and personal data from the report unless maintainers explicitly arrange a secure transfer.
+Use [GitHub private security advisories](https://github.com/scrollDynasty/BrowserMesh/security/advisories/new). Include impact, affected versions, reproduction steps, and a proposed mitigation when available. Remove credentials, cookies, tokens, passwords, saved browser state, screenshots, and personal data from the report unless maintainers explicitly arrange a secure transfer.
 
 Maintainers will acknowledge reports as soon as practical and coordinate remediation and disclosure. Please allow reasonable time for a fix before public disclosure.
 

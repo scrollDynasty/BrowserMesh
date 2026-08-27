@@ -50,4 +50,4 @@ Snapshot results include:
 
 Observation list results include `events`, nullable `nextCursor`, `droppedCount`, and `gap`. An overflowed ring buffer can create a gap; consumers must not assume lossless telemetry.
 
-See [`contracts.ts`](https://github.com/scrollDynasty/multi-agent-browser-mcp/blob/master/src/adapters/mcp/contracts.ts) for the executable output schemas.
+See [`contracts.ts`](https://github.com/scrollDynasty/BrowserMesh/blob/master/src/adapters/mcp/contracts.ts) for the executable output schemas.

@@ -1,6 +1,6 @@
 # Complete MCP tool index
 
-The exact tool registry is implemented in [`src/adapters/mcp/server.ts`](https://github.com/scrollDynasty/multi-agent-browser-mcp/blob/master/src/adapters/mcp/server.ts). Inputs below omit no public fields; “page address” means required `sessionId`, required `pageId`, and optional `timeoutMs`.
+The exact tool registry is implemented in [`src/adapters/mcp/server.ts`](https://github.com/scrollDynasty/BrowserMesh/blob/master/src/adapters/mcp/server.ts). Inputs below omit no public fields; “page address” means required `sessionId`, required `pageId`, and optional `timeoutMs`.
 
 | Tool                       | Input beyond shared address                                       | Primary structured result                                 |
 | -------------------------- | ----------------------------------------------------------------- | --------------------------------------------------------- |

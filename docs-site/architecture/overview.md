@@ -42,4 +42,4 @@ Chromium starts lazily. Each ready session receives a new non-persistent context
 
 There is no arbitrary JavaScript evaluation, shell, caller-controlled file read/write, or caller-chosen screenshot path. Artifacts such as HAR, trace, video, uploads, and downloads are intentionally deferred until a controlled artifact contract exists.
 
-For design rationale, see the repository's [architecture and accepted ADRs](https://github.com/scrollDynasty/multi-agent-browser-mcp/tree/master/docs).
+For design rationale, see the repository's [architecture and accepted ADRs](https://github.com/scrollDynasty/BrowserMesh/tree/master/docs).
