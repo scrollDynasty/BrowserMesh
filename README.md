@@ -7,9 +7,9 @@ gives it as many independent sessions as the task needs — each with its own co
 authentication — running in parallel. Test checkout as a customer while an admin session verifies
 the order, in one conversation, without either seeing the other's state.
 
-- [Documentation](https://scrolldynasty.github.io/multi-agent-browser-mcp/)
-- [Getting started](https://scrolldynasty.github.io/multi-agent-browser-mcp/guide/getting-started)
-- [MCP tool reference](https://scrolldynasty.github.io/multi-agent-browser-mcp/reference/tools)
+- [Documentation](https://scrolldynasty.github.io/BrowserMesh/)
+- [Getting started](https://scrolldynasty.github.io/BrowserMesh/guide/getting-started)
+- [MCP tool reference](https://scrolldynasty.github.io/BrowserMesh/reference/tools)
 
 ```text
 External AI client

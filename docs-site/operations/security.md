@@ -26,4 +26,4 @@ BrowserMesh runs locally and communicates over stdio in v0.1. Local execution is
 
 v0.1 has no remote HTTP transport, multi-client authorization, leases, hosted service, HAR/trace/video, upload/download, or artifact store. Unexpected browser disconnect does not reconstruct live sessions.
 
-Report vulnerabilities privately through [GitHub Security Advisories](https://github.com/scrollDynasty/multi-agent-browser-mcp/security/advisories/new). Do not include credentials, cookies, tokens, or state files.
+Report vulnerabilities privately through [GitHub Security Advisories](https://github.com/scrollDynasty/BrowserMesh/security/advisories/new). Do not include credentials, cookies, tokens, or state files.

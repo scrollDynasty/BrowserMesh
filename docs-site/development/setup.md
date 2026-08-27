@@ -7,7 +7,7 @@
 - Playwright-supported Chromium environment
 
 ```bash
-git clone https://github.com/scrollDynasty/multi-agent-browser-mcp.git browsermesh
+git clone https://github.com/scrollDynasty/BrowserMesh.git browsermesh
 cd browsermesh
 npm ci
 npx playwright install chromium
@@ -30,4 +30,4 @@ npm run docs:build   # static documentation build
 
 The repository is a strict TypeScript ESM package. Domain/application/runtime code must remain independent of MCP and Playwright adapters.
 
-See the repository's [development guide](https://github.com/scrollDynasty/multi-agent-browser-mcp/blob/master/docs/development.md) for test-server and real-runtime details.
+See the repository's [development guide](https://github.com/scrollDynasty/BrowserMesh/blob/master/docs/development.md) for test-server and real-runtime details.

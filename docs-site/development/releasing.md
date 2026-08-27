@@ -11,4 +11,4 @@ Releases are automated but intentionally gated. The documented maintainer flow i
 
 Stable versions use npm dist-tag `latest`; prereleases use `beta`. The tag version must exactly match `package.json` and belong to `master`.
 
-This documentation does not grant permission to publish. See the repository's [release guide](https://github.com/scrollDynasty/multi-agent-browser-mcp/blob/master/docs/releasing.md).
+This documentation does not grant permission to publish. See the repository's [release guide](https://github.com/scrollDynasty/BrowserMesh/blob/master/docs/releasing.md).

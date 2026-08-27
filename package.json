@@ -79,7 +79,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/scrollDynasty/multi-agent-browser-mcp.git"
+    "url": "git+https://github.com/scrollDynasty/BrowserMesh.git"
   },
   "keywords": [
     "browser",
@@ -91,7 +91,7 @@
   ],
   "author": "BrowserMesh contributors",
   "bugs": {
-    "url": "https://github.com/scrollDynasty/multi-agent-browser-mcp/issues"
+    "url": "https://github.com/scrollDynasty/BrowserMesh/issues"
   },
-  "homepage": "https://github.com/scrollDynasty/multi-agent-browser-mcp#readme"
+  "homepage": "https://github.com/scrollDynasty/BrowserMesh#readme"
 }
