@@ -1,6 +1,6 @@
 # Contributing
 
-Contributions are welcome. Read [`CONTRIBUTING.md`](https://github.com/scrollDynasty/multi-agent-browser-mcp/blob/master/CONTRIBUTING.md) and the repository's `AGENTS.md` before changing runtime behavior.
+Contributions are welcome. Read [`CONTRIBUTING.md`](https://github.com/scrollDynasty/BrowserMesh/blob/master/CONTRIBUTING.md) and the repository's `AGENTS.md` before changing runtime behavior.
 
 ## Core review checklist
 

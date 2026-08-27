@@ -7,7 +7,7 @@ const mcpConfig = `{
       "command": "npx",
       "args": [
         "-y",
-        "multi-agent-browser-mcp"
+        "browsermesh"
       ]
     }
   }
@@ -17,12 +17,12 @@ const setupCommands = [
   {
     id: 'install',
     title: 'Install Chromium',
-    command: 'npx -y multi-agent-browser-mcp --install-browser',
+    command: 'npx -y browsermesh --install-browser',
   },
   {
     id: 'connect',
     title: 'Connect your MCP client',
-    command: 'npx -y multi-agent-browser-mcp',
+    command: 'npx -y browsermesh',
   },
   {
     id: 'session',
@@ -175,7 +175,7 @@ const guarantees = [
       <span>Continue reading</span>
       <a href="./concepts/sessions">Sessions and pages</a>
       <a href="./examples/multi-session">Multi-session example</a>
-      <a href="https://github.com/scrollDynasty/multi-agent-browser-mcp">GitHub repository</a>
+      <a href="https://github.com/scrollDynasty/BrowserMesh">GitHub repository</a>
     </nav>
   </main>
 </template>

@@ -1,12 +1,15 @@
+import { createRequire } from 'node:module';
+
 import { defineConfig } from 'vitepress';
 
-const repo = 'https://github.com/scrollDynasty/multi-agent-browser-mcp';
+const repo = 'https://github.com/scrollDynasty/BrowserMesh';
+const { version } = createRequire(import.meta.url)('../../package.json') as { version: string };
 
 export default defineConfig({
   lang: 'en-US',
   title: 'BrowserMesh',
   description: 'Isolated multi-session browser runtime for MCP clients.',
-  base: '/multi-agent-browser-mcp/',
+  base: '/BrowserMesh/',
   cleanUrls: true,
   lastUpdated: true,
   head: [
@@ -27,7 +30,7 @@ export default defineConfig({
       { text: 'Concepts', link: '/concepts/sessions' },
       { text: 'Tools', link: '/tools/overview' },
       { text: 'Reference', link: '/reference/configuration' },
-      { text: 'v0.1.4', link: `${repo}/releases` },
+      { text: `v${version}`, link: `${repo}/releases` },
     ],
     sidebar: {
       '/': [

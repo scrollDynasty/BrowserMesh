@@ -27,7 +27,7 @@ BrowserMesh reads configuration from environment variables at process start. Inv
 | `BROWSERMESH_MAX_STATE_BYTES`              | `1048576`        | integer 1,024–67,108,864                   |
 | `BROWSERMESH_MAX_STATE_TOTAL_BYTES`        | `16777216`       | integer 1,024–1,073,741,824                |
 
-Defaults for resource budgets are defined in the runtime's [`resource-limits.ts`](https://github.com/scrollDynasty/multi-agent-browser-mcp/blob/master/src/domain/resource-limits.ts); the values above reflect the current v0.1 source.
+Defaults for resource budgets are defined in the runtime's [`resource-limits.ts`](https://github.com/scrollDynasty/BrowserMesh/blob/master/src/domain/resource-limits.ts); the values above reflect the current v0.1 source.
 
 ## Example
 

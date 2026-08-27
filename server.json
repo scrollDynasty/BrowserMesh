@@ -4,7 +4,7 @@
   "title": "BrowserMesh",
   "description": "Isolated multi-session Chromium runtime for external MCP clients over stdio.",
   "repository": {
-    "url": "https://github.com/scrollDynasty/multi-agent-browser-mcp",
+    "url": "https://github.com/scrollDynasty/BrowserMesh",
     "source": "github",
     "id": "1331707544"
   },
