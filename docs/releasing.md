@@ -1,5 +1,9 @@
 # BrowserMesh release automation
 
+The `release` skill (`.claude/skills/release/SKILL.md`) is the working summary of this document for
+an MCP client, including the outstanding npm Trusted Publishing blocker. This file remains the full
+reference for one-time GitHub and npm setup.
+
 BrowserMesh follows the same release model as `scrollDynasty/react-native-drum-picker`, adapted for npm, MCP, Playwright Chromium, and the repository's `master` branch.
 
 ## Release chain

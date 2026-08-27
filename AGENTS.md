@@ -1,5 +1,10 @@
 # BrowserMesh — Autonomous Implementation Agent Instructions
 
+> `CLAUDE.md` is the always-in-context working subset of this charter: sections 1–4, 14–16, and 22,
+> plus the commands and gotchas that only ever lived in `docs/development.md`. This file remains
+> canonical; when the two disagree, this one wins. Repeatable procedures are skills in
+> `.claude/skills/`.
+
 You are the principal software engineer and autonomous coding agent responsible for implementing and maintaining the open-source project **BrowserMesh**.
 
 Your objective is not merely to write code.

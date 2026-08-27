@@ -1,5 +1,10 @@
 # BrowserMesh Development
 
+Working through an MCP client such as Claude Code? `CLAUDE.md` carries the always-in-context subset
+of this document and of the `AGENTS.md` charter: the invariants, the commands, and the gotchas.
+Repeatable procedures live as skills in `.claude/skills/` — `add-browser-tool`, `write-adr`, and
+`release`.
+
 ## Baseline
 
 BrowserMesh v0.1 is a local TypeScript/Node.js modular monolith.
@@ -99,12 +104,18 @@ npm run test:e2e
 npm run test:stress
 npm run test:coverage
 npm run build
+npm run verify:fast
 npm run verify
 ```
 
 `npm run verify` is the canonical local full-project verification entry point. It runs the complete
 suite with V8 coverage and enforces the repository's statement, branch, function, and line
 thresholds.
+
+`npm run verify:fast` is the inner loop: typecheck, lint, and unit tests only, with no coverage and
+no Chromium. It composes the same scripts rather than restating them, so it keeps the
+`check:version` gate that `pretypecheck` provides. Run it after each edit and `verify` before
+pushing.
 
 It should run all required non-destructive checks needed for v0.1 release confidence, including:
 
@@ -244,22 +255,14 @@ Contains:
 
 ## Adding a browser operation
 
-When adding a browser capability:
+The step-by-step recipe lives in the `add-browser-tool` skill
+(`.claude/skills/add-browser-tool/SKILL.md`), together with the contracts and tests that force each
+step. It is kept in one place so the ordering cannot drift from the checks that enforce it.
 
-1. define the engine-independent input/result contract;
-2. extend `BrowserEnginePort` only if engine capability is required;
-3. implement the concrete behavior inside the Playwright adapter;
-4. route the operation through `BrowserMeshRuntime`;
-5. ensure it targets an explicit `sessionId`;
-6. ensure page operations target explicit `pageId`;
-7. ensure live session/browser access passes through the session queue;
-8. allocate/correlate an `operationId`;
-9. map concrete errors into stable BrowserMesh errors;
-10. expose the behavior through validated MCP input;
-11. write a useful AI-facing MCP tool description;
-12. add positive and negative tests;
-13. add isolation/concurrency/cleanup coverage where applicable;
-14. run affected suites and then broader verification.
+The shape of it: define the engine-independent contract first, extend `BrowserEnginePort` only if
+new engine capability is genuinely required, implement the concrete behaviour in the Playwright
+adapter last, and route everything through `BrowserMeshRuntime` with explicit `sessionId` and
+`pageId` addressing through the session queue.
 
 Do not introduce current-page state.
 
