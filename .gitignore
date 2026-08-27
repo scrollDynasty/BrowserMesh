@@ -9,6 +9,5 @@ docs-site/.vitepress/dist/
 .env.*
 !.env.example
 
-# Local implementation-agent instructions and bootstrap prompt
-AGENTS.md
+# Personal bootstrap prompt; the AGENTS.md charter is tracked.
 PROMT.md
