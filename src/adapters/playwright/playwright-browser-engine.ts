@@ -68,6 +68,8 @@ interface ElementReferenceEntry {
 type ActionableElement = PwLocator | ElementHandle<HTMLElement | SVGElement>;
 
 const ELEMENT_REF_TTL_MS = 30_000;
+/** Rounds `unexpectedFailure` will drain a cleanup chain that keeps growing. */
+const MAX_CLEANUP_DRAIN_ROUNDS = 8;
 const INTERACTIVE_SELECTOR =
   'a[href],button,input:not([type="hidden"]),select,textarea,[role],[tabindex]:not([tabindex="-1"])';
 
@@ -880,17 +882,79 @@ export class PlaywrightBrowserEngine implements BrowserEnginePort {
       },
     );
     const settled = await Promise.allSettled([actionPromise, waiter.promise]);
-    const unexpectedFailure = await waiter.unexpectedFailure();
-    waiter.dispose();
+    // The waiter no longer disposes itself when its promise settles, so this is
+    // the only thing that unregisters its page listeners.
+    let unexpectedFailure: Error | undefined;
+    try {
+      unexpectedFailure = await waiter.unexpectedFailure();
+    } finally {
+      waiter.dispose();
+    }
     const actionResult = settled[0];
     const waitResult = settled[1];
-    if (actionResult.status === 'rejected') {
-      if (waitResult.status === 'fulfilled' && waitResult.value.kind === 'popup')
+    // A popup that satisfied the wait is registered but still owned by this
+    // operation: its pageId only reaches the caller through a successful
+    // result. Any failure discards that result, so this is the last place that
+    // can close the page.
+    // Returns the error to raise. `closePage` rejects when the page will not
+    // close, and letting that propagate would replace the real reason the
+    // operation failed with a cleanup detail -- and leave the handle in the
+    // registry, since `closePage` only forgets it after a successful close.
+    // Aggregate instead, as the waiter's own late-popup branch does.
+    const closeUndeliveredPopup = async (primary: Error): Promise<Error> => {
+      if (waitResult.status !== 'fulfilled' || waitResult.value.kind !== 'popup') return primary;
+      // A cancellation is identified downstream by `name === 'AbortError'`, and
+      // rebuilding it as a BrowserMeshError would rename it, so every
+      // `isCancellation` check would see a browser failure instead of an abort.
+      // Keeping the abort intact outranks reporting the cleanup failure.
+      // `isCancellation` narrows to `Error`, which would leave `primary` as
+      // `never` afterwards, so read it as a plain boolean.
+      const cancelled: boolean = isCancellation(primary);
+      if (cancelled) {
+        await this.closePage(waitResult.value.page).catch(() => undefined);
+        return primary;
+      }
+      try {
         await this.closePage(waitResult.value.page);
-      throw errorObject(actionResult.reason);
-    }
-    if (unexpectedFailure !== undefined) throw unexpectedFailure;
-    if (waitResult.status === 'rejected') throw errorObject(waitResult.reason);
+        return primary;
+      } catch (cleanupError) {
+        return new BrowserMeshError(
+          'BROWSER_ERROR',
+          'Operation failed and the popup it opened could not be closed',
+          { cause: new AggregateError([primary, cleanupError]) },
+        );
+      }
+    };
+    // One rule for every exit: the reason the operation failed keeps the code,
+    // message and details, and anything raised while cleaning up after it is
+    // aggregated into the cause. A cleanup detail must never be the whole story
+    // -- the waiter can fail on its own terms (timeout, abort, cancelled
+    // action, mismatched dialog) without ever setting `unexpectedError`, and
+    // that reason lives only in `waitResult.reason`.
+    const reportedWith = (primary: Error, secondary: Error | undefined): Error => {
+      // `isCancellation` narrows to `Error`, which would leave `primary` as
+      // `never` afterwards, so read it as a plain boolean.
+      const cancelled: boolean = isCancellation(primary);
+      if (secondary === undefined || secondary === primary || cancelled) return primary;
+      return new BrowserMeshError(
+        primary instanceof BrowserMeshError ? primary.code : 'BROWSER_ERROR',
+        primary.message,
+        {
+          cause: new AggregateError([primary, secondary]),
+          ...(primary instanceof BrowserMeshError && primary.details !== undefined
+            ? { details: primary.details }
+            : {}),
+        },
+      );
+    };
+    if (actionResult.status === 'rejected')
+      throw reportedWith(
+        await closeUndeliveredPopup(errorObject(actionResult.reason)),
+        unexpectedFailure,
+      );
+    if (waitResult.status === 'rejected')
+      throw reportedWith(errorObject(waitResult.reason), unexpectedFailure);
+    if (unexpectedFailure !== undefined) throw await closeUndeliveredPopup(unexpectedFailure);
     return waitResult.value;
   }
 
@@ -1292,6 +1356,9 @@ function createEventWaiter(
   registerPopup: (popup: Page) => BrowserPageHandle,
 ): EventWaiter {
   let settled = false;
+  // Distinct from `settled`: `finish` settles a success, and a late popup must not
+  // be force-closed -- nor allowed to fail the operation -- when the wait succeeded.
+  let failed = false;
   let unexpectedError: Error | undefined;
   let unexpectedCleanup: Promise<void> = Promise.resolve();
   let resolvePromise!: (value: BrowserEngineActionWaitEvent) => void;
@@ -1308,6 +1375,7 @@ function createEventWaiter(
   const fail = (error: unknown): void => {
     if (settled) return;
     settled = true;
+    failed = true;
     rejectPromise(error instanceof Error ? error : new Error(String(error)));
   };
   const onNavigation = (frame: Frame): void => {
@@ -1339,6 +1407,39 @@ function createEventWaiter(
   };
   const onPopup = (popup: Page): void => {
     if (wait.kind !== 'popup') {
+      // The popup listener outlives the settle so a page this operation asked
+      // for can still be reclaimed. That must not let a stray popup overturn a
+      // wait that already succeeded: recording `unexpectedError` here would
+      // make `actionAndWait` throw instead of returning the result it holds.
+      // Leaving the tab matches the expected-popup branch below; adopting or
+      // closing pages after a successful operation is the ownership change
+      // noted there.
+      if (settled) {
+        if (!failed) return;
+        // The waiter already failed for its own reason -- a timeout, an abort, a
+        // cancelled action, a mismatched dialog -- and none of those set
+        // `unexpectedError`, so `??=` below would fire and replace that reason
+        // with a synthetic "unexpected popup". Reclaim the tab, and touch the
+        // reported error only if the close itself fails, exactly as the
+        // expected-popup branch does.
+        unexpectedCleanup = unexpectedCleanup.then(async () => {
+          try {
+            await popup.close();
+          } catch (cleanupError) {
+            unexpectedError = new BrowserMeshError(
+              'BROWSER_ERROR',
+              'Operation failed and the popup it opened could not be closed',
+              {
+                cause:
+                  unexpectedError === undefined
+                    ? cleanupError
+                    : new AggregateError([unexpectedError, cleanupError]),
+              },
+            );
+          }
+        });
+        return;
+      }
       const error = new BrowserMeshError(
         'BROWSER_ERROR',
         `Unexpected popup while waiting for ${wait.kind}`,
@@ -1357,6 +1458,53 @@ function createEventWaiter(
         }
         fail(unexpectedError);
       });
+      return;
+    }
+    if (failed) {
+      // The operation already failed — commonly because a dialog arrived first
+      // and rejected this waiter — so no pageId can reach the caller and
+      // nothing else owns this page. Close it, which is the same policy the
+      // unexpected branch above applies to a popup raised for another wait.
+      //
+      // Known bound: this only reclaims a popup Chromium delivers before
+      // `actionAndWait` disposes the waiter. A popup attached after that has no
+      // listener left — there is no context-level page listener — and still
+      // leaks. Closing that window means owning pages the operation did not
+      // create, which is an ownership change for an ADR rather than a fix here.
+      unexpectedCleanup = unexpectedCleanup.then(async () => {
+        try {
+          await popup.close();
+        } catch (cleanupError) {
+          // Never `??=` here. The usual way to reach this branch is the
+          // unexpected-dialog handler, which has already set `unexpectedError`,
+          // so a conditional assignment would drop the cleanup failure in
+          // exactly the case it exists to report. SPEC 8.1 item 8 requires
+          // reporting cleanup failures rather than swallowing them.
+          unexpectedError = new BrowserMeshError(
+            'BROWSER_ERROR',
+            'Operation failed and the popup it opened could not be closed',
+            {
+              cause:
+                unexpectedError === undefined
+                  ? cleanupError
+                  : new AggregateError([unexpectedError, cleanupError]),
+            },
+          );
+        }
+      });
+      return;
+    }
+    if (settled) {
+      // Reaching here means the wait already succeeded with a different popup,
+      // since a failed waiter returns above. `finish` would discard this one,
+      // but its argument is evaluated first, so registering it would leave an
+      // entry in the page registry that no caller can ever address -- the
+      // orphan this change removes elsewhere.
+      //
+      // The tab itself is left alone. Closing a page after the operation
+      // succeeded would either swallow the close failure or fail an operation
+      // that did not fail, and adopting it needs the ownership change noted
+      // above. This is the pre-existing leak, without the registry entry.
       return;
     }
     finish({ kind: 'popup', page: registerPopup(popup) });
@@ -1445,22 +1593,50 @@ function createEventWaiter(
   control.signal?.addEventListener('abort', onAbort, { once: true });
   const timeoutMs = remainingOperationTime(control);
   const timer = setTimeout(() => fail(operationTimeout(control.timeoutMs)), timeoutMs);
+  // Everything except the popup listener stops mattering the moment the waiter
+  // settles: none of it can change the outcome any more. Only a popup can still
+  // arrive for a page the action already asked Chromium to open.
+  const disposeSettledListeners = (): void => {
+    page.off('framenavigated', onNavigation);
+    page.off('response', onResponse);
+    page.off('dialog', onDialog);
+  };
   const dispose = (): void => {
     clearTimeout(timer);
     control.signal?.removeEventListener('abort', onAbort);
-    page.off('framenavigated', onNavigation);
-    page.off('response', onResponse);
+    disposeSettledListeners();
     page.off('popup', onPopup);
-    page.off('dialog', onDialog);
   };
   if (control.signal?.aborted === true) onAbort();
-  void promise.finally(dispose).catch(() => undefined);
+  // Drop the settled listeners as soon as the promise settles, exactly as
+  // before, and keep only the popup listener until `actionAndWait` disposes.
+  // Holding the others open would widen a user-visible contract: a dialog
+  // arriving after a popup wait had already succeeded would start failing an
+  // operation that used to return the popup. The popup listener has to outlive
+  // the settle, because a page the action already requested can still arrive
+  // with nothing else listening for it.
+  void promise.finally(disposeSettledListeners).catch(() => undefined);
   return {
     promise,
     cancel: fail,
     dispose,
     async unexpectedFailure() {
-      await unexpectedCleanup;
+      // A late handler extends the chain by reassigning `unexpectedCleanup`.
+      // Awaiting the identifier once would settle against whatever chain
+      // existed at that instant and miss work scheduled while that await was
+      // still pending, so drain until the chain stops growing.
+      // Bounded on purpose. Listeners are still attached during this drain and
+      // extend the chain synchronously, and the runtime deadline is cooperative
+      // -- it is checked before engine calls, so nothing outside would end a
+      // page that produced popups faster than closing them retires. A few
+      // rounds cover a real handler; more than that is pathological, and the
+      // session queue must not be held open for it.
+      let pending = unexpectedCleanup;
+      for (let round = 0; round < MAX_CLEANUP_DRAIN_ROUNDS; round += 1) {
+        await pending;
+        if (pending === unexpectedCleanup) break;
+        pending = unexpectedCleanup;
+      }
       return unexpectedError;
     },
   };

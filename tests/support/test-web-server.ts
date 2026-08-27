@@ -87,6 +87,7 @@ export async function startTestWebServer(): Promise<TestWebServer> {
           <button data-testid="confirm" onclick="document.querySelector('[data-testid=status]').textContent=confirm('Confirm message') ? 'accepted' : 'dismissed'">Confirm</button>
           <button data-testid="alert" onclick="alert('Alert message'); document.querySelector('[data-testid=status]').textContent='handled'">Alert</button>
           <button data-testid="unexpected-dialog" onclick="alert('Unexpected alert'); fetch('/api/result')">Unexpected dialog</button>
+          <button data-testid="popup-and-dialog" onclick="window.open('/popup-destination', '_blank'); alert('Alert beside the popup')">Popup and unexpected dialog</button>
           <div data-testid="status">ready</div>`,
         ),
       );

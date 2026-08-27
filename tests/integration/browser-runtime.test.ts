@@ -910,6 +910,37 @@ describe('real Chromium runtime', () => {
     });
   });
 
+  it('closes the expected popup when an unexpected dialog fails the same operation', async () => {
+    const target = await createTarget();
+    await runtime.navigate(target, `${web.baseUrl}/popup-dialog-actions`);
+    const context = requireBrowserContext(firstPrivateValue(harness.engine, 'contexts'));
+    const managedPages = (await runtime.listPages(target.sessionId)).value.length;
+    const contextPages = context.pages().length;
+
+    // One click opens the awaited popup and raises a dialog. Chromium may deliver
+    // those two events in either order and each order runs different compensation
+    // code, so this asserts only the outcome both must reach: the operation fails
+    // and no tab is left behind. The orderings themselves are pinned
+    // deterministically in tests/unit/action-wait-popup-ownership.test.ts.
+    await expect(
+      runtime.actionAndWait(
+        target,
+        { kind: 'click', target: { strategy: 'testId', value: 'popup-and-dialog' } },
+        { kind: 'popup' },
+      ),
+    ).rejects.toMatchObject({ code: 'BROWSER_ERROR' });
+
+    expect((await runtime.listPages(target.sessionId)).value).toHaveLength(managedPages);
+    // Wait for the context to settle rather than sampling it: the close can still
+    // be in flight when the operation rejects, and which of the two event orders
+    // Chromium picked decides that. A tab nothing ever closes still fails here,
+    // which is the leak this guards.
+    await expect.poll(() => context.pages().length, { timeout: 5_000 }).toBe(contextPages);
+    await expect(runtime.getTitle(target)).resolves.toMatchObject({
+      value: 'Popup and dialog actions',
+    });
+  });
+
   it('keeps waits ordered per session, parallel across sessions, and usable after timeout', async () => {
     const a = await createTarget();
     const b = await createTarget();
