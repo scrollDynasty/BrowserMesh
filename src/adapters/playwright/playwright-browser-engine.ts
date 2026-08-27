@@ -1380,14 +1380,30 @@ function createEventWaiter(
       // and rejected this waiter — so no pageId can reach the caller and
       // nothing else owns this page. Close it, which is the same policy the
       // unexpected branch above applies to a popup raised for another wait.
+      //
+      // Known bound: this only reclaims a popup Chromium delivers before
+      // `actionAndWait` disposes the waiter. A popup attached after that has no
+      // listener left — there is no context-level page listener — and still
+      // leaks. Closing that window means owning pages the operation did not
+      // create, which is an ownership change for an ADR rather than a fix here.
       unexpectedCleanup = unexpectedCleanup.then(async () => {
         try {
           await popup.close();
         } catch (cleanupError) {
-          unexpectedError ??= new BrowserMeshError(
+          // Never `??=` here. The usual way to reach this branch is the
+          // unexpected-dialog handler, which has already set `unexpectedError`,
+          // so a conditional assignment would drop the cleanup failure in
+          // exactly the case it exists to report. SPEC 8.1 item 8 requires
+          // reporting cleanup failures rather than swallowing them.
+          unexpectedError = new BrowserMeshError(
             'BROWSER_ERROR',
-            'Failed to close a popup that opened after the operation failed',
-            { cause: cleanupError },
+            'Operation failed and the popup it opened could not be closed',
+            {
+              cause:
+                unexpectedError === undefined
+                  ? cleanupError
+                  : new AggregateError([unexpectedError, cleanupError]),
+            },
           );
         }
       });
@@ -1498,7 +1514,16 @@ function createEventWaiter(
     cancel: fail,
     dispose,
     async unexpectedFailure() {
-      await unexpectedCleanup;
+      // A late handler extends the chain by reassigning `unexpectedCleanup`.
+      // Awaiting the identifier once would settle against whatever chain
+      // existed at that instant and miss work scheduled while that await was
+      // still pending, so drain until the chain stops growing.
+      let pending = unexpectedCleanup;
+      for (;;) {
+        await pending;
+        if (pending === unexpectedCleanup) break;
+        pending = unexpectedCleanup;
+      }
       return unexpectedError;
     },
   };

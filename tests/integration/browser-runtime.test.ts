@@ -917,9 +917,11 @@ describe('real Chromium runtime', () => {
     const managedPages = (await runtime.listPages(target.sessionId)).value.length;
     const contextPages = context.pages().length;
 
-    // One click opens the awaited popup and raises a dialog. The popup satisfies the
-    // wait and is registered, then the dialog turns the whole operation into a failure,
-    // so the caller never receives the pageId that would let it close the popup later.
+    // One click opens the awaited popup and raises a dialog. Chromium may deliver
+    // those two events in either order and each order runs different compensation
+    // code, so this asserts only the outcome both must reach: the operation fails
+    // and no tab is left behind. The orderings themselves are pinned
+    // deterministically in tests/unit/action-wait-popup-ownership.test.ts.
     await expect(
       runtime.actionAndWait(
         target,
