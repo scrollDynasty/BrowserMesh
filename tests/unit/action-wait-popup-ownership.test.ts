@@ -32,13 +32,15 @@ describe('actionAndWait popup ownership', () => {
     expect(registeredPages(engine)).toHaveLength(1);
   });
 
-  it('closes a popup that satisfied the wait when a later dialog fails the operation', async () => {
+  it('closes a popup that won the race against a dialog already failing the operation', async () => {
     const { engine, page, handle } = engineWithPage();
     const popup = new FakePage();
     stubAction(engine, async () => {
-      page.emit('popup', popup);
-      await flush();
+      // Same tick: the dialog handler records the failure synchronously but
+      // fails the waiter from a promise chain, so the popup still satisfies the
+      // wait. The operation then throws with a registered popup nobody receives.
       page.emit('dialog', dialog());
+      page.emit('popup', popup);
       await flush();
     });
 
@@ -48,6 +50,23 @@ describe('actionAndWait popup ownership', () => {
     });
     expect(popup.closed).toBe(true);
     expect(registeredPages(engine)).toHaveLength(1);
+  });
+
+  it('leaves a settled popup wait alone when a dialog arrives afterwards', async () => {
+    const { engine, page, handle } = engineWithPage();
+    const popup = new FakePage();
+    stubAction(engine, async () => {
+      page.emit('popup', popup);
+      await flush();
+      // The waiter has settled, so the dialog listener is already gone and
+      // Playwright dismisses this itself. The operation keeps its result -- the
+      // behaviour before this change, pinned so it is not lost again.
+      page.emit('dialog', dialog());
+      await flush();
+    });
+
+    await expect(actionAndWait(engine, handle)).resolves.toMatchObject({ kind: 'popup' });
+    expect(popup.closed).toBe(false);
   });
 
   it('reports a failed popup close instead of letting the dialog error hide it', async () => {
@@ -76,9 +95,8 @@ describe('actionAndWait popup ownership', () => {
     const popup = new FakePage();
     popup.closeError = new Error('target closed');
     stubAction(engine, async () => {
-      page.emit('popup', popup);
-      await flush();
       page.emit('dialog', dialog());
+      page.emit('popup', popup);
       await flush();
     });
 

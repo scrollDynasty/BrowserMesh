@@ -68,6 +68,8 @@ interface ElementReferenceEntry {
 type ActionableElement = PwLocator | ElementHandle<HTMLElement | SVGElement>;
 
 const ELEMENT_REF_TTL_MS = 30_000;
+/** Rounds `unexpectedFailure` will drain a cleanup chain that keeps growing. */
+const MAX_CLEANUP_DRAIN_ROUNDS = 8;
 const INTERACTIVE_SELECTOR =
   'a[href],button,input:not([type="hidden"]),select,textarea,[role],[tabindex]:not([tabindex="-1"])';
 
@@ -912,8 +914,21 @@ export class PlaywrightBrowserEngine implements BrowserEnginePort {
         );
       }
     };
-    if (actionResult.status === 'rejected')
-      throw await closeUndeliveredPopup(errorObject(actionResult.reason));
+    if (actionResult.status === 'rejected') {
+      // `unexpectedFailure` can hold a cleanup failure raised while this path
+      // was being taken -- the action rejects, cancels the waiter, and a popup
+      // it had already requested then fails to close. Throwing only the action
+      // error would swallow that, which is the thing the branch that records it
+      // exists to prevent.
+      const primary = await closeUndeliveredPopup(errorObject(actionResult.reason));
+      throw unexpectedFailure === undefined || unexpectedFailure === primary
+        ? primary
+        : new BrowserMeshError(
+            primary instanceof BrowserMeshError ? primary.code : 'BROWSER_ERROR',
+            primary.message,
+            { cause: new AggregateError([primary, unexpectedFailure]) },
+          );
+    }
     if (unexpectedFailure !== undefined) throw await closeUndeliveredPopup(unexpectedFailure);
     if (waitResult.status === 'rejected') throw errorObject(waitResult.reason);
     return waitResult.value;
@@ -1521,20 +1536,29 @@ function createEventWaiter(
   control.signal?.addEventListener('abort', onAbort, { once: true });
   const timeoutMs = remainingOperationTime(control);
   const timer = setTimeout(() => fail(operationTimeout(control.timeoutMs)), timeoutMs);
+  // Everything except the popup listener stops mattering the moment the waiter
+  // settles: none of it can change the outcome any more. Only a popup can still
+  // arrive for a page the action already asked Chromium to open.
+  const disposeSettledListeners = (): void => {
+    page.off('framenavigated', onNavigation);
+    page.off('response', onResponse);
+    page.off('dialog', onDialog);
+  };
   const dispose = (): void => {
     clearTimeout(timer);
     control.signal?.removeEventListener('abort', onAbort);
-    page.off('framenavigated', onNavigation);
-    page.off('response', onResponse);
+    disposeSettledListeners();
     page.off('popup', onPopup);
-    page.off('dialog', onDialog);
   };
   if (control.signal?.aborted === true) onAbort();
-  // Only guard against an unhandled rejection here. Disposing as soon as the
-  // promise settles would unregister the popup listener before the operation
-  // has finished failing, and a popup the action already requested would then
-  // open with nothing listening for it. `actionAndWait` always disposes.
-  void promise.catch(() => undefined);
+  // Drop the settled listeners as soon as the promise settles, exactly as
+  // before, and keep only the popup listener until `actionAndWait` disposes.
+  // Holding the others open would widen a user-visible contract: a dialog
+  // arriving after a popup wait had already succeeded would start failing an
+  // operation that used to return the popup. The popup listener has to outlive
+  // the settle, because a page the action already requested can still arrive
+  // with nothing else listening for it.
+  void promise.finally(disposeSettledListeners).catch(() => undefined);
   return {
     promise,
     cancel: fail,
@@ -1544,8 +1568,14 @@ function createEventWaiter(
       // Awaiting the identifier once would settle against whatever chain
       // existed at that instant and miss work scheduled while that await was
       // still pending, so drain until the chain stops growing.
+      // Bounded on purpose. Listeners are still attached during this drain and
+      // extend the chain synchronously, and the runtime deadline is cooperative
+      // -- it is checked before engine calls, so nothing outside would end a
+      // page that produced popups faster than closing them retires. A few
+      // rounds cover a real handler; more than that is pathological, and the
+      // session queue must not be held open for it.
       let pending = unexpectedCleanup;
-      for (;;) {
+      for (let round = 0; round < MAX_CLEANUP_DRAIN_ROUNDS; round += 1) {
         await pending;
         if (pending === unexpectedCleanup) break;
         pending = unexpectedCleanup;
