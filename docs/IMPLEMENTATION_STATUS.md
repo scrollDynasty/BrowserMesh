@@ -28,7 +28,7 @@ the starting point. The remaining floor is the semantic locator union that rough
 embed, which is the feature rather than waste; ADR 0020 records why collapsing the interaction tools
 to reach Playwright MCP's number is rejected.
 
-Verification: 156 unit, 72 integration, 3 e2e, and 3 stress tests pass, with typecheck, lint, and
+Verification: 156 unit, 72 integration, 1 e2e, and 2 stress tests pass, with typecheck, lint, and
 format clean.
 
 Released as `browsermesh@0.2.0`. Every version of `multi-agent-browser-mcp` is deprecated in favour
