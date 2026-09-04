@@ -4,6 +4,14 @@ All notable changes to BrowserMesh are documented in this file.
 
 This project follows [Semantic Versioning](https://semver.org/). Release entries are maintained by [release-please](https://github.com/googleapis/release-please) from Conventional Commit pull-request titles.
 
+## [0.2.2](https://github.com/scrollDynasty/BrowserMesh/compare/v0.2.1...v0.2.2) (2026-09-04)
+
+
+### Bug Fixes
+
+* close a popup that opens after its operation already failed ([#60](https://github.com/scrollDynasty/BrowserMesh/issues/60)) ([e58886f](https://github.com/scrollDynasty/BrowserMesh/commit/e58886f3d77fab41e1454c05edd6aa80847c99f1))
+* restore the docs site after the repository rename ([#56](https://github.com/scrollDynasty/BrowserMesh/issues/56)) ([11701c1](https://github.com/scrollDynasty/BrowserMesh/commit/11701c1cc1f5a915b5b87fc4389550ba08ebd1b1))
+
 ## [0.2.1](https://github.com/scrollDynasty/multi-agent-browser-mcp/compare/v0.2.0...v0.2.1) (2026-08-17)
 
 
