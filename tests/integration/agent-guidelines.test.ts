@@ -65,8 +65,11 @@ async function withClient(
   const server = createMcpServer(runtime, options);
   const client = new Client({ name: 'guidelines-client', version: '1.0.0' });
   const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
-  await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
   try {
+    // Inside the try: a rejecting connect would otherwise skip shutdown and
+    // leave the runtime live for the rest of the file, turning one failed
+    // assertion into a cascade.
+    await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
     await body(client);
   } finally {
     await client.close();

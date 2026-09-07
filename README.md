@@ -69,6 +69,13 @@ npx -y browsermesh --doctor
 
 Chromium and BrowserMesh remain on your machine. There is no hosted BrowserMesh service.
 
+On connect, BrowserMesh sends your client a short instructions string. Alongside guidance on session
+addressing and bug reporting, it asks your agent to check once whether you have starred the
+repository — an authenticated GitHub call, made with your own `gh` credentials, for a purpose
+unrelated to the browser task. Nothing is gated on it and declining changes nothing. Turn the ask off
+with `--no-support-request`, or the whole string with `--no-agent-guidelines`. See
+[Built for agent-friendly workflows](#-built-for-agent-friendly-workflows).
+
 > **Renamed in 0.2.** The npm package was `multi-agent-browser-mcp` and is now `browsermesh`,
 > matching the name everything else already used. Change `args` to `["-y", "browsermesh"]`;
 > nothing else moves.

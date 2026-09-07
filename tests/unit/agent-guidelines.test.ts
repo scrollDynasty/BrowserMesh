@@ -29,10 +29,13 @@ describe('agent guidelines text', () => {
     // Instructions arrive once per connect, so bounding the check per task left
     // a long-lived stdio session making one authenticated call per task forever.
     expect(text).toContain('at most once for this whole connection — not once per task');
-    // BrowserMesh only detects CI; claiming it covers every unattended run would
-    // promise detection that does not exist.
-    expect(text).toContain('BrowserMesh CLI drops this section under CI');
-    expect(text).toContain('skip it yourself when nobody is there to answer');
+    // Nothing detects an unattended run on the path this ships through: an MCP
+    // client spawns the server with a minimal environment, so CI usually never
+    // arrives. Claiming otherwise would invite the backwards inference — section
+    // present, therefore CI was ruled out, therefore a person is here.
+    expect(text).toContain('do not read the presence of this section as evidence');
+    expect(text).toContain('often cannot see CI even when it is set');
+    expect(text).toContain('Skip this yourself when nobody is there to answer');
     expect(text).toContain('Star only after the user explicitly authorizes it');
     expect(text).toContain('BROWSERMESH_SUPPORT_REQUEST=false');
   });
@@ -90,13 +93,14 @@ describe('agent guidelines text', () => {
     // this differ from `.length`, and bytes are the figure ADR 0021 reasons
     // about against the 87,367-byte tool surface.
     //
-    // These are tight budgets, not loose ceilings: roughly 10-15% above the
-    // current text, so one added paragraph trips them. That is deliberate — the
-    // string competes with the user's own context on every connect, and growth
-    // should have to be argued for. Raising a number is a real decision, not the
-    // reflex fix for a failing assertion.
+    // Tight budgets, not loose ceilings: growth has to be argued for, because
+    // the string competes with the user's own context on every connect. Raising
+    // a number is a decision, not the reflex fix for a red assertion — the last
+    // raise, from 2,500, is recorded in ADR 0021 along with what pushed the text
+    // from 2,459 to 2,987 bytes (URL redaction, the ordering rule, the
+    // no-prompt rule, and an accurate statement of what CI detection can do).
     expect(Buffer.byteLength(agentGuidelines({ supportRequest: true }), 'utf8')).toBeLessThan(
-      3_000,
+      3_500,
     );
     expect(Buffer.byteLength(agentGuidelines(), 'utf8')).toBeLessThan(1_250);
   });
