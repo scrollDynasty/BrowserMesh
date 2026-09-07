@@ -26,19 +26,21 @@ Usage:
 Every option sets the environment variable that already configures it, and the command line wins
 over the environment. A rejected value names the variable it came from and exits with status `2`.
 
-| Option                | Variable                   | Effect                                                              |
-| --------------------- | -------------------------- | ------------------------------------------------------------------- |
-| `--timeout <ms>`      | `BROWSERMESH_TIMEOUT_MS`   | Default bounded operation timeout                                   |
-| `--data-dir <path>`   | `BROWSERMESH_DATA_DIR`     | Directory for saved browser state                                   |
-| `--log-level <level>` | `BROWSERMESH_LOG_LEVEL`    | `debug`, `info`, `warn`, `error`, or `silent`                       |
-| `--max-sessions <n>`  | `BROWSERMESH_MAX_SESSIONS` | Maximum concurrent sessions                                         |
-| `--max-pages <n>`     | `BROWSERMESH_MAX_PAGES`    | Maximum managed pages per session                                   |
-| `--tools <profiles>`  | `BROWSERMESH_TOOLS`        | Publish only these profiles: `core`, `observability`, `persistence` |
-| `--headless`          | `BROWSERMESH_HEADLESS`     | Run Chromium without a visible window                               |
-| `--headed`            | `BROWSERMESH_HEADLESS`     | Show the Chromium window (default)                                  |
-| `--no-persistence`    | `BROWSERMESH_PERSISTENCE`  | Disable saved browser state                                         |
-| `--no-schema-refs`    | `BROWSERMESH_SCHEMA_REFS`  | Publish expanded schemas for clients that cannot resolve `$ref`     |
-| `--no-auto-install`   | `BROWSERMESH_AUTO_INSTALL` | Do not download Chromium automatically on first use                 |
+| Option                  | Variable                       | Effect                                                              |
+| ----------------------- | ------------------------------ | ------------------------------------------------------------------- |
+| `--timeout <ms>`        | `BROWSERMESH_TIMEOUT_MS`       | Default bounded operation timeout                                   |
+| `--data-dir <path>`     | `BROWSERMESH_DATA_DIR`         | Directory for saved browser state                                   |
+| `--log-level <level>`   | `BROWSERMESH_LOG_LEVEL`        | `debug`, `info`, `warn`, `error`, or `silent`                       |
+| `--max-sessions <n>`    | `BROWSERMESH_MAX_SESSIONS`     | Maximum concurrent sessions                                         |
+| `--max-pages <n>`       | `BROWSERMESH_MAX_PAGES`        | Maximum managed pages per session                                   |
+| `--tools <profiles>`    | `BROWSERMESH_TOOLS`            | Publish only these profiles: `core`, `observability`, `persistence` |
+| `--headless`            | `BROWSERMESH_HEADLESS`         | Run Chromium without a visible window                               |
+| `--headed`              | `BROWSERMESH_HEADLESS`         | Show the Chromium window (default)                                  |
+| `--no-persistence`      | `BROWSERMESH_PERSISTENCE`      | Disable saved browser state                                         |
+| `--no-schema-refs`      | `BROWSERMESH_SCHEMA_REFS`      | Publish expanded schemas for clients that cannot resolve `$ref`     |
+| `--no-auto-install`     | `BROWSERMESH_AUTO_INSTALL`     | Do not download Chromium automatically on first use                 |
+| `--no-agent-guidelines` | `BROWSERMESH_AGENT_GUIDELINES` | Send no MCP instructions to the connecting client                   |
+| `--no-support-request`  | `BROWSERMESH_SUPPORT_REQUEST`  | Keep the MCP instructions without the open-source support request   |
 
 Browser startup is lazy: discovering tools does not require Chromium to launch. The first start of a
 fresh installation downloads Chromium before connecting the transport, unless `--no-auto-install`

@@ -20,6 +20,7 @@ describe('createRuntime', () => {
       schemaReferences: true,
       autoInstall: false,
       agentGuidelines: true,
+      supportRequest: true,
       tools: '',
       observability: {
         maxEventsPerPage: 200,

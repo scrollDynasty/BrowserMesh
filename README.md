@@ -541,7 +541,10 @@ gh api --method PUT /user/starred/scrollDynasty/BrowserMesh
 most once, never to star without your explicit authorization, and to continue your task immediately
 if you decline, if `gh` is missing, or if the check fails. No BrowserMesh operation is gated on it.
 
-Set `BROWSERMESH_AGENT_GUIDELINES=false` and BrowserMesh sends no instructions at all.
+Two switches control this. `BROWSERMESH_SUPPORT_REQUEST=false` (or `--no-support-request`) drops the
+support request and keeps the addressing and reporting guidance, so declining the ask never costs you
+the useful part. `BROWSERMESH_AGENT_GUIDELINES=false` (or `--no-agent-guidelines`) sends no
+instructions at all.
 
 ### Assisted issue reporting
 
@@ -634,6 +637,7 @@ BrowserMesh never attempts to serialize a live `BrowserContext`, open pages, pen
 | `BROWSERMESH_AUTO_INSTALL`                 |           `true` | Download Chromium on first start if missing    |
 | `BROWSERMESH_TOOLS`                        |            (all) | Tool profiles to publish, comma-separated      |
 | `BROWSERMESH_AGENT_GUIDELINES`             |           `true` | Send the MCP instructions string on connect    |
+| `BROWSERMESH_SUPPORT_REQUEST`              |           `true` | Include the open-source support request in it  |
 | `BROWSERMESH_OBSERVABILITY_EVENTS`         |            `200` | Retained mixed observability events per page   |
 | `BROWSERMESH_OBSERVABILITY_STRING_CHARS`   |           `2048` | Maximum exposed event string length            |
 | `BROWSERMESH_OBSERVABILITY_PAGE_SIZE`      |            `100` | Maximum events returned by one read            |
@@ -649,7 +653,7 @@ BrowserMesh never attempts to serialize a live `BrowserContext`, open pages, pen
 
 The options the command line accepts are `--headless`, `--headed`, `--timeout`, `--data-dir`,
 `--log-level`, `--max-sessions`, `--max-pages`, `--tools`, `--no-persistence`, `--no-schema-refs`,
-and `--no-auto-install`. Each sets the variable above that already configures it, and the command
+`--no-auto-install`, `--no-agent-guidelines`, and `--no-support-request`. Each sets the variable above that already configures it, and the command
 line wins. The remaining variables — the observability, screenshot, visible-text, and persistence
 budgets — are set through the environment only. Run `browsermesh --help` for the current list. A
 rejected value names the variable it came from and exits with status 2 instead of printing a stack

@@ -31,9 +31,9 @@ came for.
 
 ## Decision
 
-`createMcpServer` passes a single `AGENT_GUIDELINES` string as `instructions`. It is 1,977 bytes,
-2.3% of the published tool surface, and lives in `src/adapters/mcp/agent-guidelines.ts` as a plain
-constant with no runtime inputs.
+`createMcpServer` passes an `agentGuidelines()` string as `instructions`. It is 2,097 bytes, 2.4% of
+the published tool surface, and lives in `src/adapters/mcp/agent-guidelines.ts` as three plain
+constants with no runtime inputs.
 
 It carries three things: the explicit-addressing rule and when to open a separate session; a request
 to star the open-source repository; and how to report a BrowserMesh bug.
@@ -47,10 +47,23 @@ repository is starred only after the user explicitly authorizes it. Star state i
 starred". Substituting another account or token, or working around missing authentication, is
 excluded.
 
-**`BROWSERMESH_AGENT_GUIDELINES=false` sends no instructions at all**, not a trimmed version. An
-operator who does not want BrowserMesh speaking to their agent gets silence, and the opt-out is
-named inside the text so the reader can find it without the README. `createMcpServer` also accepts
-`agentGuidelines: false` for direct API callers. The default is `true`.
+**The two halves switch independently, because they differ in kind.** The addressing and reporting
+guidance is server documentation with no side effects. The support request is not: it asks the agent
+to spend the user's GitHub credentials on `gh api user/starred/...` and to offer an account-mutating
+`PUT`, for work unrelated to the browser task at hand. Coupling them would mean the only way to
+decline the ask is to lose the documentation.
+
+So `BROWSERMESH_SUPPORT_REQUEST=false` drops the support section and keeps everything else, leaving
+776 bytes; `BROWSERMESH_AGENT_GUIDELINES=false` sends no instructions at all. Both default to `true`
+— shipping the request enabled is a deliberate choice by the project owner, and it is defensible only
+because of the guarantees above. `createMcpServer` takes `supportRequest` and `agentGuidelines`
+directly, and `--no-support-request` / `--no-agent-guidelines` match the existing boolean opt-outs in
+`cli-arguments.ts`.
+
+Each flag names itself inside the text it controls, and says accurately what it removes. That
+matters more than it looks: the instructions are the only place a consumer learns the flags exist, so
+a section claiming to drop only itself while actually suppressing everything would cost a user the
+addressing rule they wanted to keep.
 
 The addressing rule is in the same string rather than left to tool descriptions because it is the
 one thing a tool description cannot establish: each description explains its own tool, and no single
@@ -63,19 +76,26 @@ make a promotional ask into an access-control mechanism, which the runtime has n
 
 ## Consequences
 
-Every client now receives 1,977 bytes it did not before, on every connect. That is the recurring
-cost, it is paid by workflows that never needed the guidance, and it is why the length is asserted
-in `tests/integration/agent-guidelines.test.ts` rather than left to review.
+Every client now receives 2,097 bytes it did not before, on every connect, or 776 with the support
+request declined. That is the recurring cost, it is paid by workflows that never needed the guidance,
+and it is why the size is asserted in `tests/unit/agent-guidelines.test.ts` — in bytes, since the em
+dashes make `.length` report a different number than what travels on the wire.
 
 Publishing a support request from inside a package is a reputational position, not a neutral one. It
 is defensible only while every guarantee above holds, so those guarantees are now contract: the
 non-blocking wording, the authorization requirement, the single ask, the strict status reading, and
-the opt-out each have a test asserting the exact phrase. Weakening one is a test failure, not a
-quiet edit.
+both opt-outs each have a test asserting the exact phrase. Those tests live in `tests/unit/` so that
+weakening one fails `npm test` and `verify:fast`, the documented inner loop — a guarantee asserted
+only under full `verify` is one an edit can pass through.
 
-`BROWSERMESH_AGENT_GUIDELINES` is a new public configuration variable and joins the documented list
-in `README.md`. `browser_runtime_info` does not report it: the tool reports what bounds browser work,
-and this bounds nothing.
+The opt-out is asserted end to end through the real CLI in `tests/integration/stdio.test.ts`, not
+only against `createMcpServer` and `loadConfig`. Deleting the one wiring line in `cli.ts` otherwise
+leaves the suite green while the documented opt-out stops working; that deletion now fails.
+
+`BROWSERMESH_AGENT_GUIDELINES` and `BROWSERMESH_SUPPORT_REQUEST` are new public configuration
+variables and join the documented list in `README.md` and the CLI reference.
+`browser_runtime_info` reports neither: the tool reports what bounds browser work, and these bound
+nothing.
 
 The guidance now has two homes with different jobs. `AGENTS.md` and `.github/AGENT_GUIDELINES.md`
 address agents working _in this repository_ and stay long; `AGENT_GUIDELINES` addresses agents

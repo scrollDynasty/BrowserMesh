@@ -69,15 +69,23 @@ describe('loadConfig', () => {
     for (const invalid of ['', 'TRUE', '1', 'yes']) {
       expect(() => loadConfig({ BROWSERMESH_HEADLESS: invalid })).toThrow();
       expect(() => loadConfig({ BROWSERMESH_AGENT_GUIDELINES: invalid })).toThrow();
+      expect(() => loadConfig({ BROWSERMESH_SUPPORT_REQUEST: invalid })).toThrow();
     }
   });
 
   it('publishes the agent guidelines by default and lets an operator opt out', () => {
     // The guidelines reach every client on connect, so an operator who does not
     // want them sent has to be able to turn them off without patching anything.
-    expect(loadConfig({}).agentGuidelines).toBe(true);
+    expect(loadConfig({})).toMatchObject({ agentGuidelines: true, supportRequest: true });
     expect(loadConfig({ BROWSERMESH_AGENT_GUIDELINES: 'false' }).agentGuidelines).toBe(false);
     expect(loadConfig({ BROWSERMESH_AGENT_GUIDELINES: 'true' }).agentGuidelines).toBe(true);
+
+    // Independent switches: declining the support request must not cost the
+    // operator the session-addressing guidance.
+    expect(loadConfig({ BROWSERMESH_SUPPORT_REQUEST: 'false' })).toMatchObject({
+      agentGuidelines: true,
+      supportRequest: false,
+    });
   });
 
   it('names the rejected variable without leaking a stack or the value', () => {

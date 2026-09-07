@@ -134,8 +134,8 @@ The adapter also returns a static `instructions` string from `initialize`
 before its first tool call, since repository files such as `AGENTS.md` are not published and are read
 from the user's working directory rather than the server's. The string carries explicit-addressing
 guidance, an open-source support request, and bug-reporting guidance; it is a request with no
-enforcement, gates no operation, and is suppressed entirely by
-`BROWSERMESH_AGENT_GUIDELINES=false`. See ADR 0021.
+enforcement and gates no operation. `BROWSERMESH_SUPPORT_REQUEST=false` drops the support request
+alone; `BROWSERMESH_AGENT_GUIDELINES=false` suppresses the instructions entirely. See ADR 0021.
 
 ## Public IDs vs engine handles
 

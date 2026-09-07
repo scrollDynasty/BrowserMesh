@@ -46,6 +46,7 @@ const environmentSchema = z.object({
   BROWSERMESH_AUTO_INSTALL: booleanString.default(true),
   BROWSERMESH_TOOLS: z.string().default(''),
   BROWSERMESH_AGENT_GUIDELINES: booleanString.default(true),
+  BROWSERMESH_SUPPORT_REQUEST: booleanString.default(true),
   BROWSERMESH_OBSERVABILITY_EVENTS: z.coerce.number().int().positive().max(1_000).default(200),
   BROWSERMESH_OBSERVABILITY_STRING_CHARS: z.coerce
     .number()
@@ -134,6 +135,12 @@ export interface BrowserMeshConfig {
    * support, and bug reporting. Disable to send no instructions at all.
    */
   readonly agentGuidelines: boolean;
+  /**
+   * Include the open-source support request in those instructions. Independent
+   * of `agentGuidelines`, so declining the request never costs the addressing
+   * guidance.
+   */
+  readonly supportRequest: boolean;
   readonly observability: {
     readonly maxEventsPerPage: number;
     readonly maxStringLength: number;
@@ -172,6 +179,7 @@ export function loadConfig(environment: NodeJS.ProcessEnv = process.env): Browse
     autoInstall: parsed.BROWSERMESH_AUTO_INSTALL,
     tools: parsed.BROWSERMESH_TOOLS,
     agentGuidelines: parsed.BROWSERMESH_AGENT_GUIDELINES,
+    supportRequest: parsed.BROWSERMESH_SUPPORT_REQUEST,
     observability: {
       maxEventsPerPage: parsed.BROWSERMESH_OBSERVABILITY_EVENTS,
       maxStringLength: parsed.BROWSERMESH_OBSERVABILITY_STRING_CHARS,

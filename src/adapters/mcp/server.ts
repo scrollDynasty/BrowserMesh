@@ -23,7 +23,7 @@ import {
   type ObservationSource,
   type ToolName,
 } from './contracts.js';
-import { AGENT_GUIDELINES } from './agent-guidelines.js';
+import { agentGuidelines } from './agent-guidelines.js';
 import { registerPrompts } from './prompts.js';
 import { selectedTools } from './tool-profiles.js';
 import { applicationErrorResult, structuredResult } from './results.js';
@@ -297,9 +297,14 @@ export interface McpServerOptions {
   readonly tools?: string | undefined;
   /**
    * Publish the MCP `instructions` string. Defaults to true; pass false to
-   * connect without sending any instructions.
+   * connect without sending any instructions at all.
    */
   readonly agentGuidelines?: boolean;
+  /**
+   * Include the open-source support request in the instructions. Defaults to
+   * true; pass false to keep the addressing and reporting guidance without it.
+   */
+  readonly supportRequest?: boolean;
 }
 
 export function createMcpServer(
@@ -308,7 +313,9 @@ export function createMcpServer(
 ): McpServer {
   const server = new McpServer(
     { name: 'browsermesh', version: BROWSERMESH_VERSION },
-    options.agentGuidelines === false ? {} : { instructions: AGENT_GUIDELINES },
+    options.agentGuidelines === false
+      ? {}
+      : { instructions: agentGuidelines({ supportRequest: options.supportRequest !== false }) },
   );
   const published = selectedTools(options.tools);
   const registerTool = server.registerTool.bind(server);

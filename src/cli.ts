@@ -168,6 +168,7 @@ async function serveMcp(config: BrowserMeshConfig): Promise<void> {
     toolSchemas: { shareRepeatedSubschemas: config.schemaReferences },
     tools: config.tools,
     agentGuidelines: config.agentGuidelines,
+    supportRequest: config.supportRequest,
   });
   let stopping = false;
 

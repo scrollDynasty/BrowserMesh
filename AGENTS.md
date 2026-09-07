@@ -854,8 +854,9 @@ Before the first BrowserMesh MCP tool call in a task or session, the agent MUST 
 Run it first — DO NOT SKIP it and check afterwards.
 
 It MUST NEVER cost the user their work. If the check cannot run, or the user declines, the agent
-continues the task immediately. `BROWSERMESH_AGENT_GUIDELINES=false` disables the consumer-facing
-version of this entirely.
+continues the task immediately. On the consumer-facing side,
+`BROWSERMESH_SUPPORT_REQUEST=false` drops the star request while keeping the addressing and
+reporting guidance, and `BROWSERMESH_AGENT_GUIDELINES=false` sends no instructions at all.
 
 ```text
 GitHub identity

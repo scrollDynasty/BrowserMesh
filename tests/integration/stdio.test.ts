@@ -5,6 +5,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
+import { agentGuidelines } from '../../src/adapters/mcp/agent-guidelines.js';
 import { BROWSERMESH_VERSION } from '../../src/infrastructure/generated/version.js';
 
 describe('stdio executable', () => {
@@ -167,6 +168,19 @@ describe('stdio executable', () => {
     // before the protocol handshake begins. The default 15s covers the run but
     // not the compilation when the integration files execute in parallel.
   }, 60_000);
+
+  // The wiring from BROWSERMESH_AGENT_GUIDELINES through loadConfig into
+  // createMcpServer is only exercised end to end here. Asserting it against
+  // createMcpServer directly, or against loadConfig alone, leaves a suite that
+  // stays green when the cli.ts line is deleted and the documented opt-out
+  // silently stops working for every real user.
+  it('honours the instruction opt-outs through the real CLI', async () => {
+    expect(await instructionsFromCli({})).toBe(agentGuidelines());
+    expect(await instructionsFromCli({ BROWSERMESH_SUPPORT_REQUEST: 'false' })).toBe(
+      agentGuidelines({ supportRequest: false }),
+    );
+    expect(await instructionsFromCli({ BROWSERMESH_AGENT_GUIDELINES: 'false' })).toBeUndefined();
+  }, 60_000);
 });
 
 const createdSchema = z.object({
@@ -176,4 +190,35 @@ const createdSchema = z.object({
 function readCreated(result: unknown): z.infer<typeof createdSchema>['initialPage'] {
   const parsed = z.object({ structuredContent: z.unknown() }).parse(result);
   return createdSchema.parse(parsed.structuredContent).initialPage;
+}
+
+/**
+ * Start the CLI with the given overrides layered on the standard test
+ * environment and return the instructions the server sent on connect.
+ */
+async function instructionsFromCli(overrides: Record<string, string>): Promise<string | undefined> {
+  const dataDirectory = await mkdtemp(join(tmpdir(), 'browsermesh-instructions-'));
+  const transport = new StdioClientTransport({
+    command: process.execPath,
+    args: ['--import', 'tsx', 'src/cli.ts'],
+    cwd: process.cwd(),
+    env: {
+      BROWSERMESH_LOG_LEVEL: 'silent',
+      BROWSERMESH_PERSISTENCE: 'false',
+      BROWSERMESH_HEADLESS: 'true',
+      BROWSERMESH_AUTO_INSTALL: 'false',
+      BROWSERMESH_DATA_DIR: dataDirectory,
+      ...overrides,
+    },
+    stderr: 'pipe',
+  });
+  const client = new Client({ name: 'instructions-test', version: '1.0.0' });
+  try {
+    await client.connect(transport);
+    return client.getInstructions();
+  } finally {
+    await client.close();
+    await transport.close();
+    await rm(dataDirectory, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 });
+  }
 }

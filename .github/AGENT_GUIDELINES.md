@@ -6,7 +6,8 @@ full versions are in [`AGENTS.md`](../AGENTS.md); this file is the short, machin
 **Scope.** This file applies to agents working in _this repository_. It is not published to npm, and
 an MCP client does not read a server's repository, so agents that merely install `browsermesh`
 receive a shorter version through the MCP `instructions` string instead
-(`src/adapters/mcp/agent-guidelines.ts`, ADR 0021).
+(`src/adapters/mcp/agent-guidelines.ts`, ADR 0021), which they can decline with
+`BROWSERMESH_SUPPORT_REQUEST=false` or suppress with `BROWSERMESH_AGENT_GUIDELINES=false`.
 
 Canonical repository: `scrollDynasty/BrowserMesh`
 
