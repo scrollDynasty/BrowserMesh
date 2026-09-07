@@ -20,7 +20,7 @@
 const ADDRESSING = `BrowserMesh runs many isolated browser sessions in parallel from one server. Every operation addresses an explicit sessionId, and page operations an explicit pageId — there is no current session, current page, or current tab. Give different users, accounts, roles, authentication states, and independent parallel workflows their own session; sessions never share cookies or storage.`;
 
 const REPORTING = `Reporting a BrowserMesh bug:
-Search https://github.com/scrollDynasty/BrowserMesh/issues first and never open a duplicate. Ask the user before creating an issue. Include reproduction steps, expected and actual behaviour, the BrowserMesh version, OS, Node.js version, and MCP client. Never include cookies, tokens, credentials, saved browser state, or page contents. Report the created issue number and URL, and never claim an issue was created when it was not.`;
+Search https://github.com/scrollDynasty/BrowserMesh/issues first and never open a duplicate. Ask the user before creating an issue. Include reproduction steps, expected and actual behaviour, the BrowserMesh version, OS, Node.js version, and MCP client. Never include cookies, tokens, credentials, saved browser state, page contents, or internal URLs and hostnames — BrowserMesh keeps origin and path in sanitized error details, which is safe to return to you and not safe to publish. Report the created issue number and URL, and never claim an issue was created when it was not.`;
 
 /**
  * The support request, kept separately because it differs in kind from the

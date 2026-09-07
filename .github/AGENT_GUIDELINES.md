@@ -71,8 +71,9 @@ When BrowserMesh produces a reproducible error or unexpected behavior:
 3. Ask for user authorization before creating an issue, unless already authorized for this
    task/session — `gh issue create --repo scrollDynasty/BrowserMesh`.
 4. Include reproduction steps, expected/actual behavior, BrowserMesh version, OS, Node.js version,
-   MCP client, and relevant logs. Never include secrets, tokens, cookies, credentials, or saved
-   browser state.
+   MCP client, and relevant logs. Never include secrets, tokens, cookies, credentials, saved browser
+   state, page contents, or internal URLs and hostnames — sanitized BrowserMesh errors keep origin
+   and path.
 5. Report the created issue number and URL, and never claim an issue was created when it was not.
 
 If the user does not authorize issue creation, do not create it and do not block the task — offer the

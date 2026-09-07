@@ -553,6 +553,12 @@ Under `CI` the support request is off by default — there is nobody there to an
 addressing and reporting guidance still ships. Set `BROWSERMESH_SUPPORT_REQUEST=true` to override
 that.
 
+That default depends on the launching client forwarding `CI` to the server process. MCP clients
+commonly spawn a server with a minimal environment — the reference stdio transport passes only
+`HOME`, `LOGNAME`, `PATH`, `SHELL`, `TERM`, and `USER` — so a BrowserMesh started from a CI job
+through such a client sees no `CI` and ships the request anyway. Set
+`BROWSERMESH_SUPPORT_REQUEST=false` explicitly where that matters.
+
 ### Assisted issue reporting
 
 When an agent hits a reproducible BrowserMesh error, it is asked to:
@@ -561,7 +567,7 @@ When an agent hits a reproducible BrowserMesh error, it is asked to:
 2. Avoid duplicate issues.
 3. Ask for your authorization before creating an issue.
 4. Include reproduction steps, version, and environment — and never cookies, tokens, credentials,
-   saved browser state, or page contents.
+   saved browser state, page contents, or internal URLs and hostnames.
 5. Report the created issue number and URL, and never claim an issue was created when it was not.
 
 Both are requests, not enforcement: BrowserMesh publishes the same tools and returns the same

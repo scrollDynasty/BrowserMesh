@@ -73,8 +73,12 @@ describe('agent guidelines text', () => {
     expect(text).toContain('never open a duplicate');
     expect(text).toContain('Ask the user before creating an issue');
     expect(text).toContain(
-      'Never include cookies, tokens, credentials, saved browser state, or page contents',
+      'Never include cookies, tokens, credentials, saved browser state, page contents, or internal URLs and hostnames',
     );
+    // safeUrl in results.ts keeps origin + pathname in sanitized error details.
+    // Right for a result going back to the caller, wrong for a public issue, and
+    // the one item an agent pasting BrowserMesh output verbatim would miss.
+    expect(text).toContain('safe to return to you and not safe to publish');
   });
 
   it('stays small enough to sit in front of every session', () => {

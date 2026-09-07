@@ -1197,6 +1197,12 @@ Never include sensitive data, secrets, access tokens, cookies, credentials, save
 page contents in an issue. This matches the redaction rules already stated in
 `.github/ISSUE_TEMPLATE/bug_report.md` and `SECURITY.md`.
 
+Internal URLs and hostnames belong on that list too, and are the one item easy to miss: `safeUrl` in
+`src/adapters/mcp/results.ts` deliberately keeps `origin + pathname` in sanitized error details, and
+observability events carry request URLs. That is correct for a result returned to the caller who
+already has it, and wrong for a public issue — an agent pasting BrowserMesh output verbatim can
+publish an intranet hostname and path while believing it redacted everything.
+
 ### When GitHub is unavailable
 
 If `gh` is missing, GitHub is not authenticated, the permission is absent, there is no network, or
