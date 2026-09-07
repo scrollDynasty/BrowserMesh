@@ -1,0 +1,21 @@
+{
+  // vitest.config.ts is type-checked separately because importing `vitest/config` drags in
+  // Vitest's and Vite's own declaration files, and Vitest 5.0.0 ships three that do not
+  // compile under this project's settings:
+  //   - `vitest/config.d.ts` imports `@vitest/expect`, which 5.0.0 dropped from its
+  //     dependencies, and browser-mode types reference `MarkOptions`, which
+  //     `vitest/browser` does not export - both are vitest-dev/vitest#11140, fixed by
+  //     vitest-dev/vitest#11141 but unreleased as of 5.0.0;
+  //   - the experimental `benchmark.provider` option is declared `string | undefined` on
+  //     the resolved config and `string` on the user config, which collides under
+  //     exactOptionalPropertyTypes.
+  // skipLibCheck confines all three to this one file; src, tests and scripts keep the
+  // strict, full-library check from tsconfig.json. Drop this file once Vitest ships a
+  // release whose declarations type-check on their own.
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "skipLibCheck": true
+  },
+  "include": ["vitest.config.ts"]
+}

@@ -9,7 +9,12 @@ export default tseslint.config(
   ...tseslint.configs.strictTypeChecked,
   {
     languageOptions: {
-      parserOptions: { projectService: true, tsconfigRootDir: import.meta.dirname },
+      parserOptions: {
+        // vitest.config.ts sits outside tsconfig.json's include (see tsconfig.vitest.json),
+        // so the project service has to be told to lint it against the default project.
+        projectService: { allowDefaultProject: ['vitest.config.ts'] },
+        tsconfigRootDir: import.meta.dirname,
+      },
     },
     rules: {
       '@typescript-eslint/only-throw-error': 'error',
