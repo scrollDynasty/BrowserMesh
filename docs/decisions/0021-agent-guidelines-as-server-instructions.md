@@ -31,7 +31,7 @@ came for.
 
 ## Decision
 
-`createMcpServer` passes an `agentGuidelines()` string as `instructions`. It is 2,424 bytes, 2.8% of
+`createMcpServer` passes an `agentGuidelines()` string as `instructions`. It is 2,446 bytes, 2.8% of
 the published tool surface, and lives in `src/adapters/mcp/agent-guidelines.ts` as four plain
 constants with no runtime inputs.
 
@@ -54,7 +54,7 @@ to spend the user's GitHub credentials on `gh api user/starred/...` and to offer
 decline the ask is to lose the documentation.
 
 So `BROWSERMESH_SUPPORT_REQUEST=false` drops the support section and keeps everything else, leaving
-985 bytes; `BROWSERMESH_AGENT_GUIDELINES=false` sends no instructions at all. Both default to `true`
+992 bytes; `BROWSERMESH_AGENT_GUIDELINES=false` sends no instructions at all. Both default to `true`
 in an attended run
 — shipping the request enabled is a deliberate choice by the project owner, and it is defensible only
 because of the guarantees above. `createMcpServer` takes `supportRequest` and `agentGuidelines`
@@ -69,8 +69,11 @@ per task for the life of the connection. Only the _ask_ was ever capped; the _ch
 unattended runs, and that promise is otherwise prose in a prompt with nothing behind it: no test can
 assert a model honoured it. `config.ts` is the one place allowed to read the environment, so it makes
 the promise a default instead — `supportRequest` is `false` when `CI` is set to anything but `false`
-or `0`, and an explicit `BROWSERMESH_SUPPORT_REQUEST` wins either way. `CI` is the only unattended
-signal a stdio server actually has — there is no interactivity to probe — so the text claims exactly
+or `0`, and an explicit `BROWSERMESH_SUPPORT_REQUEST` wins either way. The carve-out lives at the configuration layer, so it applies to the
+server as consumers run it — via the CLI — while `createMcpServer` itself stays environment-free for
+embedders, who pass the booleans they want. `tests/integration/agent-guidelines.test.ts` asserts the
+seam between the two, which is what the claim in the shipped text actually rests on. `CI` is the only
+unattended signal a stdio server actually has — there is no interactivity to probe — so the text claims exactly
 that and asks the agent to skip the request itself in the headless, batch, and cron runs BrowserMesh
 cannot see. This is the case where the ask
 has no upside at all: there is nobody to answer it. The addressing and reporting guidance is
@@ -95,7 +98,7 @@ make a promotional ask into an access-control mechanism, which the runtime has n
 
 ## Consequences
 
-Every client now receives 2,424 bytes it did not before, on every connect, or 985 with the support
+Every client now receives 2,446 bytes it did not before, on every connect, or 992 with the support
 request declined. That is the recurring cost, it is paid by workflows that never needed the guidance,
 and it is why the size is asserted in `tests/unit/agent-guidelines.test.ts` — in bytes, since the em
 dashes make `.length` report a different number than what travels on the wire.

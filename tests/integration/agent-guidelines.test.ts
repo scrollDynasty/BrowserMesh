@@ -3,6 +3,7 @@ import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
 import { describe, expect, it } from 'vitest';
 import { agentGuidelines } from '../../src/adapters/mcp/agent-guidelines.js';
 import { createMcpServer, type McpServerOptions } from '../../src/adapters/mcp/server.js';
+import { loadConfig } from '../../src/infrastructure/config.js';
 import { testRuntime } from '../support/fakes.js';
 
 // What the text says is asserted in tests/unit/agent-guidelines.test.ts. This
@@ -19,6 +20,25 @@ describe('MCP agent guidelines delivery', () => {
     await withClient({ agentGuidelines: false }, async (client) => {
       expect(client.getInstructions()).toBeUndefined();
     });
+  });
+
+  it('honours the CI carve-out the shipped text promises', async () => {
+    // The string tells the reader "BrowserMesh drops this section under CI".
+    // loadConfig deciding that, and createMcpServer sending it, are asserted
+    // separately; this covers the seam between them, which is what the claim
+    // actually depends on. createMcpServer itself reads no environment.
+    const { agentGuidelines: guidelines, supportRequest } = loadConfig({ CI: 'true' });
+    await withClient({ agentGuidelines: guidelines, supportRequest }, async (client) => {
+      expect(client.getInstructions()).toBe(agentGuidelines({ supportRequest: false }));
+    });
+
+    const attended = loadConfig({ CI: 'false' });
+    await withClient(
+      { agentGuidelines: attended.agentGuidelines, supportRequest: attended.supportRequest },
+      async (client) => {
+        expect(client.getInstructions()).toBe(agentGuidelines());
+      },
+    );
   });
 
   it('keeps the guidance when only the support request is declined', async () => {

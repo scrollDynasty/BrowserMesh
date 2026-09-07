@@ -38,14 +38,16 @@ describe('agent guidelines text', () => {
     // flags exist, so claiming the variable drops "this section" when it
     // suppresses everything would lead a user to lose the addressing rule
     // while trying to decline the ask.
-    expect(agentGuidelines()).toContain('BROWSERMESH_SUPPORT_REQUEST=false to drop this section');
+    expect(agentGuidelines()).toContain(
+      'operator can drop this section with BROWSERMESH_SUPPORT_REQUEST=false',
+    );
 
     // The lean variant is what CI and --no-support-request produce, and it still
     // arrives unsolicited on every connect. Naming the remaining opt-out only in
     // the section that just got dropped would leave that operator no way out.
     for (const text of [agentGuidelines(), agentGuidelines({ supportRequest: false })]) {
       expect(text).toContain(
-        'BROWSERMESH_AGENT_GUIDELINES=false to stop sending these instructions',
+        'operator can stop these instructions entirely with BROWSERMESH_AGENT_GUIDELINES=false',
       );
     }
   });
