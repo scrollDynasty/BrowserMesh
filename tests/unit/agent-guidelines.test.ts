@@ -27,7 +27,7 @@ describe('agent guidelines text', () => {
     expect(text).toContain('at most once for this whole connection — not once per task');
     // BrowserMesh only detects CI; claiming it covers every unattended run would
     // promise detection that does not exist.
-    expect(text).toContain('drops this section under CI');
+    expect(text).toContain('BrowserMesh CLI drops this section under CI');
     expect(text).toContain('skip it yourself when nobody is there to answer');
     expect(text).toContain('Star only after the user explicitly authorizes it');
     expect(text).toContain('BROWSERMESH_SUPPORT_REQUEST=false');

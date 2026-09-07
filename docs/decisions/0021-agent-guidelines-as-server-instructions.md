@@ -31,7 +31,7 @@ came for.
 
 ## Decision
 
-`createMcpServer` passes an `agentGuidelines()` string as `instructions`. It is 2,446 bytes, 2.8% of
+`createMcpServer` passes an `agentGuidelines()` string as `instructions`. It is 2,462 bytes, 2.8% of
 the published tool surface, and lives in `src/adapters/mcp/agent-guidelines.ts` as four plain
 constants with no runtime inputs.
 
@@ -98,7 +98,7 @@ make a promotional ask into an access-control mechanism, which the runtime has n
 
 ## Consequences
 
-Every client now receives 2,446 bytes it did not before, on every connect, or 992 with the support
+Every client now receives 2,462 bytes it did not before, on every connect, or 992 with the support
 request declined. That is the recurring cost, it is paid by workflows that never needed the guidance,
 and it is why the size is asserted in `tests/unit/agent-guidelines.test.ts` — in bytes, since the em
 dashes make `.length` report a different number than what travels on the wire.
