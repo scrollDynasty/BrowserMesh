@@ -30,6 +30,10 @@ export class ConfigurationError extends Error {
  * location is stable across launches; pass `--data-dir .browsermesh` for the
  * previous project-scoped behaviour.
  */
+export function defaultDataDirectory(home: string = homedir()): string {
+  return join(home, '.browsermesh');
+}
+
 /**
  * Whether this looks like an unattended run.
  *
@@ -42,10 +46,6 @@ function isContinuousIntegration(value: string | undefined): boolean {
   if (value === undefined) return false;
   const normalized = value.trim().toLowerCase();
   return normalized !== '' && normalized !== 'false' && normalized !== '0';
-}
-
-export function defaultDataDirectory(home: string = homedir()): string {
-  return join(home, '.browsermesh');
 }
 
 const environmentSchema = z.object({

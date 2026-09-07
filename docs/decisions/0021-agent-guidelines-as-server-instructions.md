@@ -31,8 +31,8 @@ came for.
 
 ## Decision
 
-`createMcpServer` passes an `agentGuidelines()` string as `instructions`. It is 2,097 bytes, 2.4% of
-the published tool surface, and lives in `src/adapters/mcp/agent-guidelines.ts` as three plain
+`createMcpServer` passes an `agentGuidelines()` string as `instructions`. It is 2,319 bytes, 2.7% of
+the published tool surface, and lives in `src/adapters/mcp/agent-guidelines.ts` as four plain
 constants with no runtime inputs.
 
 It carries three things: the explicit-addressing rule and when to open a separate session; a request
@@ -54,7 +54,7 @@ to spend the user's GitHub credentials on `gh api user/starred/...` and to offer
 decline the ask is to lose the documentation.
 
 So `BROWSERMESH_SUPPORT_REQUEST=false` drops the support section and keeps everything else, leaving
-776 bytes; `BROWSERMESH_AGENT_GUIDELINES=false` sends no instructions at all. Both default to `true`
+985 bytes; `BROWSERMESH_AGENT_GUIDELINES=false` sends no instructions at all. Both default to `true`
 in an attended run
 — shipping the request enabled is a deliberate choice by the project owner, and it is defensible only
 because of the guarantees above. `createMcpServer` takes `supportRequest` and `agentGuidelines`
@@ -69,7 +69,10 @@ or `0`, and an explicit `BROWSERMESH_SUPPORT_REQUEST` wins either way. This is t
 has no upside at all: there is nobody to answer it. The addressing and reporting guidance is
 unaffected and still ships.
 
-Each flag names itself inside the text it controls, and says accurately what it removes. That
+Each flag is named in every variant that ships, and says accurately what it removes. Naming
+`BROWSERMESH_AGENT_GUIDELINES` only inside the support section would have hidden it exactly where it
+is most needed: the lean variant is what `CI` and `--no-support-request` produce, and it still
+arrives unsolicited on every connect. That
 matters more than it looks: the instructions are the only place a consumer learns the flags exist, so
 a section claiming to drop only itself while actually suppressing everything would cost a user the
 addressing rule they wanted to keep.
@@ -85,7 +88,7 @@ make a promotional ask into an access-control mechanism, which the runtime has n
 
 ## Consequences
 
-Every client now receives 2,097 bytes it did not before, on every connect, or 776 with the support
+Every client now receives 2,319 bytes it did not before, on every connect, or 985 with the support
 request declined. That is the recurring cost, it is paid by workflows that never needed the guidance,
 and it is why the size is asserted in `tests/unit/agent-guidelines.test.ts` — in bytes, since the em
 dashes make `.length` report a different number than what travels on the wire.

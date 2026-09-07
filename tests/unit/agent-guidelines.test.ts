@@ -34,11 +34,16 @@ describe('agent guidelines text', () => {
     // flags exist, so claiming the variable drops "this section" when it
     // suppresses everything would lead a user to lose the addressing rule
     // while trying to decline the ask.
-    const text = agentGuidelines();
-    expect(text).toContain('BROWSERMESH_SUPPORT_REQUEST=false to drop this section');
-    expect(text).toContain(
-      'BROWSERMESH_AGENT_GUIDELINES=false suppresses these instructions entirely',
-    );
+    expect(agentGuidelines()).toContain('BROWSERMESH_SUPPORT_REQUEST=false to drop this section');
+
+    // The lean variant is what CI and --no-support-request produce, and it still
+    // arrives unsolicited on every connect. Naming the remaining opt-out only in
+    // the section that just got dropped would leave that operator no way out.
+    for (const text of [agentGuidelines(), agentGuidelines({ supportRequest: false })]) {
+      expect(text).toContain(
+        'BROWSERMESH_AGENT_GUIDELINES=false to stop sending these instructions',
+      );
+    }
   });
 
   it('reads the star API strictly and never guesses a state', () => {
@@ -72,7 +77,7 @@ describe('agent guidelines text', () => {
     // about against the 87,367-byte tool surface.
     expect(Buffer.byteLength(agentGuidelines(), 'utf8')).toBeLessThan(2_500);
     expect(Buffer.byteLength(agentGuidelines({ supportRequest: false }), 'utf8')).toBeLessThan(
-      1_000,
+      1_250,
     );
   });
 });
