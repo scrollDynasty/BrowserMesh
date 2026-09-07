@@ -81,6 +81,17 @@ request declined. That is the recurring cost, it is paid by workflows that never
 and it is why the size is asserted in `tests/unit/agent-guidelines.test.ts` — in bytes, since the em
 dashes make `.length` report a different number than what travels on the wire.
 
+The support request ships enabled by default, and that carries a specific risk worth naming rather
+than discovering later. A server whose `instructions` tell an agent to run shell commands against the
+user's authenticated GitHub account is structurally similar to the prompt-injection and
+tool-poisoning pattern that MCP scanners and client policies flag; the classification does not depend
+on intent, and it would apply to the whole package, addressing rule included. Every guarantee that
+makes the ask defensible is prose in a prompt: the tests assert the phrases are present, and no test
+can assert that a client model obeys them. The default is therefore the only control this project
+actually holds over the behaviour, and it is spent deliberately. Defaulting the request to `false`
+was considered and rejected by the project owner; `BROWSERMESH_SUPPORT_REQUEST=false` remains the
+one-word reversal if that judgement changes.
+
 Publishing a support request from inside a package is a reputational position, not a neutral one. It
 is defensible only while every guarantee above holds, so those guarantees are now contract: the
 non-blocking wording, the authorization requirement, the single ask, the strict status reading, and
