@@ -23,6 +23,7 @@ import {
   type ObservationSource,
   type ToolName,
 } from './contracts.js';
+import { AGENT_GUIDELINES } from './agent-guidelines.js';
 import { registerPrompts } from './prompts.js';
 import { selectedTools } from './tool-profiles.js';
 import { applicationErrorResult, structuredResult } from './results.js';
@@ -294,13 +295,21 @@ export interface McpServerOptions {
    * profile, so an existing configuration keeps the tools it had.
    */
   readonly tools?: string | undefined;
+  /**
+   * Publish the MCP `instructions` string. Defaults to true; pass false to
+   * connect without sending any instructions.
+   */
+  readonly agentGuidelines?: boolean;
 }
 
 export function createMcpServer(
   runtime: BrowserMeshRuntime,
   options: McpServerOptions = {},
 ): McpServer {
-  const server = new McpServer({ name: 'browsermesh', version: BROWSERMESH_VERSION });
+  const server = new McpServer(
+    { name: 'browsermesh', version: BROWSERMESH_VERSION },
+    options.agentGuidelines === false ? {} : { instructions: AGENT_GUIDELINES },
+  );
   const published = selectedTools(options.tools);
   const registerTool = server.registerTool.bind(server);
 

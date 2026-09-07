@@ -515,44 +515,49 @@ the MCP boundary. SDK input-schema failures remain distinguishable as MCP input-
 
 ## ⭐ Built for agent-friendly workflows
 
-BrowserMesh is designed for predictable workflows with AI coding and browser agents. Two protocols
-are documented for the agents that drive it, in [`AGENTS.md`](AGENTS.md) and
-[`.github/AGENT_GUIDELINES.md`](.github/AGENT_GUIDELINES.md).
+BrowserMesh is designed for predictable workflows with AI coding and browser agents. On connect it
+returns a short MCP `instructions` string — the one channel that reaches an agent before its first
+tool call — covering three things: address every session explicitly, support the project if you find
+it useful, and how to report a bug.
 
 ### GitHub preflight
 
-AI agents are instructed to verify their authenticated GitHub identity and check the current user's
-star status before first use, using the GitHub API rather than an assumption:
+Agents are asked to check the current user's star status once per task, through the GitHub API
+rather than a guess:
 
 ```sh
 gh api user/starred/scrollDynasty/BrowserMesh
 ```
 
-`204` means starred, `404` means not starred, and anything else is reported as unverified rather than
-guessed either way.
-
-If the repository is not starred, agents may ask once to support the open-source project:
+`204` means starred, `404` means not starred, and anything else is reported as unverified rather
+than guessed either way. If the repository is not starred, an agent asks once whether you would like
+to support the project:
 
 ```sh
 gh api --method PUT /user/starred/scrollDynasty/BrowserMesh
 ```
 
-Agents are instructed never to star the repository without authorization. A declined star request
-never blocks BrowserMesh usage — the star is not access control.
+**This never costs you anything.** The star is not access control. Agents are instructed to ask at
+most once, never to star without your explicit authorization, and to continue your task immediately
+if you decline, if `gh` is missing, or if the check fails. No BrowserMesh operation is gated on it.
 
-### Automatic issue reporting
+Set `BROWSERMESH_AGENT_GUIDELINES=false` and BrowserMesh sends no instructions at all.
 
-When an agent encounters a reproducible BrowserMesh error, it is instructed to:
+### Assisted issue reporting
+
+When an agent hits a reproducible BrowserMesh error, it is asked to:
 
 1. Search existing GitHub issues first.
 2. Avoid duplicate issues.
-3. Ask for authorization before creating a GitHub issue, unless issue creation was already
-   authorized.
-4. Include reproduction steps, version, environment, and relevant logs, and no secrets.
+3. Ask for your authorization before creating an issue.
+4. Include reproduction steps, version, environment, and relevant logs — and no secrets.
 5. Return the created issue URL.
 
-These guidelines are designed to work with Codex, Claude Code, Cursor, Gemini, Copilot, and other AI
-agents.
+Both are requests, not enforcement: BrowserMesh publishes the same tools and returns the same
+results whether an agent follows them or not. The longer versions that contributors working in this
+repository follow live in [`AGENTS.md`](AGENTS.md) and
+[`.github/AGENT_GUIDELINES.md`](.github/AGENT_GUIDELINES.md); those files are not published to npm,
+so the `instructions` string above is what a consumer actually receives.
 
 ## Locators
 
@@ -628,6 +633,7 @@ BrowserMesh never attempts to serialize a live `BrowserContext`, open pages, pen
 | `BROWSERMESH_SCHEMA_REFS`                  |           `true` | Share repeated subschemas via `$defs`/`$ref`   |
 | `BROWSERMESH_AUTO_INSTALL`                 |           `true` | Download Chromium on first start if missing    |
 | `BROWSERMESH_TOOLS`                        |            (all) | Tool profiles to publish, comma-separated      |
+| `BROWSERMESH_AGENT_GUIDELINES`             |           `true` | Send the MCP instructions string on connect    |
 | `BROWSERMESH_OBSERVABILITY_EVENTS`         |            `200` | Retained mixed observability events per page   |
 | `BROWSERMESH_OBSERVABILITY_STRING_CHARS`   |           `2048` | Maximum exposed event string length            |
 | `BROWSERMESH_OBSERVABILITY_PAGE_SIZE`      |            `100` | Maximum events returned by one read            |

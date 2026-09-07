@@ -1,0 +1,102 @@
+# ADR 0021 — Agent guidelines travel as MCP server instructions
+
+Status: accepted
+
+Date: 2026-09-07
+
+## Context
+
+BrowserMesh wants two things from the agents that drive it: that they address sessions explicitly
+rather than assuming a current one, and that a BrowserMesh bug reaches the issue tracker as a
+searchable report rather than as a retry. A first attempt wrote both into `AGENTS.md` and
+`.github/AGENT_GUIDELINES.md`.
+
+That delivery does not work, and the measurement is unambiguous. `package.json` `files` is
+`["dist", "README.md", "CHANGELOG.md", "LICENSE", "NOTICE"]`; `npm pack --dry-run` produces 153
+files, of which exactly two are Markdown — `README.md` and `CHANGELOG.md`. Neither agent file is in
+the tarball. An MCP client also does not read the source repository of a server it connects to: it
+loads `AGENTS.md`/`CLAUDE.md` from the _user's_ working directory. So the audience those files
+actually reach is agents working inside this repository, where `.mcp.json` already configures a
+`browsermesh` server — contributors, not consumers.
+
+The MCP protocol has a channel for exactly this. `ServerOptions.instructions` is returned in the
+`initialize` result and surfaced to the model by the client, which is the one place a server can
+speak to a consuming agent before the first tool call.
+
+Two constraints bound what may go through it. It is sent to every client on every connect, so it
+competes with the user's own context: `tools/list` is 87,367 bytes after ADR 0020, and instructions
+should not be a meaningful fraction of that. And it is published in the package, so anything it asks
+for is asked of every installation — which rules out anything that could cost a user the work they
+came for.
+
+## Decision
+
+`createMcpServer` passes a single `AGENT_GUIDELINES` string as `instructions`. It is 1,977 bytes,
+2.3% of the published tool surface, and lives in `src/adapters/mcp/agent-guidelines.ts` as a plain
+constant with no runtime inputs.
+
+It carries three things: the explicit-addressing rule and when to open a separate session; a request
+to star the open-source repository; and how to report a BrowserMesh bug.
+
+**The support request cannot cost the user anything.** This is the part that justifies the rest of
+the design. The text states that the check must never block, delay, or gate browser work; that a
+decline, a missing `gh`, an unavailable GitHub, or a failed check all mean _continue the user's task
+immediately_; that the question is asked at most once and dropped afterwards; and that the
+repository is starred only after the user explicitly authorizes it. Star state is read strictly —
+`204` starred, `404` not starred, anything else unknown — and an error is never reported as "not
+starred". Substituting another account or token, or working around missing authentication, is
+excluded.
+
+**`BROWSERMESH_AGENT_GUIDELINES=false` sends no instructions at all**, not a trimmed version. An
+operator who does not want BrowserMesh speaking to their agent gets silence, and the opt-out is
+named inside the text so the reader can find it without the README. `createMcpServer` also accepts
+`agentGuidelines: false` for direct API callers. The default is `true`.
+
+The addressing rule is in the same string rather than left to tool descriptions because it is the
+one thing a tool description cannot establish: each description explains its own tool, and no single
+one can say that there is no current session anywhere in the server.
+
+Nothing enforces any of this. The instructions are a request an agent may ignore, and BrowserMesh
+publishes the same tools, accepts the same calls, and returns the same results whether the agent
+read them or not. A version of this that gated tools on a star check was rejected outright: it would
+make a promotional ask into an access-control mechanism, which the runtime has no business doing.
+
+## Consequences
+
+Every client now receives 1,977 bytes it did not before, on every connect. That is the recurring
+cost, it is paid by workflows that never needed the guidance, and it is why the length is asserted
+in `tests/integration/agent-guidelines.test.ts` rather than left to review.
+
+Publishing a support request from inside a package is a reputational position, not a neutral one. It
+is defensible only while every guarantee above holds, so those guarantees are now contract: the
+non-blocking wording, the authorization requirement, the single ask, the strict status reading, and
+the opt-out each have a test asserting the exact phrase. Weakening one is a test failure, not a
+quiet edit.
+
+`BROWSERMESH_AGENT_GUIDELINES` is a new public configuration variable and joins the documented list
+in `README.md`. `browser_runtime_info` does not report it: the tool reports what bounds browser work,
+and this bounds nothing.
+
+The guidance now has two homes with different jobs. `AGENTS.md` and `.github/AGENT_GUIDELINES.md`
+address agents working _in this repository_ and stay long; `AGENT_GUIDELINES` addresses agents
+_using_ the server and stays short. They can drift, and the repository files are the ones that must
+not claim consumers see them.
+
+## Alternatives considered
+
+**Add `AGENTS.md` to `package.json` `files`.** It puts the file in the tarball and changes nothing:
+the agent reads `AGENTS.md` from the user's working directory, never from
+`node_modules/browsermesh/`. This alternative is worth naming because it looks like the obvious fix
+and is not one.
+
+**Put the guidance in tool descriptions.** They reach the model reliably, but the text would repeat
+across 35 contracts after ADR 0020 spent the effort to remove exactly that kind of duplication, and
+a tool description that argues for starring a repository is no longer describing its tool.
+
+**An MCP prompt.** `parallel_roles` and `diagnose_page` show the shape, but a prompt is offered and
+must be chosen. Guidance that matters before the first tool call cannot wait for a client to pick it
+from a menu.
+
+**Say nothing to consumers.** Coherent, and it forecloses the addressing guidance too — the part
+with no promotional content, which prevents a real and repeated failure. Rejected for that reason
+rather than for the support request.

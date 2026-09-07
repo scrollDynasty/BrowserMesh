@@ -68,7 +68,16 @@ describe('loadConfig', () => {
     expect(() => loadConfig({ BROWSERMESH_MAX_SAVED_STATES: '10001' })).toThrow();
     for (const invalid of ['', 'TRUE', '1', 'yes']) {
       expect(() => loadConfig({ BROWSERMESH_HEADLESS: invalid })).toThrow();
+      expect(() => loadConfig({ BROWSERMESH_AGENT_GUIDELINES: invalid })).toThrow();
     }
+  });
+
+  it('publishes the agent guidelines by default and lets an operator opt out', () => {
+    // The guidelines reach every client on connect, so an operator who does not
+    // want them sent has to be able to turn them off without patching anything.
+    expect(loadConfig({}).agentGuidelines).toBe(true);
+    expect(loadConfig({ BROWSERMESH_AGENT_GUIDELINES: 'false' }).agentGuidelines).toBe(false);
+    expect(loadConfig({ BROWSERMESH_AGENT_GUIDELINES: 'true' }).agentGuidelines).toBe(true);
   });
 
   it('names the rejected variable without leaking a stack or the value', () => {

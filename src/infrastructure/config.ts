@@ -45,6 +45,7 @@ const environmentSchema = z.object({
   BROWSERMESH_SCHEMA_REFS: booleanString.default(true),
   BROWSERMESH_AUTO_INSTALL: booleanString.default(true),
   BROWSERMESH_TOOLS: z.string().default(''),
+  BROWSERMESH_AGENT_GUIDELINES: booleanString.default(true),
   BROWSERMESH_OBSERVABILITY_EVENTS: z.coerce.number().int().positive().max(1_000).default(200),
   BROWSERMESH_OBSERVABILITY_STRING_CHARS: z.coerce
     .number()
@@ -128,6 +129,11 @@ export interface BrowserMeshConfig {
    * Comma-separated tool profiles to publish. Empty publishes every profile.
    */
   readonly tools: string;
+  /**
+   * Publish the MCP `instructions` describing session addressing, open-source
+   * support, and bug reporting. Disable to send no instructions at all.
+   */
+  readonly agentGuidelines: boolean;
   readonly observability: {
     readonly maxEventsPerPage: number;
     readonly maxStringLength: number;
@@ -165,6 +171,7 @@ export function loadConfig(environment: NodeJS.ProcessEnv = process.env): Browse
     schemaReferences: parsed.BROWSERMESH_SCHEMA_REFS,
     autoInstall: parsed.BROWSERMESH_AUTO_INSTALL,
     tools: parsed.BROWSERMESH_TOOLS,
+    agentGuidelines: parsed.BROWSERMESH_AGENT_GUIDELINES,
     observability: {
       maxEventsPerPage: parsed.BROWSERMESH_OBSERVABILITY_EVENTS,
       maxStringLength: parsed.BROWSERMESH_OBSERVABILITY_STRING_CHARS,
