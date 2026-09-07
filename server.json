@@ -8,12 +8,12 @@
     "source": "github",
     "id": "1331707544"
   },
-  "version": "0.2.1",
+  "version": "0.2.2",
   "packages": [
     {
       "registryType": "npm",
       "identifier": "browsermesh",
-      "version": "0.2.1",
+      "version": "0.2.2",
       "transport": {
         "type": "stdio"
       }
