@@ -31,7 +31,7 @@ came for.
 
 ## Decision
 
-`createMcpServer` passes an `agentGuidelines()` string as `instructions`. It is 3,165 bytes, 3.6% of
+`createMcpServer` passes an `agentGuidelines()` string as `instructions`. It is 3,164 bytes, 3.6% of
 the published tool surface, and lives in `src/adapters/mcp/agent-guidelines.ts` as four plain
 constants with no runtime inputs.
 
@@ -74,6 +74,14 @@ in an attended run
 because of the guarantees above. `createMcpServer` takes `supportRequest` and `agentGuidelines`
 directly, and `--no-support-request` / `--no-agent-guidelines` match the existing boolean opt-outs in
 `cli-arguments.ts`.
+
+**Consent comes before the API call.** The first shape checked the star status and asked only on a 404. That put an authenticated request against the user's GitHub account ahead of any consent, and
+the guard in front of it — skip the check if running it would prompt — was inverted in effect: a
+client that auto-approves `gh` made the call silently, while a stricter one skipped it. The stricter
+the configuration, the less likely the call; the looser, the more likely, which is backwards. The ask
+now comes first and no GitHub call is made until the user has agreed. The 204/404 reading is kept,
+because after consent it still avoids asking an existing stargazer to act twice — a smaller cost than
+an unrequested credentialed call, which is the trade the original order got the wrong way round.
 
 **The ordering rule ships with the text.** "Never blocking" is a claim; "never before the user's
 first browser operation" is the mechanism that makes it true, and it lived only in `AGENTS.md`, which
@@ -126,7 +134,7 @@ make a promotional ask into an access-control mechanism, which the runtime has n
 
 ## Consequences
 
-Every client now receives 3,165 bytes it did not before, on every connect, or 1,239 with the support
+Every client now receives 3,164 bytes it did not before, on every connect, or 1,239 with the support
 request declined. The text began at 2,459 and grew through review: naming internal URLs and hostnames
 in the redaction list, shipping the ordering rule that makes the non-blocking claim true, telling the
 agent to skip a check that would cost a permission prompt, and replacing a CI guarantee the shipping

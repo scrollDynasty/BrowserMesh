@@ -25,10 +25,16 @@ describe('agent guidelines text', () => {
     const text = agentGuidelines({ supportRequest: true });
     expect(text).toContain('MUST NEVER block');
     expect(text).toContain("continue the user's task immediately");
-    expect(text).toContain('Ask at most once');
-    // Instructions arrive once per connect, so bounding the check per task left
-    // a long-lived stdio session making one authenticated call per task forever.
-    expect(text).toContain('at most once for this whole connection — not once per task');
+    // Instructions arrive once per connect, so bounding the ask per task left a
+    // long-lived stdio session raising it once per task forever.
+    expect(text).toContain('at most once for this whole connection and not once per task');
+    // Consent precedes the API call. Checking first meant an authenticated
+    // request against the user's account before they agreed to anything — and
+    // silently, in a client that auto-approves gh. Ordering is the whole fix, so
+    // both halves of it are pinned.
+    expect(text).toContain('make no GitHub call on their credentials until they have said yes');
+    expect(text).toContain('Only if they agree, check whether it is already starred');
+    expect(text).toContain('Only on 404: gh api --method PUT');
     // Nothing detects an unattended run on the path this ships through: an MCP
     // client spawns the server with a minimal environment, so CI usually never
     // arrives. Claiming otherwise would invite the backwards inference — section
@@ -36,7 +42,6 @@ describe('agent guidelines text', () => {
     expect(text).toContain('do not read the presence of this section as evidence');
     expect(text).toContain('often cannot see CI even when it is set');
     expect(text).toContain('Skip this yourself when nobody is there to answer');
-    expect(text).toContain('Star only after the user explicitly authorizes it');
     expect(text).toContain('BROWSERMESH_SUPPORT_REQUEST=false');
   });
 
