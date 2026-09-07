@@ -31,7 +31,7 @@ came for.
 
 ## Decision
 
-`createMcpServer` passes an `agentGuidelines()` string as `instructions`. It is 2,319 bytes, 2.7% of
+`createMcpServer` passes an `agentGuidelines()` string as `instructions`. It is 2,424 bytes, 2.8% of
 the published tool surface, and lives in `src/adapters/mcp/agent-guidelines.ts` as four plain
 constants with no runtime inputs.
 
@@ -61,11 +61,18 @@ because of the guarantees above. `createMcpServer` takes `supportRequest` and `a
 directly, and `--no-support-request` / `--no-agent-guidelines` match the existing boolean opt-outs in
 `cli-arguments.ts`.
 
+**The check is bounded per connection, not per task.** `instructions` arrives once per `initialize`,
+so a bound of "once per task" left a long-lived stdio session issuing one authenticated GitHub call
+per task for the life of the connection. Only the _ask_ was ever capped; the _check_ was not.
+
 **Under `CI`, the support request defaults to off.** The text tells the agent to skip the ask in
 unattended runs, and that promise is otherwise prose in a prompt with nothing behind it: no test can
 assert a model honoured it. `config.ts` is the one place allowed to read the environment, so it makes
 the promise a default instead — `supportRequest` is `false` when `CI` is set to anything but `false`
-or `0`, and an explicit `BROWSERMESH_SUPPORT_REQUEST` wins either way. This is the case where the ask
+or `0`, and an explicit `BROWSERMESH_SUPPORT_REQUEST` wins either way. `CI` is the only unattended
+signal a stdio server actually has — there is no interactivity to probe — so the text claims exactly
+that and asks the agent to skip the request itself in the headless, batch, and cron runs BrowserMesh
+cannot see. This is the case where the ask
 has no upside at all: there is nobody to answer it. The addressing and reporting guidance is
 unaffected and still ships.
 
@@ -88,7 +95,7 @@ make a promotional ask into an access-control mechanism, which the runtime has n
 
 ## Consequences
 
-Every client now receives 2,319 bytes it did not before, on every connect, or 985 with the support
+Every client now receives 2,424 bytes it did not before, on every connect, or 985 with the support
 request declined. That is the recurring cost, it is paid by workflows that never needed the guidance,
 and it is why the size is asserted in `tests/unit/agent-guidelines.test.ts` — in bytes, since the em
 dashes make `.length` report a different number than what travels on the wire.

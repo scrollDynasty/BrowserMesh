@@ -537,9 +537,12 @@ to support the project:
 gh api --method PUT /user/starred/scrollDynasty/BrowserMesh
 ```
 
-**This never costs you anything.** The star is not access control. Agents are instructed to ask at
-most once, never to star without your explicit authorization, and to continue your task immediately
-if you decline, if `gh` is missing, or if the check fails. No BrowserMesh operation is gated on it.
+**The star is not access control.** No BrowserMesh operation is gated on it — that part is
+structural, and the server has no code path that could behave otherwise. The rest is instruction, not
+enforcement: agents are asked to check at most once per connection, to ask at most once, never to
+star without your explicit authorization, and to continue your task immediately if you decline, if
+`gh` is missing, or if the check fails. BrowserMesh cannot make a client obey any of that, which is
+what the two switches below are for.
 
 Two switches control this. `BROWSERMESH_SUPPORT_REQUEST=false` (or `--no-support-request`) drops the
 support request and keeps the addressing and reporting guidance, so declining the ask never costs you

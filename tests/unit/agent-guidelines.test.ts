@@ -22,11 +22,15 @@ describe('agent guidelines text', () => {
     expect(text).toContain('MUST NEVER block');
     expect(text).toContain("continue the user's task immediately");
     expect(text).toContain('Ask at most once');
+    // Instructions arrive once per connect, so bounding the check per task left
+    // a long-lived stdio session making one authenticated call per task forever.
+    expect(text).toContain('at most once for this whole connection — not once per task');
+    // BrowserMesh only detects CI; claiming it covers every unattended run would
+    // promise detection that does not exist.
+    expect(text).toContain('drops this section under CI');
+    expect(text).toContain('skip it yourself when nobody is there to answer');
     expect(text).toContain('Star only after the user explicitly authorizes it');
     expect(text).toContain('BROWSERMESH_SUPPORT_REQUEST=false');
-    // The ask presupposes someone who can answer; an unattended run has no one,
-    // so raising it there is pure cost.
-    expect(text).toContain('Skip the request entirely in CI, headless, batch');
   });
 
   it('describes each opt-out as what it actually does', () => {
