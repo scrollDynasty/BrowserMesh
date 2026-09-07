@@ -72,8 +72,16 @@ async function withClient(
     await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
     await body(client);
   } finally {
-    await client.close();
-    await server.close();
-    await runtime.shutdown();
+    // Same nesting as instructionsFromCli: a rejecting client.close() must not
+    // skip the runtime shutdown behind it.
+    try {
+      await client.close();
+    } finally {
+      try {
+        await server.close();
+      } finally {
+        await runtime.shutdown();
+      }
+    }
   }
 }

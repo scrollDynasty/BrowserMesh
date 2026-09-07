@@ -31,7 +31,7 @@ came for.
 
 ## Decision
 
-`createMcpServer` passes an `agentGuidelines()` string as `instructions`. It is 2,987 bytes, 3.4% of
+`createMcpServer` passes an `agentGuidelines()` string as `instructions`. It is 3,165 bytes, 3.6% of
 the published tool surface, and lives in `src/adapters/mcp/agent-guidelines.ts` as four plain
 constants with no runtime inputs.
 
@@ -126,13 +126,15 @@ make a promotional ask into an access-control mechanism, which the runtime has n
 
 ## Consequences
 
-Every client now receives 2,987 bytes it did not before, on every connect, or 1,116 with the support
+Every client now receives 3,165 bytes it did not before, on every connect, or 1,239 with the support
 request declined. The text began at 2,459 and grew through review: naming internal URLs and hostnames
 in the redaction list, shipping the ordering rule that makes the non-blocking claim true, telling the
 agent to skip a check that would cost a permission prompt, and replacing a CI guarantee the shipping
-path cannot keep with an accurate statement of what is detectable. The budget was raised from 2,500
-to 3,500 to match, deliberately and once — a ceiling held a few bytes above the text stops guarding
-against a new section and starts failing on ordinary wording fixes. That is the recurring cost, it is paid by workflows that never needed the guidance,
+path cannot keep with an accurate statement of what is detectable. The budgets are now stated against the design
+constraint rather than the current size — 4,500 and 2,000, roughly 5% and 2% of the 87,367-byte tool
+surface — because a ceiling held a few bytes above the text stops guarding against a new section and
+starts failing on ordinary wording fixes. That happened three times during review, and the fix each
+time was raising the constant, which is what a budget exists to prevent. That is the recurring cost, it is paid by workflows that never needed the guidance,
 and it is why the size is asserted in `tests/unit/agent-guidelines.test.ts` — in bytes, since the em
 dashes make `.length` report a different number than what travels on the wire. The ceiling is set to
 catch a new section rather than a rephrasing: held a few bytes above the current text it fails on

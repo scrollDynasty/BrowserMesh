@@ -235,8 +235,17 @@ async function instructionsFromCli(overrides: Record<string, string>): Promise<s
     await client.connect(transport);
     return client.getInstructions();
   } finally {
-    await client.close();
-    await transport.close();
-    await rm(dataDirectory, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 });
+    // Nested so a rejecting close still runs the rest: a skipped transport.close
+    // leaves a spawned `node --import tsx src/cli.ts` child alive for the whole
+    // run, and a skipped rm leaves its temp directory behind.
+    try {
+      await client.close();
+    } finally {
+      try {
+        await transport.close();
+      } finally {
+        await rm(dataDirectory, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 });
+      }
+    }
   }
 }
