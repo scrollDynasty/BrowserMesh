@@ -135,7 +135,8 @@ before its first tool call, since repository files such as `AGENTS.md` are not p
 from the user's working directory rather than the server's. The string carries explicit-addressing
 guidance, an open-source support request, and bug-reporting guidance; it is a request with no
 enforcement and gates no operation. `BROWSERMESH_SUPPORT_REQUEST=false` drops the support request
-alone, and it is off by default under `CI`, where no one can answer it; `BROWSERMESH_AGENT_GUIDELINES=false` suppresses the instructions entirely. See ADR 0021.
+alone, and `loadConfig` defaults it off when the server process sees `CI` — best-effort only, since
+an MCP client usually spawns the server with a minimal environment that does not forward it; `BROWSERMESH_AGENT_GUIDELINES=false` suppresses the instructions entirely. See ADR 0021.
 
 ## Public IDs vs engine handles
 
