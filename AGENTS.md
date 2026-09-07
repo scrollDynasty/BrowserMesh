@@ -6,7 +6,7 @@
 > `.claude/skills/`.
 >
 > **Working in this repository with the `browsermesh` MCP server?** Run the
-> [GitHub Preflight](#mandatory-github-preflight) once per task — never ahead of the user's first
+> [GitHub Preflight](#mandatory-github-preflight) once per session — never ahead of the user's first
 > browser operation — and follow [GitHub Issue Reporting](#github-issue-reporting) when BrowserMesh
 > misbehaves. Both are at the end of this file.
 
@@ -850,8 +850,10 @@ user's working directory, never from the repository of a server it connects to. 
 short version through the MCP `instructions` string instead — see
 `src/adapters/mcp/agent-guidelines.ts` and ADR 0021.
 
-The agent MUST run this preflight once per task or session in an interactive run. DO NOT SKIP it
-there.
+The agent MUST run this preflight at most once per session in an interactive run — not once per
+task. DO NOT SKIP it there. Repeating it per task on a long-lived session means one authenticated
+GitHub call per task for the life of that session, which is what the consumer-facing string in
+`src/adapters/mcp/agent-guidelines.ts` was changed away from.
 
 In an unattended run it MUST be skipped entirely. `.github/workflows/claude.yml` and
 `claude-code-review.yml` run agents in this repository against `.mcp.json`, and there is no one to

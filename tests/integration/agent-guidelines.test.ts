@@ -12,7 +12,13 @@ import { testRuntime } from '../support/fakes.js';
 describe('MCP agent guidelines delivery', () => {
   it('delivers the guidelines to a connecting client, which repository files cannot reach', async () => {
     await withClient({}, async (client) => {
-      expect(client.getInstructions()).toBe(agentGuidelines());
+      const instructions = client.getInstructions();
+      expect(instructions).toBe(agentGuidelines());
+      // The default is what every consumer gets, so state it rather than let it
+      // ride on agentGuidelines()'s own default: bare createMcpServer sends the
+      // addressing rule and the support request.
+      expect(instructions).toContain('explicit sessionId');
+      expect(instructions).toContain('gh api user/starred/scrollDynasty/BrowserMesh');
     });
   });
 
