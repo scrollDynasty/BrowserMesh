@@ -298,6 +298,13 @@ export interface McpServerOptions {
   /**
    * Publish the MCP `instructions` string. Defaults to true; pass false to
    * connect without sending any instructions at all.
+   *
+   * Unlike `supportRequest` below, this default is not conservative: an existing
+   * caller of `createMcpServer(runtime)` starts emitting roughly a kilobyte of
+   * prompt content on upgrade with no call-site change. That is deliberate — the
+   * content is server documentation, and the explicit-addressing rule is the one
+   * thing no per-tool description can establish — but it is a behaviour change,
+   * and `agentGuidelines: false` opts out of it.
    */
   readonly agentGuidelines?: boolean;
   /**

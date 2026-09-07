@@ -54,6 +54,13 @@ bumped, and the `CI` carve-out cannot help it: that lives in `loadConfig`, which
 its own options never calls. `cli.ts` opts in from configuration, so `npx browsermesh` is unchanged.
 `McpServerOptions` is re-exported from `src/index.ts` so an embedder can name the option at all.
 
+The two defaults are deliberately asymmetric, and the asymmetry is the decision. `agentGuidelines`
+stays `true`, so an existing `createMcpServer(runtime)` caller does begin emitting roughly a kilobyte
+of prompt content on upgrade without changing a line — accepted because that content is server
+documentation about BrowserMesh's own contracts, and because the explicit-addressing rule is the one
+thing no per-tool description can establish. `supportRequest` is not documentation and does not get
+the same latitude.
+
 **The two halves switch independently, because they differ in kind.** The addressing and reporting
 guidance is server documentation with no side effects. The support request is not: it asks the agent
 to spend the user's GitHub credentials on `gh api user/starred/...` and to offer an account-mutating
