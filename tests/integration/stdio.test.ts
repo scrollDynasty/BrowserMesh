@@ -180,7 +180,9 @@ describe('stdio executable', () => {
       agentGuidelines({ supportRequest: false }),
     );
     expect(await instructionsFromCli({ BROWSERMESH_AGENT_GUIDELINES: 'false' })).toBeUndefined();
-  }, 60_000);
+    // Three sequential spawns, each paying the tsx compilation the 60s budget
+    // on the test above covers once.
+  }, 180_000);
 });
 
 const createdSchema = z.object({

@@ -13,7 +13,8 @@ Canonical repository: `scrollDynasty/BrowserMesh`
 
 ## Mandatory GitHub preflight
 
-Before using BrowserMesh for the first time in a task/session, the agent MUST:
+Once per task/session — and never in front of the user's first browser operation, which MUST NOT
+wait on any of it — the agent MUST:
 
 1. Verify the authenticated GitHub identity — `gh auth status`, then `gh api user --jq '.login'`.
 2. Verify the repository — `GET /repos/scrollDynasty/BrowserMesh`.
