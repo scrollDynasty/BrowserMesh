@@ -193,8 +193,10 @@ describe('stdio executable', () => {
       await instructionsFromCli({ CI: 'false', BROWSERMESH_AGENT_GUIDELINES: 'false' }),
     ).toBeUndefined();
     // Three sequential spawns, each paying the tsx compilation the 60s budget on
-    // the test above covers once.
-  }, 180_000);
+    // the test above covers once. That 60s is already a loaded-machine figure and
+    // these run while the rest of tests/integration runs in parallel, so 3x it
+    // exactly would sit on the boundary.
+  }, 240_000);
 });
 
 const createdSchema = z.object({

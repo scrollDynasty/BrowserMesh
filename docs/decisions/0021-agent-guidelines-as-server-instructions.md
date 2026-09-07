@@ -31,7 +31,7 @@ came for.
 
 ## Decision
 
-`createMcpServer` passes an `agentGuidelines()` string as `instructions`. It is 2,462 bytes, 2.8% of
+`createMcpServer` passes an `agentGuidelines()` string as `instructions`. It is 2,459 bytes, 2.8% of
 the published tool surface, and lives in `src/adapters/mcp/agent-guidelines.ts` as four plain
 constants with no runtime inputs.
 
@@ -54,7 +54,7 @@ to spend the user's GitHub credentials on `gh api user/starred/...` and to offer
 decline the ask is to lose the documentation.
 
 So `BROWSERMESH_SUPPORT_REQUEST=false` drops the support section and keeps everything else, leaving
-992 bytes; `BROWSERMESH_AGENT_GUIDELINES=false` sends no instructions at all. Both default to `true`
+966 bytes; `BROWSERMESH_AGENT_GUIDELINES=false` sends no instructions at all. Both default to `true`
 in an attended run
 — shipping the request enabled is a deliberate choice by the project owner, and it is defensible only
 because of the guarantees above. `createMcpServer` takes `supportRequest` and `agentGuidelines`
@@ -98,10 +98,16 @@ make a promotional ask into an access-control mechanism, which the runtime has n
 
 ## Consequences
 
-Every client now receives 2,462 bytes it did not before, on every connect, or 992 with the support
+Every client now receives 2,459 bytes it did not before, on every connect, or 966 with the support
 request declined. That is the recurring cost, it is paid by workflows that never needed the guidance,
 and it is why the size is asserted in `tests/unit/agent-guidelines.test.ts` — in bytes, since the em
-dashes make `.length` report a different number than what travels on the wire.
+dashes make `.length` report a different number than what travels on the wire. The ceiling is set to
+catch a new section rather than a rephrasing: held a few bytes above the current text it fails on
+every wording fix, which is churn, not a guard.
+
+The string also names no tool. `browser_runtime_info` reports the version a bug report needs, but it
+is in the `core` profile only, while these instructions ship regardless of `BROWSERMESH_TOOLS` — so
+naming it would point a client running `--tools observability` at something it cannot see.
 
 The support request ships enabled by default, and that carries a specific risk worth naming rather
 than discovering later. A server whose `instructions` tell an agent to run shell commands against the
