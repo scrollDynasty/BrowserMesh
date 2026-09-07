@@ -4,12 +4,16 @@ import { agentGuidelines } from '../../src/adapters/mcp/agent-guidelines.js';
 // These assert a static string, so they belong in the inner loop: ADR 0021
 // treats each guarantee below as contract, and that only holds if weakening one
 // fails `npm test` rather than only the full `verify`.
+//
+// agentGuidelines() renders without the support request: both public entry
+// points default to the conservative variant, and the project's policy default
+// is applied by the CLI from config.ts.
 describe('agent guidelines text', () => {
   it('teaches the addressing rule the tool surface depends on', () => {
     // An agent that assumes a current session is the failure this text exists
     // to prevent, so the rule has to survive any future edit — including the
     // edit that drops the support request.
-    for (const text of [agentGuidelines(), agentGuidelines({ supportRequest: false })]) {
+    for (const text of [agentGuidelines({ supportRequest: true }), agentGuidelines()]) {
       expect(text).toContain('explicit sessionId');
       expect(text).toContain('no current session');
     }
@@ -18,7 +22,7 @@ describe('agent guidelines text', () => {
   it('states the support request as non-blocking, authorized, and droppable', () => {
     // Each of these is what keeps a promotional ask from costing a user the
     // work they actually came for.
-    const text = agentGuidelines();
+    const text = agentGuidelines({ supportRequest: true });
     expect(text).toContain('MUST NEVER block');
     expect(text).toContain("continue the user's task immediately");
     expect(text).toContain('Ask at most once');
@@ -38,14 +42,14 @@ describe('agent guidelines text', () => {
     // flags exist, so claiming the variable drops "this section" when it
     // suppresses everything would lead a user to lose the addressing rule
     // while trying to decline the ask.
-    expect(agentGuidelines()).toContain(
+    expect(agentGuidelines({ supportRequest: true })).toContain(
       'operator can drop this section with BROWSERMESH_SUPPORT_REQUEST=false, keeping the addressing and bug-reporting guidance',
     );
 
     // The lean variant is what CI and --no-support-request produce, and it still
     // arrives unsolicited on every connect. Naming the remaining opt-out only in
     // the section that just got dropped would leave that operator no way out.
-    for (const text of [agentGuidelines(), agentGuidelines({ supportRequest: false })]) {
+    for (const text of [agentGuidelines({ supportRequest: true }), agentGuidelines()]) {
       expect(text).toContain(
         'operator can stop these instructions entirely with BROWSERMESH_AGENT_GUIDELINES=false',
       );
@@ -53,7 +57,7 @@ describe('agent guidelines text', () => {
   });
 
   it('reads the star API strictly and never guesses a state', () => {
-    const text = agentGuidelines();
+    const text = agentGuidelines({ supportRequest: true });
     expect(text).toContain('204 = starred');
     expect(text).toContain('404 = not starred');
     expect(text).toContain('anything else = unknown');
@@ -61,7 +65,7 @@ describe('agent guidelines text', () => {
   });
 
   it('drops the whole request, and only the request, when it is declined', () => {
-    const lean = agentGuidelines({ supportRequest: false });
+    const lean = agentGuidelines();
     expect(lean).not.toContain('star');
     expect(lean).not.toContain('gh api');
     expect(lean).toContain('explicit sessionId');
@@ -69,7 +73,7 @@ describe('agent guidelines text', () => {
   });
 
   it('keeps secrets and page contents out of bug reports', () => {
-    const text = agentGuidelines();
+    const text = agentGuidelines({ supportRequest: true });
     expect(text).toContain('never open a duplicate');
     expect(text).toContain('Ask the user before creating an issue');
     expect(text).toContain(
@@ -86,12 +90,14 @@ describe('agent guidelines text', () => {
     // this differ from `.length`, and bytes are the figure ADR 0021 reasons
     // about against the 87,367-byte tool surface.
     //
-    // The ceiling catches structural growth — a new section — not wording drift.
-    // Set to roughly 3x the current text it would have to grow a lot to trip;
-    // set a few bytes above it, every rephrasing fails the guard instead.
-    expect(Buffer.byteLength(agentGuidelines(), 'utf8')).toBeLessThan(3_000);
-    expect(Buffer.byteLength(agentGuidelines({ supportRequest: false }), 'utf8')).toBeLessThan(
-      1_250,
+    // These are tight budgets, not loose ceilings: roughly 10-15% above the
+    // current text, so one added paragraph trips them. That is deliberate — the
+    // string competes with the user's own context on every connect, and growth
+    // should have to be argued for. Raising a number is a real decision, not the
+    // reflex fix for a failing assertion.
+    expect(Buffer.byteLength(agentGuidelines({ supportRequest: true }), 'utf8')).toBeLessThan(
+      3_000,
     );
+    expect(Buffer.byteLength(agentGuidelines(), 'utf8')).toBeLessThan(1_250);
   });
 });

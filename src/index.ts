@@ -17,6 +17,7 @@ export type {
 export { PlaywrightBrowserEngine } from './adapters/playwright/playwright-browser-engine.js';
 export { FileSystemStateRepository } from './adapters/persistence/filesystem-state-repository.js';
 export { createMcpServer } from './adapters/mcp/server.js';
+export type { McpServerOptions } from './adapters/mcp/server.js';
 export { createRuntime } from './create-runtime.js';
 export { loadConfig } from './infrastructure/config.js';
 export type { BrowserMeshConfig } from './infrastructure/config.js';

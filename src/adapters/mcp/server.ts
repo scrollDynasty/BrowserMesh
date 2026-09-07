@@ -301,8 +301,13 @@ export interface McpServerOptions {
    */
   readonly agentGuidelines?: boolean;
   /**
-   * Include the open-source support request in the instructions. Defaults to
-   * true; pass false to keep the addressing and reporting guidance without it.
+   * Include the open-source support request in the instructions.
+   *
+   * Defaults to **false** here, deliberately: `createMcpServer` is public API,
+   * and an embedder upgrading BrowserMesh must not start asking its users for
+   * GitHub stars because a dependency bumped. `cli.ts` opts in from
+   * configuration, so `npx browsermesh` is unaffected — and the `CI` carve-out
+   * lives in `loadConfig`, which an embedder never calls.
    */
   readonly supportRequest?: boolean;
 }
@@ -315,7 +320,7 @@ export function createMcpServer(
     { name: 'browsermesh', version: BROWSERMESH_VERSION },
     options.agentGuidelines === false
       ? {}
-      : { instructions: agentGuidelines({ supportRequest: options.supportRequest !== false }) },
+      : { instructions: agentGuidelines({ supportRequest: options.supportRequest === true }) },
   );
   const published = selectedTools(options.tools);
   const registerTool = server.registerTool.bind(server);

@@ -185,9 +185,11 @@ describe('stdio executable', () => {
     // transport merges getDefaultEnvironment() beneath the env passed here, and
     // CI is not among the variables that inherits — but pinning states the
     // intent and survives a change to that list.
-    expect(await instructionsFromCli({ CI: 'false' })).toBe(agentGuidelines());
+    expect(await instructionsFromCli({ CI: 'false' })).toBe(
+      agentGuidelines({ supportRequest: true }),
+    );
     expect(await instructionsFromCli({ CI: 'false', BROWSERMESH_SUPPORT_REQUEST: 'false' })).toBe(
-      agentGuidelines({ supportRequest: false }),
+      agentGuidelines(),
     );
     expect(
       await instructionsFromCli({ CI: 'false', BROWSERMESH_AGENT_GUIDELINES: 'false' }),

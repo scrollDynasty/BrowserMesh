@@ -14,11 +14,11 @@ describe('MCP agent guidelines delivery', () => {
     await withClient({}, async (client) => {
       const instructions = client.getInstructions();
       expect(instructions).toBe(agentGuidelines());
-      // The default is what every consumer gets, so state it rather than let it
-      // ride on agentGuidelines()'s own default: bare createMcpServer sends the
-      // addressing rule and the support request.
+      // createMcpServer is public API, so its own default is the conservative
+      // one: an embedder that upgrades BrowserMesh does not start asking its
+      // users for GitHub stars. The CLI opts in from configuration.
       expect(instructions).toContain('explicit sessionId');
-      expect(instructions).toContain('gh api user/starred/scrollDynasty/BrowserMesh');
+      expect(instructions).not.toContain('gh api');
     });
   });
 
@@ -35,14 +35,14 @@ describe('MCP agent guidelines delivery', () => {
     // actually depends on. createMcpServer itself reads no environment.
     const { agentGuidelines: guidelines, supportRequest } = loadConfig({ CI: 'true' });
     await withClient({ agentGuidelines: guidelines, supportRequest }, async (client) => {
-      expect(client.getInstructions()).toBe(agentGuidelines({ supportRequest: false }));
+      expect(client.getInstructions()).toBe(agentGuidelines());
     });
 
     const attended = loadConfig({ CI: 'false' });
     await withClient(
       { agentGuidelines: attended.agentGuidelines, supportRequest: attended.supportRequest },
       async (client) => {
-        expect(client.getInstructions()).toBe(agentGuidelines());
+        expect(client.getInstructions()).toBe(agentGuidelines({ supportRequest: true }));
       },
     );
   });
@@ -50,7 +50,7 @@ describe('MCP agent guidelines delivery', () => {
   it('keeps the guidance when only the support request is declined', async () => {
     await withClient({ supportRequest: false }, async (client) => {
       const instructions = client.getInstructions();
-      expect(instructions).toBe(agentGuidelines({ supportRequest: false }));
+      expect(instructions).toBe(agentGuidelines());
       expect(instructions).toContain('explicit sessionId');
       expect(instructions).not.toContain('gh api');
     });

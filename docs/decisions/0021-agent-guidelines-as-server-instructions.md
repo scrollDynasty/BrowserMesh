@@ -31,7 +31,7 @@ came for.
 
 ## Decision
 
-`createMcpServer` passes an `agentGuidelines()` string as `instructions`. It is 2,609 bytes, 3.0% of
+`createMcpServer` passes an `agentGuidelines()` string as `instructions`. It is 2,851 bytes, 3.3% of
 the published tool surface, and lives in `src/adapters/mcp/agent-guidelines.ts` as four plain
 constants with no runtime inputs.
 
@@ -47,6 +47,13 @@ repository is starred only after the user explicitly authorizes it. Star state i
 starred". Substituting another account or token, or working around missing authentication, is
 excluded.
 
+**The library default is conservative; the CLI applies the policy.** `createMcpServer` and
+`agentGuidelines` are both public API, so both default `supportRequest` to `false`. An embedder that
+upgrades BrowserMesh must not begin asking its own users for GitHub stars because a dependency
+bumped, and the `CI` carve-out cannot help it: that lives in `loadConfig`, which an embedder building
+its own options never calls. `cli.ts` opts in from configuration, so `npx browsermesh` is unchanged.
+`McpServerOptions` is re-exported from `src/index.ts` so an embedder can name the option at all.
+
 **The two halves switch independently, because they differ in kind.** The addressing and reporting
 guidance is server documentation with no side effects. The support request is not: it asks the agent
 to spend the user's GitHub credentials on `gh api user/starred/...` and to offer an account-mutating
@@ -60,6 +67,15 @@ in an attended run
 because of the guarantees above. `createMcpServer` takes `supportRequest` and `agentGuidelines`
 directly, and `--no-support-request` / `--no-agent-guidelines` match the existing boolean opt-outs in
 `cli-arguments.ts`.
+
+**The ordering rule ships with the text.** "Never blocking" is a claim; "never before the user's
+first browser operation" is the mechanism that makes it true, and it lived only in `AGENTS.md`, which
+this same ADR establishes is never delivered to a consumer. A client acting on `instructions` at
+`initialize` could fire a permission-prompted `gh` call ahead of the first `browser_*` call — the
+exact delay the text forbids. The bullet is now in the string, alongside a second one: skip the check
+entirely if running it would prompt the user, since an interruption costs more than the answer is
+worth. That is the closest the text gets to consent for the read, which is otherwise ungated where
+the `PUT` is not.
 
 **The check is bounded per connection, not per task.** `instructions` arrives once per `initialize`,
 so a bound of "once per task" left a long-lived stdio session issuing one authenticated GitHub call
@@ -103,7 +119,7 @@ make a promotional ask into an access-control mechanism, which the runtime has n
 
 ## Consequences
 
-Every client now receives 2,609 bytes it did not before, on every connect, or 1,116 with the support
+Every client now receives 2,851 bytes it did not before, on every connect, or 1,116 with the support
 request declined. That is the recurring cost, it is paid by workflows that never needed the guidance,
 and it is why the size is asserted in `tests/unit/agent-guidelines.test.ts` — in bytes, since the em
 dashes make `.length` report a different number than what travels on the wire. The ceiling is set to
