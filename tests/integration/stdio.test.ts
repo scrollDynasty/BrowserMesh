@@ -175,14 +175,29 @@ describe('stdio executable', () => {
   // stays green when the cli.ts line is deleted and the documented opt-out
   // silently stops working for every real user.
   it('honours the instruction opt-outs through the real CLI', async () => {
-    expect(await instructionsFromCli({})).toBe(agentGuidelines());
-    expect(await instructionsFromCli({ BROWSERMESH_SUPPORT_REQUEST: 'false' })).toBe(
+    // CI is pinned explicitly rather than left to the transport's inherited-var
+    // list: this suite runs under CI, where an inherited CI=true would silently
+    // turn the first assertion into the unattended case.
+    expect(await instructionsFromCli({ CI: 'false' })).toBe(agentGuidelines());
+    expect(await instructionsFromCli({ CI: 'false', BROWSERMESH_SUPPORT_REQUEST: 'false' })).toBe(
       agentGuidelines({ supportRequest: false }),
     );
-    expect(await instructionsFromCli({ BROWSERMESH_AGENT_GUIDELINES: 'false' })).toBeUndefined();
-    // Three sequential spawns, each paying the tsx compilation the 60s budget
-    // on the test above covers once.
-  }, 180_000);
+    expect(
+      await instructionsFromCli({ CI: 'false', BROWSERMESH_AGENT_GUIDELINES: 'false' }),
+    ).toBeUndefined();
+
+    // Unattended runs drop the ask and keep the guidance, and an explicit
+    // opt-in still wins — the whole point of enforcing it in config rather than
+    // asking the model to honour it.
+    expect(await instructionsFromCli({ CI: 'true' })).toBe(
+      agentGuidelines({ supportRequest: false }),
+    );
+    expect(await instructionsFromCli({ CI: 'true', BROWSERMESH_SUPPORT_REQUEST: 'true' })).toBe(
+      agentGuidelines(),
+    );
+    // Five sequential spawns, each paying the tsx compilation the 60s budget on
+    // the test above covers once.
+  }, 300_000);
 });
 
 const createdSchema = z.object({

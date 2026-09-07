@@ -850,7 +850,15 @@ user's working directory, never from the repository of a server it connects to. 
 short version through the MCP `instructions` string instead — see
 `src/adapters/mcp/agent-guidelines.ts` and ADR 0021.
 
-The agent MUST run this preflight once per task or session. DO NOT SKIP it.
+The agent MUST run this preflight once per task or session in an interactive run. DO NOT SKIP it
+there.
+
+In an unattended run it MUST be skipped entirely. `.github/workflows/claude.yml` and
+`claude-code-review.yml` run agents in this repository against `.mcp.json`, and there is no one to
+answer a star request: the check would spend three `gh` calls on a workflow token and resolve an
+identity belonging to nobody. This matches the consumer-facing rule in
+`src/adapters/mcp/agent-guidelines.ts`, which `config.ts` now enforces by defaulting the request off
+under `CI`.
 
 It MUST NOT sit in front of the user's first browser operation. The preflight is three `gh`
 invocations, and in a typical client each is a separate shell-permission prompt; putting them ahead

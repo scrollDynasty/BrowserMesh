@@ -546,6 +546,10 @@ support request and keeps the addressing and reporting guidance, so declining th
 the useful part. `BROWSERMESH_AGENT_GUIDELINES=false` (or `--no-agent-guidelines`) sends no
 instructions at all.
 
+Under `CI` the support request is off by default — there is nobody there to answer it — while the
+addressing and reporting guidance still ships. Set `BROWSERMESH_SUPPORT_REQUEST=true` to override
+that.
+
 ### Assisted issue reporting
 
 When an agent hits a reproducible BrowserMesh error, it is asked to:
@@ -625,32 +629,32 @@ BrowserMesh never attempts to serialize a live `BrowserContext`, open pages, pen
 
 ## Configuration
 
-| Environment variable                       |          Default | Meaning                                        |
-| ------------------------------------------ | ---------------: | ---------------------------------------------- |
-| `BROWSERMESH_TIMEOUT_MS`                   |          `10000` | Default bounded operation timeout              |
-| `BROWSERMESH_DATA_DIR`                     | `~/.browsermesh` | Private local data directory                   |
-| `BROWSERMESH_LOG_LEVEL`                    |           `info` | `debug`, `info`, `warn`, `error`, or `silent`  |
-| `BROWSERMESH_MAX_SESSIONS`                 |             `50` | Active session limit                           |
-| `BROWSERMESH_MAX_PAGES`                    |             `20` | Managed pages per session                      |
-| `BROWSERMESH_PERSISTENCE`                  |           `true` | Enable saved browser state                     |
-| `BROWSERMESH_HEADLESS`                     |          `false` | Launch Chromium without a visible window       |
-| `BROWSERMESH_SCHEMA_REFS`                  |           `true` | Share repeated subschemas via `$defs`/`$ref`   |
-| `BROWSERMESH_AUTO_INSTALL`                 |           `true` | Download Chromium on first start if missing    |
-| `BROWSERMESH_TOOLS`                        |            (all) | Tool profiles to publish, comma-separated      |
-| `BROWSERMESH_AGENT_GUIDELINES`             |           `true` | Send the MCP instructions string on connect    |
-| `BROWSERMESH_SUPPORT_REQUEST`              |           `true` | Include the open-source support request in it  |
-| `BROWSERMESH_OBSERVABILITY_EVENTS`         |            `200` | Retained mixed observability events per page   |
-| `BROWSERMESH_OBSERVABILITY_STRING_CHARS`   |           `2048` | Maximum exposed event string length            |
-| `BROWSERMESH_OBSERVABILITY_PAGE_SIZE`      |            `100` | Maximum events returned by one read            |
-| `BROWSERMESH_OBSERVABILITY_RESPONSE_BYTES` |          `65536` | Maximum serialized observability response size |
-| `BROWSERMESH_SCREENSHOT_MAX_DIMENSION`     |          `10000` | Maximum PNG width or height in CSS pixels      |
-| `BROWSERMESH_SCREENSHOT_MAX_PIXELS`        |       `40000000` | Maximum total PNG pixels                       |
-| `BROWSERMESH_SCREENSHOT_MAX_BYTES`         |       `16777216` | Maximum encoded PNG bytes                      |
-| `BROWSERMESH_VISIBLE_TEXT_MAX_CHARS`       |          `20000` | Maximum returned Unicode code points           |
-| `BROWSERMESH_VISIBLE_TEXT_MAX_BYTES`       |          `65536` | Maximum returned visible-text UTF-8 bytes      |
-| `BROWSERMESH_MAX_SAVED_STATES`             |            `100` | Maximum persisted logical states               |
-| `BROWSERMESH_MAX_STATE_BYTES`              |        `1048576` | Maximum bytes in one persisted state           |
-| `BROWSERMESH_MAX_STATE_TOTAL_BYTES`        |       `16777216` | Maximum aggregate persisted-state bytes        |
+| Environment variable                       |           Default | Meaning                                                 |
+| ------------------------------------------ | ----------------: | ------------------------------------------------------- |
+| `BROWSERMESH_TIMEOUT_MS`                   |           `10000` | Default bounded operation timeout                       |
+| `BROWSERMESH_DATA_DIR`                     |  `~/.browsermesh` | Private local data directory                            |
+| `BROWSERMESH_LOG_LEVEL`                    |            `info` | `debug`, `info`, `warn`, `error`, or `silent`           |
+| `BROWSERMESH_MAX_SESSIONS`                 |              `50` | Active session limit                                    |
+| `BROWSERMESH_MAX_PAGES`                    |              `20` | Managed pages per session                               |
+| `BROWSERMESH_PERSISTENCE`                  |            `true` | Enable saved browser state                              |
+| `BROWSERMESH_HEADLESS`                     |           `false` | Launch Chromium without a visible window                |
+| `BROWSERMESH_SCHEMA_REFS`                  |            `true` | Share repeated subschemas via `$defs`/`$ref`            |
+| `BROWSERMESH_AUTO_INSTALL`                 |            `true` | Download Chromium on first start if missing             |
+| `BROWSERMESH_TOOLS`                        |             (all) | Tool profiles to publish, comma-separated               |
+| `BROWSERMESH_AGENT_GUIDELINES`             |            `true` | Send the MCP instructions string on connect             |
+| `BROWSERMESH_SUPPORT_REQUEST`              | `true` (attended) | Include the open-source support request; off under `CI` |
+| `BROWSERMESH_OBSERVABILITY_EVENTS`         |             `200` | Retained mixed observability events per page            |
+| `BROWSERMESH_OBSERVABILITY_STRING_CHARS`   |            `2048` | Maximum exposed event string length                     |
+| `BROWSERMESH_OBSERVABILITY_PAGE_SIZE`      |             `100` | Maximum events returned by one read                     |
+| `BROWSERMESH_OBSERVABILITY_RESPONSE_BYTES` |           `65536` | Maximum serialized observability response size          |
+| `BROWSERMESH_SCREENSHOT_MAX_DIMENSION`     |           `10000` | Maximum PNG width or height in CSS pixels               |
+| `BROWSERMESH_SCREENSHOT_MAX_PIXELS`        |        `40000000` | Maximum total PNG pixels                                |
+| `BROWSERMESH_SCREENSHOT_MAX_BYTES`         |        `16777216` | Maximum encoded PNG bytes                               |
+| `BROWSERMESH_VISIBLE_TEXT_MAX_CHARS`       |           `20000` | Maximum returned Unicode code points                    |
+| `BROWSERMESH_VISIBLE_TEXT_MAX_BYTES`       |           `65536` | Maximum returned visible-text UTF-8 bytes               |
+| `BROWSERMESH_MAX_SAVED_STATES`             |             `100` | Maximum persisted logical states                        |
+| `BROWSERMESH_MAX_STATE_BYTES`              |         `1048576` | Maximum bytes in one persisted state                    |
+| `BROWSERMESH_MAX_STATE_TOTAL_BYTES`        |        `16777216` | Maximum aggregate persisted-state bytes                 |
 
 The options the command line accepts are `--headless`, `--headed`, `--timeout`, `--data-dir`,
 `--log-level`, `--max-sessions`, `--max-pages`, `--tools`, `--no-persistence`, `--no-schema-refs`,

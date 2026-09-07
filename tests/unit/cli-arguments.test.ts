@@ -98,10 +98,26 @@ describe('command-line arguments', () => {
       '--no-persistence',
       '--no-schema-refs',
       '--no-auto-install',
+      '--no-agent-guidelines',
+      '--no-support-request',
       '--install-browser',
       '--doctor',
     ]) {
       expect(text, flag).toContain(flag);
     }
+  });
+
+  it('maps the instruction opt-out flags to the variables that configure them', () => {
+    // These two flags had no assertion anywhere, so a typo in either variable
+    // name would write an override no schema key matches: loadConfig would fall
+    // through to the default and the documented opt-out would do nothing, with
+    // the suite green.
+    expect(parseArguments(['--no-agent-guidelines', '--no-support-request'])).toMatchObject({
+      kind: 'serve',
+      overrides: {
+        BROWSERMESH_AGENT_GUIDELINES: 'false',
+        BROWSERMESH_SUPPORT_REQUEST: 'false',
+      },
+    });
   });
 });

@@ -55,10 +55,19 @@ decline the ask is to lose the documentation.
 
 So `BROWSERMESH_SUPPORT_REQUEST=false` drops the support section and keeps everything else, leaving
 776 bytes; `BROWSERMESH_AGENT_GUIDELINES=false` sends no instructions at all. Both default to `true`
+in an attended run
 — shipping the request enabled is a deliberate choice by the project owner, and it is defensible only
 because of the guarantees above. `createMcpServer` takes `supportRequest` and `agentGuidelines`
 directly, and `--no-support-request` / `--no-agent-guidelines` match the existing boolean opt-outs in
 `cli-arguments.ts`.
+
+**Under `CI`, the support request defaults to off.** The text tells the agent to skip the ask in
+unattended runs, and that promise is otherwise prose in a prompt with nothing behind it: no test can
+assert a model honoured it. `config.ts` is the one place allowed to read the environment, so it makes
+the promise a default instead — `supportRequest` is `false` when `CI` is set to anything but `false`
+or `0`, and an explicit `BROWSERMESH_SUPPORT_REQUEST` wins either way. This is the case where the ask
+has no upside at all: there is nobody to answer it. The addressing and reporting guidance is
+unaffected and still ships.
 
 Each flag names itself inside the text it controls, and says accurately what it removes. That
 matters more than it looks: the instructions are the only place a consumer learns the flags exist, so
