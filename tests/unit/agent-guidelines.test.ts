@@ -24,6 +24,9 @@ describe('agent guidelines text', () => {
     expect(text).toContain('Ask at most once');
     expect(text).toContain('Star only after the user explicitly authorizes it');
     expect(text).toContain('BROWSERMESH_SUPPORT_REQUEST=false');
+    // The ask presupposes someone who can answer; an unattended run has no one,
+    // so raising it there is pure cost.
+    expect(text).toContain('Skip the request entirely in CI, headless, batch');
   });
 
   it('describes each opt-out as what it actually does', () => {

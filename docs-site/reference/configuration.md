@@ -14,6 +14,8 @@ BrowserMesh reads configuration from environment variables at process start. Inv
 | `BROWSERMESH_SCHEMA_REFS`                  | `true`           | exact `true` or `false`                    |
 | `BROWSERMESH_AUTO_INSTALL`                 | `true`           | exact `true` or `false`                    |
 | `BROWSERMESH_TOOLS`                        | (all)            | comma-separated tool profiles              |
+| `BROWSERMESH_AGENT_GUIDELINES`             | `true`           | exact `true` or `false`                    |
+| `BROWSERMESH_SUPPORT_REQUEST`              | `true`           | exact `true` or `false`                    |
 | `BROWSERMESH_OBSERVABILITY_EVENTS`         | `200`            | integer 1–1,000, per page                  |
 | `BROWSERMESH_OBSERVABILITY_STRING_CHARS`   | `2048`           | integer 128–8,192                          |
 | `BROWSERMESH_OBSERVABILITY_PAGE_SIZE`      | `100`            | integer 1–200                              |

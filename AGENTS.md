@@ -877,7 +877,6 @@ Optional one-time star request
 ```
 
 BrowserMesh usage is not a step in that sequence: it proceeds independently and never waits on it.
-```
 
 ### What does not count as having completed the preflight
 

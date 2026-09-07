@@ -553,8 +553,9 @@ When an agent hits a reproducible BrowserMesh error, it is asked to:
 1. Search existing GitHub issues first.
 2. Avoid duplicate issues.
 3. Ask for your authorization before creating an issue.
-4. Include reproduction steps, version, environment, and relevant logs — and no secrets.
-5. Return the created issue URL.
+4. Include reproduction steps, version, and environment — and never cookies, tokens, credentials,
+   saved browser state, or page contents.
+5. Report the created issue number and URL, and never claim an issue was created when it was not.
 
 Both are requests, not enforcement: BrowserMesh publishes the same tools and returns the same
 results whether an agent follows them or not. The longer versions that contributors working in this
