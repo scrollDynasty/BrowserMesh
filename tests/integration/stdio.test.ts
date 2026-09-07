@@ -175,9 +175,16 @@ describe('stdio executable', () => {
   // stays green when the cli.ts line is deleted and the documented opt-out
   // silently stops working for every real user.
   it('honours the instruction opt-outs through the real CLI', async () => {
-    // CI is pinned explicitly rather than left to the transport's inherited-var
-    // list: this suite runs under CI, where an inherited CI=true would silently
-    // turn the first assertion into the unattended case.
+    // Three spawns, one per line this is here to protect: the baseline, then
+    // each of the two lines in cli.ts. Deleting either leaves its case failing
+    // and the other passing. The CI carve-out is loadConfig behaviour and is
+    // asserted in tests/unit/config.test.ts, so it does not need a subprocess.
+    //
+    // CI is pinned because this suite runs under it and the default would
+    // otherwise vary by environment. It could not actually leak in — the
+    // transport merges getDefaultEnvironment() beneath the env passed here, and
+    // CI is not among the variables that inherits — but pinning states the
+    // intent and survives a change to that list.
     expect(await instructionsFromCli({ CI: 'false' })).toBe(agentGuidelines());
     expect(await instructionsFromCli({ CI: 'false', BROWSERMESH_SUPPORT_REQUEST: 'false' })).toBe(
       agentGuidelines({ supportRequest: false }),
@@ -185,19 +192,9 @@ describe('stdio executable', () => {
     expect(
       await instructionsFromCli({ CI: 'false', BROWSERMESH_AGENT_GUIDELINES: 'false' }),
     ).toBeUndefined();
-
-    // Unattended runs drop the ask and keep the guidance, and an explicit
-    // opt-in still wins — the whole point of enforcing it in config rather than
-    // asking the model to honour it.
-    expect(await instructionsFromCli({ CI: 'true' })).toBe(
-      agentGuidelines({ supportRequest: false }),
-    );
-    expect(await instructionsFromCli({ CI: 'true', BROWSERMESH_SUPPORT_REQUEST: 'true' })).toBe(
-      agentGuidelines(),
-    );
-    // Five sequential spawns, each paying the tsx compilation the 60s budget on
+    // Three sequential spawns, each paying the tsx compilation the 60s budget on
     // the test above covers once.
-  }, 300_000);
+  }, 180_000);
 });
 
 const createdSchema = z.object({

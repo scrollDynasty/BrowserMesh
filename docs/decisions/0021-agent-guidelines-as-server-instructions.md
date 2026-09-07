@@ -118,9 +118,11 @@ both opt-outs each have a test asserting the exact phrase. Those tests live in `
 weakening one fails `npm test` and `verify:fast`, the documented inner loop — a guarantee asserted
 only under full `verify` is one an edit can pass through.
 
-The opt-out is asserted end to end through the real CLI in `tests/integration/stdio.test.ts`, not
-only against `createMcpServer` and `loadConfig`. Deleting the one wiring line in `cli.ts` otherwise
-leaves the suite green while the documented opt-out stops working; that deletion now fails.
+The opt-outs are asserted end to end through the real CLI in `tests/integration/stdio.test.ts`, not
+only against `createMcpServer` and `loadConfig`. Deleting either wiring line in `cli.ts` otherwise
+leaves the suite green while a documented opt-out stops working; both deletions now fail. That costs
+three subprocess spawns — one baseline and one per line — and no more: the `CI` carve-out is
+`loadConfig` behaviour and is asserted without a subprocess.
 
 `BROWSERMESH_AGENT_GUIDELINES` and `BROWSERMESH_SUPPORT_REQUEST` are new public configuration
 variables and join the documented list in `README.md` and the CLI reference.
