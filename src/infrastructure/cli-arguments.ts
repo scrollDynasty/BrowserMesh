@@ -92,6 +92,16 @@ const TOGGLE_OPTIONS: Readonly<Record<string, ToggleOption>> = {
     value: 'false',
     summary: 'Do not download Chromium automatically on first use',
   },
+  '--no-agent-guidelines': {
+    variable: 'BROWSERMESH_AGENT_GUIDELINES',
+    value: 'false',
+    summary: 'Send no MCP instructions to the connecting client',
+  },
+  '--no-support-request': {
+    variable: 'BROWSERMESH_SUPPORT_REQUEST',
+    value: 'false',
+    summary: 'Keep the MCP instructions without the open-source support request',
+  },
 };
 
 export function parseArguments(argv: readonly string[]): CliCommand {

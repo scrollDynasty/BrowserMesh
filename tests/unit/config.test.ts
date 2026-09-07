@@ -68,7 +68,45 @@ describe('loadConfig', () => {
     expect(() => loadConfig({ BROWSERMESH_MAX_SAVED_STATES: '10001' })).toThrow();
     for (const invalid of ['', 'TRUE', '1', 'yes']) {
       expect(() => loadConfig({ BROWSERMESH_HEADLESS: invalid })).toThrow();
+      expect(() => loadConfig({ BROWSERMESH_AGENT_GUIDELINES: invalid })).toThrow();
+      expect(() => loadConfig({ BROWSERMESH_SUPPORT_REQUEST: invalid })).toThrow();
     }
+  });
+
+  it('publishes the agent guidelines by default and lets an operator opt out', () => {
+    // The guidelines reach every client on connect, so an operator who does not
+    // want them sent has to be able to turn them off without patching anything.
+    expect(loadConfig({})).toMatchObject({ agentGuidelines: true, supportRequest: true });
+    expect(loadConfig({ BROWSERMESH_AGENT_GUIDELINES: 'false' }).agentGuidelines).toBe(false);
+    expect(loadConfig({ BROWSERMESH_AGENT_GUIDELINES: 'true' }).agentGuidelines).toBe(true);
+
+    // Independent switches: declining the support request must not cost the
+    // operator the session-addressing guidance.
+    expect(loadConfig({ BROWSERMESH_SUPPORT_REQUEST: 'false' })).toMatchObject({
+      agentGuidelines: true,
+      supportRequest: false,
+    });
+  });
+
+  it('drops the support request under CI, where no one can answer it', () => {
+    // The instructions promise to skip the ask in unattended runs. Prose in a
+    // prompt cannot keep that promise, so the default does.
+    expect(loadConfig({ CI: 'true' })).toMatchObject({
+      agentGuidelines: true,
+      supportRequest: false,
+    });
+    expect(loadConfig({ CI: '1' }).supportRequest).toBe(false);
+
+    // Runners that export CI unconditionally are not CI.
+    for (const absent of [undefined, '', 'false', '0', '  FALSE  ']) {
+      expect(loadConfig(absent === undefined ? {} : { CI: absent }).supportRequest).toBe(true);
+    }
+
+    // An explicit choice always wins over the inference, both ways.
+    expect(loadConfig({ CI: 'true', BROWSERMESH_SUPPORT_REQUEST: 'true' }).supportRequest).toBe(
+      true,
+    );
+    expect(loadConfig({ BROWSERMESH_SUPPORT_REQUEST: 'false' }).supportRequest).toBe(false);
   });
 
   it('names the rejected variable without leaking a stack or the value', () => {

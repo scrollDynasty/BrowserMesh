@@ -23,6 +23,7 @@ import {
   type ObservationSource,
   type ToolName,
 } from './contracts.js';
+import { agentGuidelines } from './agent-guidelines.js';
 import { registerPrompts } from './prompts.js';
 import { selectedTools } from './tool-profiles.js';
 import { applicationErrorResult, structuredResult } from './results.js';
@@ -294,13 +295,40 @@ export interface McpServerOptions {
    * profile, so an existing configuration keeps the tools it had.
    */
   readonly tools?: string | undefined;
+  /**
+   * Publish the MCP `instructions` string. Defaults to true; pass false to
+   * connect without sending any instructions at all.
+   *
+   * Unlike `supportRequest` below, this default is not conservative: an existing
+   * caller of `createMcpServer(runtime)` starts emitting roughly a kilobyte of
+   * prompt content on upgrade with no call-site change. That is deliberate — the
+   * content is server documentation, and the explicit-addressing rule is the one
+   * thing no per-tool description can establish — but it is a behaviour change,
+   * and `agentGuidelines: false` opts out of it.
+   */
+  readonly agentGuidelines?: boolean;
+  /**
+   * Include the open-source support request in the instructions.
+   *
+   * Defaults to **false** here, deliberately: `createMcpServer` is public API,
+   * and an embedder upgrading BrowserMesh must not start asking its users for
+   * GitHub stars because a dependency bumped. `cli.ts` opts in from
+   * configuration, so `npx browsermesh` is unaffected — and the `CI` carve-out
+   * lives in `loadConfig`, which an embedder never calls.
+   */
+  readonly supportRequest?: boolean;
 }
 
 export function createMcpServer(
   runtime: BrowserMeshRuntime,
   options: McpServerOptions = {},
 ): McpServer {
-  const server = new McpServer({ name: 'browsermesh', version: BROWSERMESH_VERSION });
+  const server = new McpServer(
+    { name: 'browsermesh', version: BROWSERMESH_VERSION },
+    options.agentGuidelines === false
+      ? {}
+      : { instructions: agentGuidelines({ supportRequest: options.supportRequest === true }) },
+  );
   const published = selectedTools(options.tools);
   const registerTool = server.registerTool.bind(server);
 

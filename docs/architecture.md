@@ -129,6 +129,15 @@ The MCP adapter calls BrowserMesh runtime/application services.
 
 It does not bypass them.
 
+The adapter also returns a static `instructions` string from `initialize`
+(`src/adapters/mcp/agent-guidelines.ts`). It is the only channel that reaches a consuming agent
+before its first tool call, since repository files such as `AGENTS.md` are not published and are read
+from the user's working directory rather than the server's. The string carries explicit-addressing
+guidance, an open-source support request, and bug-reporting guidance; it is a request with no
+enforcement and gates no operation. `BROWSERMESH_SUPPORT_REQUEST=false` drops the support request
+alone, and `loadConfig` defaults it off when the server process sees `CI` — best-effort only, since
+an MCP client usually spawns the server with a minimal environment that does not forward it; `BROWSERMESH_AGENT_GUIDELINES=false` suppresses the instructions entirely. See ADR 0021.
+
 ## Public IDs vs engine handles
 
 External callers use:

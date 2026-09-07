@@ -5,6 +5,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
+import { agentGuidelines } from '../../src/adapters/mcp/agent-guidelines.js';
 import { BROWSERMESH_VERSION } from '../../src/infrastructure/generated/version.js';
 
 describe('stdio executable', () => {
@@ -167,6 +168,37 @@ describe('stdio executable', () => {
     // before the protocol handshake begins. The default 15s covers the run but
     // not the compilation when the integration files execute in parallel.
   }, 60_000);
+
+  // The wiring from BROWSERMESH_AGENT_GUIDELINES through loadConfig into
+  // createMcpServer is only exercised end to end here. Asserting it against
+  // createMcpServer directly, or against loadConfig alone, leaves a suite that
+  // stays green when the cli.ts line is deleted and the documented opt-out
+  // silently stops working for every real user.
+  it('honours the instruction opt-outs through the real CLI', async () => {
+    // Three spawns, one per line this is here to protect: the baseline, then
+    // each of the two lines in cli.ts. Deleting either leaves its case failing
+    // and the other passing. The CI carve-out is loadConfig behaviour and is
+    // asserted in tests/unit/config.test.ts, so it does not need a subprocess.
+    //
+    // CI is pinned because this suite runs under it and the default would
+    // otherwise vary by environment. It could not actually leak in — the
+    // transport merges getDefaultEnvironment() beneath the env passed here, and
+    // CI is not among the variables that inherits — but pinning states the
+    // intent and survives a change to that list.
+    expect(await instructionsFromCli({ CI: 'false' })).toBe(
+      agentGuidelines({ supportRequest: true }),
+    );
+    expect(await instructionsFromCli({ CI: 'false', BROWSERMESH_SUPPORT_REQUEST: 'false' })).toBe(
+      agentGuidelines(),
+    );
+    expect(
+      await instructionsFromCli({ CI: 'false', BROWSERMESH_AGENT_GUIDELINES: 'false' }),
+    ).toBeUndefined();
+    // Three sequential spawns, each paying the tsx compilation the 60s budget on
+    // the test above covers once. That 60s is already a loaded-machine figure and
+    // these run while the rest of tests/integration runs in parallel, so 3x it
+    // exactly would sit on the boundary.
+  }, 240_000);
 });
 
 const createdSchema = z.object({
@@ -176,4 +208,44 @@ const createdSchema = z.object({
 function readCreated(result: unknown): z.infer<typeof createdSchema>['initialPage'] {
   const parsed = z.object({ structuredContent: z.unknown() }).parse(result);
   return createdSchema.parse(parsed.structuredContent).initialPage;
+}
+
+/**
+ * Start the CLI with the given overrides layered on the standard test
+ * environment and return the instructions the server sent on connect.
+ */
+async function instructionsFromCli(overrides: Record<string, string>): Promise<string | undefined> {
+  const dataDirectory = await mkdtemp(join(tmpdir(), 'browsermesh-instructions-'));
+  const transport = new StdioClientTransport({
+    command: process.execPath,
+    args: ['--import', 'tsx', 'src/cli.ts'],
+    cwd: process.cwd(),
+    env: {
+      BROWSERMESH_LOG_LEVEL: 'silent',
+      BROWSERMESH_PERSISTENCE: 'false',
+      BROWSERMESH_HEADLESS: 'true',
+      BROWSERMESH_AUTO_INSTALL: 'false',
+      BROWSERMESH_DATA_DIR: dataDirectory,
+      ...overrides,
+    },
+    stderr: 'pipe',
+  });
+  const client = new Client({ name: 'instructions-test', version: '1.0.0' });
+  try {
+    await client.connect(transport);
+    return client.getInstructions();
+  } finally {
+    // Nested so a rejecting close still runs the rest: a skipped transport.close
+    // leaves a spawned `node --import tsx src/cli.ts` child alive for the whole
+    // run, and a skipped rm leaves its temp directory behind.
+    try {
+      await client.close();
+    } finally {
+      try {
+        await transport.close();
+      } finally {
+        await rm(dataDirectory, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 });
+      }
+    }
+  }
 }

@@ -167,6 +167,8 @@ async function serveMcp(config: BrowserMeshConfig): Promise<void> {
   const server = createMcpServer(runtime, {
     toolSchemas: { shareRepeatedSubschemas: config.schemaReferences },
     tools: config.tools,
+    agentGuidelines: config.agentGuidelines,
+    supportRequest: config.supportRequest,
   });
   let stopping = false;
 

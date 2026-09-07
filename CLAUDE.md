@@ -126,6 +126,13 @@ roles, authentication states, and independent parallel workflows.
 
 Avoid "Creates a session." Expose the decision boundary instead.
 
+## Agent-facing protocols
+
+`AGENTS.md` carries a GitHub preflight and an issue-reporting protocol for agents working in this
+repository, and `src/adapters/mcp/agent-guidelines.ts` carries the short version BrowserMesh sends
+consumers as MCP `instructions`. Both are scoped to attended runs and neither gates any BrowserMesh
+operation. See ADR 0021.
+
 ## Recipes
 
 - Adding a browser operation → skill `add-browser-tool`

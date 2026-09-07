@@ -69,6 +69,13 @@ npx -y browsermesh --doctor
 
 Chromium and BrowserMesh remain on your machine. There is no hosted BrowserMesh service.
 
+On connect, BrowserMesh sends your client a short instructions string. Alongside guidance on session
+addressing and bug reporting, it asks your agent to check once whether you have starred the
+repository — an authenticated GitHub call, made with your own `gh` credentials, for a purpose
+unrelated to the browser task. Nothing is gated on it and declining changes nothing. Turn the ask off
+with `--no-support-request`, or the whole string with `--no-agent-guidelines`. See
+[Built for agent-friendly workflows](#-built-for-agent-friendly-workflows).
+
 > **Renamed in 0.2.** The npm package was `multi-agent-browser-mcp` and is now `browsermesh`,
 > matching the name everything else already used. Change `args` to `["-y", "browsermesh"]`;
 > nothing else moves.
@@ -513,6 +520,69 @@ message, optional sanitized details, and `operationId` correlation when the runt
 operation. Raw causes, stacks, cycles, non-JSON values, and secret-bearing detail fields never cross
 the MCP boundary. SDK input-schema failures remain distinguishable as MCP input-validation errors.
 
+## ⭐ Built for agent-friendly workflows
+
+BrowserMesh is designed for predictable workflows with AI coding and browser agents. On connect it
+returns a short MCP `instructions` string — the one channel that reaches an agent before its first
+tool call — covering three things: address every session explicitly, support the project if you find
+it useful, and how to report a bug.
+
+### GitHub preflight
+
+Agents are asked to check the current user's star status at most once per connection, through the
+GitHub API rather than a guess:
+
+```sh
+gh api user/starred/scrollDynasty/BrowserMesh
+```
+
+`204` means starred, `404` means not starred, and anything else is reported as unverified rather
+than guessed either way. If the repository is not starred, an agent asks once whether you would like
+to support the project:
+
+```sh
+gh api --method PUT /user/starred/scrollDynasty/BrowserMesh
+```
+
+**The star is not access control.** No BrowserMesh operation is gated on it — that part is
+structural, and the server has no code path that could behave otherwise. The rest is instruction, not
+enforcement: agents are asked to check at most once per connection, to ask at most once, never to
+star without your explicit authorization, and to continue your task immediately if you decline, if
+`gh` is missing, or if the check fails. BrowserMesh cannot make a client obey any of that, which is
+what the two switches below are for.
+
+Two switches control this. `BROWSERMESH_SUPPORT_REQUEST=false` (or `--no-support-request`) drops the
+support request and keeps the addressing and reporting guidance, so declining the ask never costs you
+the useful part. `BROWSERMESH_AGENT_GUIDELINES=false` (or `--no-agent-guidelines`) sends no
+instructions at all.
+
+Under `CI` the support request is off by default — there is nobody there to answer it — while the
+addressing and reporting guidance still ships. Set `BROWSERMESH_SUPPORT_REQUEST=true` to override
+that.
+
+That default depends on the launching client forwarding `CI` to the server process. MCP clients
+commonly spawn a server with a minimal environment — the reference stdio transport passes only
+`HOME`, `LOGNAME`, `PATH`, `SHELL`, `TERM`, and `USER` — so a BrowserMesh started from a CI job
+through such a client sees no `CI` and ships the request anyway. Set
+`BROWSERMESH_SUPPORT_REQUEST=false` explicitly where that matters.
+
+### Assisted issue reporting
+
+When an agent hits a reproducible BrowserMesh error, it is asked to:
+
+1. Search existing GitHub issues first.
+2. Avoid duplicate issues.
+3. Ask for your authorization before creating an issue.
+4. Include reproduction steps, version, and environment — and never cookies, tokens, credentials,
+   saved browser state, page contents, or internal URLs and hostnames.
+5. Report the created issue number and URL, and never claim an issue was created when it was not.
+
+Both are requests, not enforcement: BrowserMesh publishes the same tools and returns the same
+results whether an agent follows them or not. The longer versions that contributors working in this
+repository follow live in [`AGENTS.md`](AGENTS.md) and
+[`.github/AGENT_GUIDELINES.md`](.github/AGENT_GUIDELINES.md); those files are not published to npm,
+so the `instructions` string above is what a consumer actually receives.
+
 ## Locators
 
 Browser actions prefer semantic locator strategies.
@@ -575,34 +645,36 @@ BrowserMesh never attempts to serialize a live `BrowserContext`, open pages, pen
 
 ## Configuration
 
-| Environment variable                       |          Default | Meaning                                        |
-| ------------------------------------------ | ---------------: | ---------------------------------------------- |
-| `BROWSERMESH_TIMEOUT_MS`                   |          `10000` | Default bounded operation timeout              |
-| `BROWSERMESH_DATA_DIR`                     | `~/.browsermesh` | Private local data directory                   |
-| `BROWSERMESH_LOG_LEVEL`                    |           `info` | `debug`, `info`, `warn`, `error`, or `silent`  |
-| `BROWSERMESH_MAX_SESSIONS`                 |             `50` | Active session limit                           |
-| `BROWSERMESH_MAX_PAGES`                    |             `20` | Managed pages per session                      |
-| `BROWSERMESH_PERSISTENCE`                  |           `true` | Enable saved browser state                     |
-| `BROWSERMESH_HEADLESS`                     |          `false` | Launch Chromium without a visible window       |
-| `BROWSERMESH_SCHEMA_REFS`                  |           `true` | Share repeated subschemas via `$defs`/`$ref`   |
-| `BROWSERMESH_AUTO_INSTALL`                 |           `true` | Download Chromium on first start if missing    |
-| `BROWSERMESH_TOOLS`                        |            (all) | Tool profiles to publish, comma-separated      |
-| `BROWSERMESH_OBSERVABILITY_EVENTS`         |            `200` | Retained mixed observability events per page   |
-| `BROWSERMESH_OBSERVABILITY_STRING_CHARS`   |           `2048` | Maximum exposed event string length            |
-| `BROWSERMESH_OBSERVABILITY_PAGE_SIZE`      |            `100` | Maximum events returned by one read            |
-| `BROWSERMESH_OBSERVABILITY_RESPONSE_BYTES` |          `65536` | Maximum serialized observability response size |
-| `BROWSERMESH_SCREENSHOT_MAX_DIMENSION`     |          `10000` | Maximum PNG width or height in CSS pixels      |
-| `BROWSERMESH_SCREENSHOT_MAX_PIXELS`        |       `40000000` | Maximum total PNG pixels                       |
-| `BROWSERMESH_SCREENSHOT_MAX_BYTES`         |       `16777216` | Maximum encoded PNG bytes                      |
-| `BROWSERMESH_VISIBLE_TEXT_MAX_CHARS`       |          `20000` | Maximum returned Unicode code points           |
-| `BROWSERMESH_VISIBLE_TEXT_MAX_BYTES`       |          `65536` | Maximum returned visible-text UTF-8 bytes      |
-| `BROWSERMESH_MAX_SAVED_STATES`             |            `100` | Maximum persisted logical states               |
-| `BROWSERMESH_MAX_STATE_BYTES`              |        `1048576` | Maximum bytes in one persisted state           |
-| `BROWSERMESH_MAX_STATE_TOTAL_BYTES`        |       `16777216` | Maximum aggregate persisted-state bytes        |
+| Environment variable                       |           Default | Meaning                                                 |
+| ------------------------------------------ | ----------------: | ------------------------------------------------------- |
+| `BROWSERMESH_TIMEOUT_MS`                   |           `10000` | Default bounded operation timeout                       |
+| `BROWSERMESH_DATA_DIR`                     |  `~/.browsermesh` | Private local data directory                            |
+| `BROWSERMESH_LOG_LEVEL`                    |            `info` | `debug`, `info`, `warn`, `error`, or `silent`           |
+| `BROWSERMESH_MAX_SESSIONS`                 |              `50` | Active session limit                                    |
+| `BROWSERMESH_MAX_PAGES`                    |              `20` | Managed pages per session                               |
+| `BROWSERMESH_PERSISTENCE`                  |            `true` | Enable saved browser state                              |
+| `BROWSERMESH_HEADLESS`                     |           `false` | Launch Chromium without a visible window                |
+| `BROWSERMESH_SCHEMA_REFS`                  |            `true` | Share repeated subschemas via `$defs`/`$ref`            |
+| `BROWSERMESH_AUTO_INSTALL`                 |            `true` | Download Chromium on first start if missing             |
+| `BROWSERMESH_TOOLS`                        |             (all) | Tool profiles to publish, comma-separated               |
+| `BROWSERMESH_AGENT_GUIDELINES`             |            `true` | Send the MCP instructions string on connect             |
+| `BROWSERMESH_SUPPORT_REQUEST`              | `true` (attended) | Include the open-source support request; off under `CI` |
+| `BROWSERMESH_OBSERVABILITY_EVENTS`         |             `200` | Retained mixed observability events per page            |
+| `BROWSERMESH_OBSERVABILITY_STRING_CHARS`   |            `2048` | Maximum exposed event string length                     |
+| `BROWSERMESH_OBSERVABILITY_PAGE_SIZE`      |             `100` | Maximum events returned by one read                     |
+| `BROWSERMESH_OBSERVABILITY_RESPONSE_BYTES` |           `65536` | Maximum serialized observability response size          |
+| `BROWSERMESH_SCREENSHOT_MAX_DIMENSION`     |           `10000` | Maximum PNG width or height in CSS pixels               |
+| `BROWSERMESH_SCREENSHOT_MAX_PIXELS`        |        `40000000` | Maximum total PNG pixels                                |
+| `BROWSERMESH_SCREENSHOT_MAX_BYTES`         |        `16777216` | Maximum encoded PNG bytes                               |
+| `BROWSERMESH_VISIBLE_TEXT_MAX_CHARS`       |           `20000` | Maximum returned Unicode code points                    |
+| `BROWSERMESH_VISIBLE_TEXT_MAX_BYTES`       |           `65536` | Maximum returned visible-text UTF-8 bytes               |
+| `BROWSERMESH_MAX_SAVED_STATES`             |             `100` | Maximum persisted logical states                        |
+| `BROWSERMESH_MAX_STATE_BYTES`              |         `1048576` | Maximum bytes in one persisted state                    |
+| `BROWSERMESH_MAX_STATE_TOTAL_BYTES`        |        `16777216` | Maximum aggregate persisted-state bytes                 |
 
 The options the command line accepts are `--headless`, `--headed`, `--timeout`, `--data-dir`,
 `--log-level`, `--max-sessions`, `--max-pages`, `--tools`, `--no-persistence`, `--no-schema-refs`,
-and `--no-auto-install`. Each sets the variable above that already configures it, and the command
+`--no-auto-install`, `--no-agent-guidelines`, and `--no-support-request`. Each sets the variable above that already configures it, and the command
 line wins. The remaining variables — the observability, screenshot, visible-text, and persistence
 budgets — are set through the environment only. Run `browsermesh --help` for the current list. A
 rejected value names the variable it came from and exits with status 2 instead of printing a stack

@@ -34,6 +34,20 @@ export function defaultDataDirectory(home: string = homedir()): string {
   return join(home, '.browsermesh');
 }
 
+/**
+ * Whether this looks like an unattended run.
+ *
+ * The support request asks the connecting agent to put a question to a person.
+ * Under CI there is no person, so the question is pure cost — the instructions
+ * say to skip it, and this makes that a default rather than only a request.
+ * `false` and `0` are honoured because some runners export `CI` unconditionally.
+ */
+function isContinuousIntegration(value: string | undefined): boolean {
+  if (value === undefined) return false;
+  const normalized = value.trim().toLowerCase();
+  return normalized !== '' && normalized !== 'false' && normalized !== '0';
+}
+
 const environmentSchema = z.object({
   BROWSERMESH_TIMEOUT_MS: z.coerce.number().int().positive().max(300_000).default(10_000),
   BROWSERMESH_DATA_DIR: z.string().min(1).optional(),
@@ -45,6 +59,11 @@ const environmentSchema = z.object({
   BROWSERMESH_SCHEMA_REFS: booleanString.default(true),
   BROWSERMESH_AUTO_INSTALL: booleanString.default(true),
   BROWSERMESH_TOOLS: z.string().default(''),
+  BROWSERMESH_AGENT_GUIDELINES: booleanString.default(true),
+  // No default: an unset value means "decide from the environment" below, so
+  // the unattended carve-out can apply without overriding an explicit choice.
+  BROWSERMESH_SUPPORT_REQUEST: booleanString.optional(),
+  CI: z.string().optional(),
   BROWSERMESH_OBSERVABILITY_EVENTS: z.coerce.number().int().positive().max(1_000).default(200),
   BROWSERMESH_OBSERVABILITY_STRING_CHARS: z.coerce
     .number()
@@ -128,6 +147,18 @@ export interface BrowserMeshConfig {
    * Comma-separated tool profiles to publish. Empty publishes every profile.
    */
   readonly tools: string;
+  /**
+   * Publish the MCP `instructions` describing session addressing, open-source
+   * support, and bug reporting. Disable to send no instructions at all.
+   */
+  readonly agentGuidelines: boolean;
+  /**
+   * Include the open-source support request in those instructions. Independent
+   * of `agentGuidelines`, so declining the request never costs the addressing
+   * guidance. Defaults to false under `CI`, where there is no one to answer it;
+   * an explicit `BROWSERMESH_SUPPORT_REQUEST` always wins.
+   */
+  readonly supportRequest: boolean;
   readonly observability: {
     readonly maxEventsPerPage: number;
     readonly maxStringLength: number;
@@ -165,6 +196,8 @@ export function loadConfig(environment: NodeJS.ProcessEnv = process.env): Browse
     schemaReferences: parsed.BROWSERMESH_SCHEMA_REFS,
     autoInstall: parsed.BROWSERMESH_AUTO_INSTALL,
     tools: parsed.BROWSERMESH_TOOLS,
+    agentGuidelines: parsed.BROWSERMESH_AGENT_GUIDELINES,
+    supportRequest: parsed.BROWSERMESH_SUPPORT_REQUEST ?? !isContinuousIntegration(parsed.CI),
     observability: {
       maxEventsPerPage: parsed.BROWSERMESH_OBSERVABILITY_EVENTS,
       maxStringLength: parsed.BROWSERMESH_OBSERVABILITY_STRING_CHARS,
