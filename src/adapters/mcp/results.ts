@@ -77,8 +77,12 @@ const NEXT_STEPS: Readonly<Record<BrowserMeshErrorCode, string>> = {
     'Call browser_runtime_info to check the launch state. If the details name a remediation, run it; otherwise retry the operation.',
   BROWSER_DISCONNECTED:
     'Chromium is gone and live sessions cannot be recovered. Create new sessions with browser_session_create; restore authentication from a saved stateId.',
+  // Deliberately says nothing about where to report. Bug reporting reaches an
+  // agent through the MCP instructions, which an operator can drop with
+  // BROWSERMESH_AGENT_GUIDELINES=false (ADR 0021); repeating the solicitation
+  // on the error channel would put it back past that opt-out.
   INTERNAL_ERROR:
-    'Retry once. If it recurs, report it with the operationId at https://github.com/scrollDynasty/BrowserMesh/issues after asking the user.',
+    'Retry once. If it recurs, quote the operationId when reporting it; the operation left nothing behind.',
   LIMIT_EXCEEDED:
     'Ask for less: lower maxChars, maxBytes, maxRefs, or limit, scope a snapshot to one container, or close sessions you no longer need. browser_runtime_info reports the effective limits.',
   RUNTIME_SHUTTING_DOWN:

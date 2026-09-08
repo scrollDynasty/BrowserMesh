@@ -52,7 +52,7 @@ around one thing those servers do not do, and it charges for it.
 | Drive Firefox or WebKit                                                   | Playwright MCP — BrowserMesh is Chromium-only today                            |
 
 The honest trade-off is discovery cost. BrowserMesh publishes 35 tools with full input _and_ output
-schemas; measured on one machine on one day, its `tools/list` is roughly 87 KB against 25 KB for
+schemas; measured on one machine on one day, its `tools/list` is roughly 94 KB against 25 KB for
 `chrome-devtools-mcp` and 18 KB for `@playwright/mcp`, both of which publish no output schemas. If
 your client is short on context and your workflow is one browser and one user, that is a real
 argument for a smaller server. Narrow the surface with `--tools core` when you do want BrowserMesh

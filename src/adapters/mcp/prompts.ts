@@ -134,15 +134,18 @@ export function registerPrompts(server: McpServer, runtime: BrowserMeshRuntime):
           .max(2_048)
           .refine(isAbsoluteHttpUrl, 'Must be an absolute http(s) URL')
           .describe('Absolute HTTP(S) URL to open in both sessions'),
+        // Bounded at the session-name limit, not at a prose limit: the rendered
+        // prompt tells the agent to pass these to browser_session_create
+        // verbatim, and a longer label would be rejected with LIMIT_EXCEEDED.
         left: z
           .string()
           .min(1)
-          .max(200)
+          .max(128)
           .describe('What the first session represents, for example "signed-out visitor"'),
         right: z
           .string()
           .min(1)
-          .max(200)
+          .max(128)
           .describe('What the second session represents, for example "subscriber"'),
       },
     },
