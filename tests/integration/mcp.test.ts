@@ -10,7 +10,7 @@ import {
 import { applicationErrorResult } from '../../src/adapters/mcp/results.js';
 import { JSON_SCHEMA_2020_12_DIALECT } from '../../src/adapters/mcp/schema-dialect.js';
 import { createMcpServer } from '../../src/adapters/mcp/server.js';
-import { BrowserMeshError } from '../../src/domain/errors.js';
+import { BrowserMeshError, errorCodes } from '../../src/domain/errors.js';
 import { DEFAULT_RESOURCE_LIMITS } from '../../src/domain/resource-limits.js';
 import { BROWSERMESH_VERSION } from '../../src/infrastructure/generated/version.js';
 import { FakeEngine, testRuntime } from '../support/fakes.js';
@@ -660,6 +660,35 @@ describe('MCP adapter', () => {
     }
   });
 
+  it('tells the caller what to do next for every error code it can return', () => {
+    // The fixed public message says only what went wrong. Without this field
+    // the remediation lives solely in the documentation site, which a client
+    // choosing its next tool call never reads (ADR 0022).
+    for (const code of errorCodes) {
+      const parsed = publicErrorSchema.parse(
+        JSON.parse(
+          readText(requireCallResult(applicationErrorResult(new BrowserMeshError(code, 'raw')))),
+        ),
+      );
+
+      expect(parsed.error.code, code).toBe(code);
+      expect(parsed.error.nextStep, code).not.toBe(parsed.error.message);
+    }
+
+    // Every value is a compile-time constant, so no failure can turn the field
+    // into a channel for a locator, a URL, or a raw cause.
+    const leaky = requireCallResult(
+      applicationErrorResult(
+        new BrowserMeshError('LOCATOR_AMBIGUOUS', 'token=do-not-expose', {
+          details: { locator: { strategy: 'css', value: 'do-not-expose' } },
+        }),
+      ),
+    );
+    const nextStep = publicErrorSchema.parse(JSON.parse(readText(leaky))).error.nextStep;
+    expect(nextStep).not.toContain('do-not-expose');
+    expect(nextStep).toContain('browser_snapshot');
+  });
+
   it('bounds application errors and removes causes, cycles, bigint, and secret fields', () => {
     const cyclic: Record<string, unknown> = {
       safe: 'x'.repeat(2_000),
@@ -875,6 +904,7 @@ const publicErrorSchema = z.object({
   error: z.object({
     code: z.string(),
     message: z.string().max(512),
+    nextStep: z.string().min(1).max(512),
     details: z.record(z.string(), z.unknown()).optional(),
     operationId: z.string().optional(),
   }),

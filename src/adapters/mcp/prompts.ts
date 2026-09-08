@@ -121,6 +121,100 @@ export function registerPrompts(server: McpServer, runtime: BrowserMeshRuntime):
     }),
   );
 
+  server.registerPrompt(
+    'compare_page_states',
+    {
+      title: 'Compare the same page in two states',
+      description:
+        'Load one URL in two isolated sessions — different accounts, saved states, locales, or viewports — and report only what differs between them.',
+      argsSchema: {
+        url: z
+          .string()
+          .min(1)
+          .max(2_048)
+          .refine(isAbsoluteHttpUrl, 'Must be an absolute http(s) URL')
+          .describe('Absolute HTTP(S) URL to open in both sessions'),
+        left: z
+          .string()
+          .min(1)
+          .max(200)
+          .describe('What the first session represents, for example "signed-out visitor"'),
+        right: z
+          .string()
+          .min(1)
+          .max(200)
+          .describe('What the second session represents, for example "subscriber"'),
+      },
+    },
+    ({ url, left, right }) => ({
+      messages: [
+        {
+          role: 'user',
+          content: {
+            type: 'text',
+            text: [
+              `Compare ${url} as "${left}" and as "${right}".`,
+              '',
+              'Use BrowserMesh as follows:',
+              `- Call browser_session_create twice, naming one session "${left}" and the other "${right}". Two sessions is what makes the comparison meaningful: one session would carry the first state into the second reading.`,
+              '- Apply whatever distinguishes them at creation time — contextSettings for viewport, locale, timezone, or colour scheme; stateId to restore saved authentication. Anything applied later is a third state, not one of the two.',
+              '- Navigate both sessions to the same URL, then capture browser_snapshot for each with the same arguments. Comparing a bounded snapshot against an unbounded one reports the bounds, not the page.',
+              '- Diff the two snapshots yourself. Report what differs, and say explicitly when something you expected to differ did not.',
+              '- Where a difference is visual rather than structural, take browser_screenshot of the same element in both sessions.',
+              '- Close both sessions with browser_session_close when finished.',
+              '',
+              'Report the differences only. Do not restate what both sessions showed identically.',
+            ].join('\n'),
+          },
+        },
+      ],
+    }),
+  );
+
+  server.registerPrompt(
+    'form_validation',
+    {
+      title: 'Drive a form to its validation errors',
+      description:
+        'Submit a form with deliberately invalid input and collect the validation errors it produces, in the page and in the console.',
+      argsSchema: {
+        url: z
+          .string()
+          .min(1)
+          .max(2_048)
+          .refine(isAbsoluteHttpUrl, 'Must be an absolute http(s) URL')
+          .describe('Absolute HTTP(S) URL of the page holding the form'),
+        form: z.string().max(500).optional().describe('Which form, if the page has more than one'),
+      },
+    },
+    ({ url, form }) => ({
+      messages: [
+        {
+          role: 'user',
+          content: {
+            type: 'text',
+            text: [
+              `Exercise the validation of the form at ${url}.`,
+              ...(form === undefined || form.length === 0 ? [] : [`Form: ${form}`]),
+              '',
+              'Use BrowserMesh as follows:',
+              '- Create one session with browser_session_create so the form starts from clean cookies and storage.',
+              '- Navigate, then capture browser_snapshot with interactiveOnly=true to enumerate the fields and the submit control before touching anything.',
+              '- Fill fields with browser_fill using semantic locators. Never submit real credentials or personal data; use obviously synthetic values.',
+              '- Submit with browser_action_and_wait when submission navigates or fires a request, so the waiter is armed before the click. Use browser_click only when submission stays on the page.',
+              '- Read the resulting messages with browser_visible_text scoped to the error container, not the whole page.',
+              "- Check browser_observe with source 'console' and source 'pageError', includeText=true: client-side validation often reports there and nowhere visible.",
+              '- Repeat for each rule worth exercising: empty required fields, malformed values, and values that are individually valid but rejected together.',
+              '- Close the session with browser_session_close when finished.',
+              '',
+              'Report each input you tried, the error it produced, and any input that was accepted when you expected it to be rejected.',
+            ].join('\n'),
+          },
+        },
+      ],
+    }),
+  );
+
   server.registerResource(
     'sessions',
     SESSIONS_RESOURCE,

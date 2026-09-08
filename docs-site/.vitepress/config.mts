@@ -78,6 +78,7 @@ export default defineConfig({
             { text: 'CLI', link: '/reference/cli' },
             { text: 'Locators and targets', link: '/reference/locators' },
             { text: 'Errors', link: '/reference/errors' },
+            { text: 'Limits', link: '/reference/limits' },
             { text: 'Returned data', link: '/reference/results' },
           ],
         },
