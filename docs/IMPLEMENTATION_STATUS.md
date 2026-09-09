@@ -9,26 +9,28 @@ was sound but expensive and awkward to adopt. Discovery cost 134,839 bytes — 7
 Playwright MCP server — `--help` exited with status 2, and a first run failed on a missing browser.
 The following are complete.
 
-| Change                                                        | Result                                                      | Contract |
-| ------------------------------------------------------------- | ----------------------------------------------------------- | -------- |
-| Share repeated subschemas through `$defs`/`$ref`              | Argument schemas −37.4%, result schemas −12.7%              | ADR 0019 |
-| One `browser_observe` replacing four list tools               | Four copies of one contract removed                         | ADR 0020 |
-| Results stop restating their requests                         | `browser_action_and_wait` 4,828 → 1,565 bytes               | ADR 0020 |
-| One spelling of the composite action target                   | `locator` removed from domain, runtime, engine, and schema  | ADR 0020 |
-| Tool profiles via `--tools`                                   | `core` publishes 31 of 35 tools                             | ADR 0020 |
-| Real argument parser: `--help`, `--version`, per-option flags | Help and version exit `0`; every variable has an option     | —        |
-| Chromium downloaded on first start                            | `--no-auto-install` keeps the previous behaviour            | —        |
-| Readable configuration failures                               | Names the variable; no stack, path, or value                | —        |
-| Saved state under the home directory                          | No longer scattered by the client's working directory       | —        |
-| MCP prompts and a session resource                            | `parallel_roles`, `diagnose_page`, `browsermesh://sessions` | —        |
-| npm package renamed to `browsermesh`                          | Matches the name docs and the registry already used         | —        |
+| Change                                                        | Result                                                                                                | Contract |
+| ------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------- | -------- |
+| Share repeated subschemas through `$defs`/`$ref`              | Argument schemas −37.4%, result schemas −12.7%                                                        | ADR 0019 |
+| One `browser_observe` replacing four list tools               | Four copies of one contract removed                                                                   | ADR 0020 |
+| Results stop restating their requests                         | `browser_action_and_wait` 4,828 → 1,565 bytes                                                         | ADR 0020 |
+| One spelling of the composite action target                   | `locator` removed from domain, runtime, engine, and schema                                            | ADR 0020 |
+| Tool profiles via `--tools`                                   | `core` publishes 31 of 35 tools                                                                       | ADR 0020 |
+| Real argument parser: `--help`, `--version`, per-option flags | Help and version exit `0`; every variable has an option                                               | —        |
+| Chromium downloaded on first start                            | `--no-auto-install` keeps the previous behaviour                                                      | —        |
+| Readable configuration failures                               | Names the variable; no stack, path, or value                                                          | —        |
+| Saved state under the home directory                          | No longer scattered by the client's working directory                                                 | —        |
+| MCP prompts and a session resource                            | `parallel_roles`, `diagnose_page`, `compare_page_states`, `form_validation`, `browsermesh://sessions` | —        |
+| npm package renamed to `browsermesh`                          | Matches the name docs and the registry already used                                                   | —        |
 
-`tools/list` is 87,367 bytes across 35 tools, or 79,479 with `--tools=core`: 35.2% and 41.1% below
-the starting point. The remaining floor is the semantic locator union that roughly twenty tools
-embed, which is the feature rather than waste; ADR 0020 records why collapsing the interaction tools
-to reach Playwright MCP's number is rejected.
+`tools/list` is 93,775 bytes across 35 tools, or 85,910 with `--tools=core`: 30.5% and 36.3% below
+the starting point. ADR 0020 brought it to 87,367 and 79,479; the union argument descriptions added
+for ADR 0022 cost 6,516 characters on top, which is the increase ADR 0024's proposed budget exists
+to make a deliberate choice rather than a side effect. The remaining floor is the semantic locator
+union that roughly twenty tools embed, which is the feature rather than waste; ADR 0020 records why
+collapsing the interaction tools to reach Playwright MCP's number is rejected.
 
-Verification: 156 unit, 72 integration, 1 e2e, and 2 stress tests pass, with typecheck, lint, and
+Verification: 179 unit, 82 integration, 1 e2e, and 2 stress tests pass, with typecheck, lint, and
 format clean.
 
 Released as `browsermesh@0.2.0`. Every version of `multi-agent-browser-mcp` is deprecated in favour

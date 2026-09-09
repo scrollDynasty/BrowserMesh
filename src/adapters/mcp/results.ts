@@ -61,7 +61,7 @@ const NEXT_STEPS: Readonly<Record<BrowserMeshErrorCode, string>> = {
   // the fixed message already cannot name the field, and a next step that
   // guessed wrong would point the agent at an argument the call never sent.
   INVALID_ARGUMENT:
-    'Re-read the tool inputSchema and check the per-argument bounds. Some bounds are enforced by the runtime rather than the schema, so a value the schema accepts can still be rejected; browser_runtime_info reports the configured ones.',
+    'Re-read the tool inputSchema and check the per-argument bounds. Some are enforced by the runtime rather than the schema, so a value the schema accepts can still be rejected. browser_runtime_info reports the session, screenshot, visible-text, and persistence limits, but not the snapshot or observability bounds.',
   OPERATION_TIMEOUT:
     'A locator that matches nothing also times out. Confirm the element with browser_snapshot before raising timeoutMs, and try exact:false on a role locator whose name may not match the accessible name character for character.',
   // An in-flight browser action is not aborted: SerialQueue checks the signal
@@ -92,8 +92,12 @@ const NEXT_STEPS: Readonly<Record<BrowserMeshErrorCode, string>> = {
   // same way as OPERATION_CANCELLED.
   INTERNAL_ERROR:
     'Retry once, unless the action may have already taken effect — confirm the page state first. If it recurs, quote the operationId when reporting it.',
+  // browser_runtime_info returns ResourceLimits plus the timeout and the
+  // session and page counts. The snapshot bounds are fixed in the build and
+  // browser_observe's limit is checked against configuration the tool does not
+  // echo, so it must not be offered as the way to read back either one.
   LIMIT_EXCEEDED:
-    'Ask for less: lower maxChars, maxBytes, maxRefs, or limit, scope a snapshot to one container, or close sessions you no longer need. browser_runtime_info reports the effective limits.',
+    'Ask for less: lower maxChars, maxBytes, maxRefs, or limit, scope a snapshot to one container, or close sessions you no longer need. browser_runtime_info reports the session, screenshot, visible-text, and persistence limits, but not the snapshot or observability bounds.',
   RUNTIME_SHUTTING_DOWN:
     'The server is shutting down and accepts no further browser work. Reconnect before retrying.',
   SAVED_STATE_NOT_FOUND:

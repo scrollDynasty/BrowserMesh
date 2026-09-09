@@ -89,7 +89,18 @@ occasionally and actively misleading the rest of the time — on `browser_observ
 most of all, where a `limit` the schema accepts and the runtime rejects is the
 case the documentation singles out and the call carries no locator at all. The
 next step names the shape of the mistake instead: the schema is not the only
-bound, and `browser_runtime_info` reports the configured ones.
+bound.
+
+**It does not send the client after a limit the runtime will not return.**
+`browser_runtime_info` returns `ResourceLimits` — session labels, screenshot,
+visible text, persistence — plus the default timeout and the session and page
+counts. The snapshot `maxChars`, `maxBytes` and `maxRefs` bounds are fixed in
+the build, and `browser_observe`'s `limit` is checked against
+`observability.maxPageSize`, which the tool does not echo. `LIMIT_EXCEEDED` and
+`INVALID_ARGUMENT` name what the tool does report and say plainly that the
+snapshot and observability bounds are not in it, so an agent that follows the
+next step does not spend a call to learn nothing. `docs-site/reference/limits.md`
+is the reference for the rest.
 
 ## Consequences
 

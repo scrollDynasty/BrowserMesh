@@ -664,6 +664,7 @@ describe('MCP adapter', () => {
     // The fixed public message says only what went wrong. Without this field
     // the remediation lives solely in the documentation site, which a client
     // choosing its next tool call never reads (ADR 0022).
+    const steps: string[] = [];
     for (const code of errorCodes) {
       const parsed = publicErrorSchema.parse(
         JSON.parse(
@@ -673,7 +674,14 @@ describe('MCP adapter', () => {
 
       expect(parsed.error.code, code).toBe(code);
       expect(parsed.error.nextStep, code).not.toBe(parsed.error.message);
+      steps.push(parsed.error.nextStep);
     }
+
+    // Distinct per code, not merely distinct from its own message: a table
+    // where every code mapped to one generic string would satisfy the loop
+    // above, and a remediation that silently became a copy of another code's is
+    // the regression this field exists to prevent.
+    expect(new Set(steps).size).toBe(errorCodes.length);
 
     // Every value is a compile-time constant, so no failure can turn the field
     // into a channel for a locator, a URL, or a raw cause.
