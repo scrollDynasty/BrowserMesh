@@ -689,6 +689,22 @@ describe('MCP adapter', () => {
     expect(nextStep).toContain('browser_snapshot');
   });
 
+  it('does not promise a rollback the runtime cannot perform', () => {
+    // A cancelled in-flight action is not aborted, and an unexpected throw can
+    // arrive after the action completed, so neither code may tell the caller to
+    // reissue unconditionally (ADR 0022).
+    for (const code of ['OPERATION_CANCELLED', 'INTERNAL_ERROR'] as const) {
+      const nextStep = publicErrorSchema.parse(
+        JSON.parse(
+          readText(requireCallResult(applicationErrorResult(new BrowserMeshError(code, 'raw')))),
+        ),
+      ).error.nextStep;
+
+      expect(nextStep, code).toContain('already taken effect');
+      expect(nextStep, code).toContain('confirm the page state');
+    }
+  });
+
   it('bounds application errors and removes causes, cycles, bigint, and secret fields', () => {
     const cyclic: Record<string, unknown> = {
       safe: 'x'.repeat(2_000),

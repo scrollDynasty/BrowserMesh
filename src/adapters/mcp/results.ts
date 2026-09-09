@@ -57,12 +57,18 @@ const NEXT_STEPS: Readonly<Record<BrowserMeshErrorCode, string>> = {
     'This session and its pages are gone. Create a replacement with browser_session_create; pass stateId to restore saved authentication.',
   PAGE_NOT_FOUND:
     'Call browser_page_list for this sessionId to get its live pageIds. A pageId belonging to another session is always rejected.',
+  // Raised from ~30 sites across the runtime, so this cannot assert one cause:
+  // the fixed message already cannot name the field, and a next step that
+  // guessed wrong would point the agent at an argument the call never sent.
   INVALID_ARGUMENT:
-    'Re-read the tool inputSchema and correct the argument. Element actions take exactly one of locator or ref, never both and never neither.',
+    'Re-read the tool inputSchema and check the per-argument bounds. Some bounds are enforced by the runtime rather than the schema, so a value the schema accepts can still be rejected; browser_runtime_info reports the configured ones.',
   OPERATION_TIMEOUT:
     'A locator that matches nothing also times out. Confirm the element with browser_snapshot before raising timeoutMs, and try exact:false on a role locator whose name may not match the accessible name character for character.',
+  // An in-flight browser action is not aborted: SerialQueue checks the signal
+  // again only after the task resolves, so a cancelled click can already have
+  // landed. Never tell the caller the operation was discarded.
   OPERATION_CANCELLED:
-    'The client cancelled this call. Nothing was retained; reissue it if the work is still wanted.',
+    'The client cancelled this call. Reissue it if the work is still wanted, unless the action may have already taken effect — confirm the page state first.',
   NAVIGATION_FAILED:
     'Check that the URL is absolute http(s) and reachable. browser_observe with source "requestFailed" reports the transport-level failure.',
   ELEMENT_NOT_FOUND:
@@ -81,8 +87,11 @@ const NEXT_STEPS: Readonly<Record<BrowserMeshErrorCode, string>> = {
   // agent through the MCP instructions, which an operator can drop with
   // BROWSERMESH_AGENT_GUIDELINES=false (ADR 0021); repeating the solicitation
   // on the error channel would put it back past that opt-out.
+  // asBrowserMeshError maps any unexpected throw here, including one raised
+  // after the browser action completed, so the retry has to be qualified the
+  // same way as OPERATION_CANCELLED.
   INTERNAL_ERROR:
-    'Retry once. If it recurs, quote the operationId when reporting it; the operation left nothing behind.',
+    'Retry once, unless the action may have already taken effect — confirm the page state first. If it recurs, quote the operationId when reporting it.',
   LIMIT_EXCEEDED:
     'Ask for less: lower maxChars, maxBytes, maxRefs, or limit, scope a snapshot to one container, or close sessions you no longer need. browser_runtime_info reports the effective limits.',
   RUNTIME_SHUTTING_DOWN:

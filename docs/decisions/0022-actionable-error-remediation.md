@@ -70,6 +70,27 @@ have: a locator matching nothing is indistinguishable, at the wire, from a slow
 page. Until ADR 0025 is decided the next step has to say so, so the client
 verifies with a snapshot instead of raising the timeout.
 
+**It never promises the operation was discarded.** `SerialQueue.run` re-checks
+the abort signal only after the task resolves, because an in-flight browser
+action cannot be aborted — a `browser_click` cancelled mid-flight can already
+have landed, and `asBrowserMeshError` maps any unexpected throw to
+`INTERNAL_ERROR`, including one raised after the action completed. So the next
+steps for `OPERATION_CANCELLED` and `INTERNAL_ERROR` qualify the retry rather
+than asserting a rollback the runtime cannot perform. Telling an agent to
+reissue a cancelled call unconditionally would contradict the documented
+recovery rule — do not retry destructive actions blind — on the channel the
+agent actually reads.
+
+**It does not guess which argument was wrong.** `INVALID_ARGUMENT` is raised
+from around thirty sites: absolute-URL checks, `timeoutMs`, URL matcher length
+and the wildcard cap, wait text, `key`, `promptText`, response method and
+status, and `browser_observe`'s `limit`. Naming one of them would be right
+occasionally and actively misleading the rest of the time — on `browser_observe`
+most of all, where a `limit` the schema accepts and the runtime rejects is the
+case the documentation singles out and the call carries no locator at all. The
+next step names the shape of the mistake instead: the schema is not the only
+bound, and `browser_runtime_info` reports the configured ones.
+
 ## Consequences
 
 Each error result grows by roughly 100 to 200 bytes. Errors are a small fraction
@@ -96,8 +117,8 @@ hostile locator in its details cannot get any of that content into the field.
 most wants specifics — which argument, and why. Raw messages are constructed
 across the runtime and the Playwright adapter from values that include locators
 and URLs, and auditing them individually is a standing obligation rather than a
-decision. Rejected in favour of a fixed string that names the invariant most
-often violated (exactly one of `locator` or `ref`).
+decision. Rejected in favour of a fixed string that describes where the
+remaining bounds live rather than naming a field it cannot know.
 
 **Put the remediation in the tool descriptions.** Discovery is paid by every
 client on every connect, whether or not the failure ever happens; error results
