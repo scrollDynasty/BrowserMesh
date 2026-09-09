@@ -392,10 +392,11 @@ export class PlaywrightBrowserEngine implements BrowserEnginePort {
   async back(handle: BrowserPageHandle, control: OperationControl): Promise<void> {
     throwIfCancelled(control.signal);
     await this.wrapAction(
-      async () =>
-        this.getPage(handle)
-          .goBack(operationOptions(control))
-          .then(() => undefined),
+      async () => {
+        const page = this.getPage(handle);
+        await this.settleBeforeHistoryMove(page, control);
+        await page.goBack(operationOptions(control));
+      },
       'NAVIGATION_FAILED',
       'Back navigation failed',
       control.timeoutMs,
@@ -405,10 +406,11 @@ export class PlaywrightBrowserEngine implements BrowserEnginePort {
   async forward(handle: BrowserPageHandle, control: OperationControl): Promise<void> {
     throwIfCancelled(control.signal);
     await this.wrapAction(
-      async () =>
-        this.getPage(handle)
-          .goForward(operationOptions(control))
-          .then(() => undefined),
+      async () => {
+        const page = this.getPage(handle);
+        await this.settleBeforeHistoryMove(page, control);
+        await page.goForward(operationOptions(control));
+      },
       'NAVIGATION_FAILED',
       'Forward navigation failed',
       control.timeoutMs,
@@ -1016,6 +1018,25 @@ export class PlaywrightBrowserEngine implements BrowserEnginePort {
     if (context === undefined)
       throw new BrowserMeshError('BROWSER_ERROR', 'Browser context is closed');
     return context;
+  }
+
+  /**
+   * Let the document the page is already on finish arriving before a history
+   * move reads its navigation history.
+   *
+   * `click` awaits the click and nothing else, so `browser_click` followed by
+   * `browser_back` is an ordinary sequence for a caller — and the two run
+   * back to back on the session queue. Chromium answers
+   * `Page.getNavigationHistory` with "Not attached to an active page" while
+   * the clicked navigation is still becoming the active document, which
+   * reached the caller as `NAVIGATION_FAILED` for a page that was merely busy.
+   *
+   * Waiting costs nothing on a settled page — `load` has already fired — and
+   * is bounded by the operation's remaining time either way, because `goBack`
+   * itself waits for `load` on the document it lands on.
+   */
+  private async settleBeforeHistoryMove(page: Page, control: OperationControl): Promise<void> {
+    await page.waitForLoadState('domcontentloaded', { timeout: remainingOperationTime(control) });
   }
 
   private getPage(handle: BrowserPageHandle): Page {

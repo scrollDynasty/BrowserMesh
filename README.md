@@ -1,5 +1,11 @@
 # BrowserMesh
 
+[![npm](https://img.shields.io/npm/v/browsermesh?logo=npm)](https://www.npmjs.com/package/browsermesh)
+[![downloads](https://img.shields.io/npm/dm/browsermesh?logo=npm)](https://www.npmjs.com/package/browsermesh)
+[![CI](https://github.com/scrollDynasty/BrowserMesh/actions/workflows/ci.yml/badge.svg)](https://github.com/scrollDynasty/BrowserMesh/actions/workflows/ci.yml)
+[![MCP Registry](https://img.shields.io/badge/MCP%20Registry-io.github.scrollDynasty%2Fbrowsermesh-blue)](https://registry.modelcontextprotocol.io/v0/servers?search=browsermesh)
+[![license](https://img.shields.io/npm/l/browsermesh)](LICENSE)
+
 **Run many browser sessions at once, fully isolated from each other, from one MCP server.**
 
 Every other browser MCP server gives your AI client one browser with a current tab. BrowserMesh
@@ -28,6 +34,30 @@ orders work within each session, and returns structured results.
 Works with Claude Code, Claude Desktop, Codex, Cursor, Windsurf, Qwen, and any other MCP-compatible
 client.
 
+## When to use BrowserMesh, and when not to
+
+BrowserMesh is not a drop-in replacement for the general-purpose browser MCP servers. It is built
+around one thing those servers do not do, and it charges for it.
+
+| You want to…                                                              | Reach for                                                                      |
+| ------------------------------------------------------------------------- | ------------------------------------------------------------------------------ |
+| Drive two or more accounts, roles, or auth states at the same time        | **BrowserMesh** — a context per session, running in parallel                   |
+| Keep a signed-in state and reuse it in a later, separate session          | **BrowserMesh** — `browser_state_save` / `stateId`                             |
+| Address a specific tab deterministically across a long workflow           | **BrowserMesh** — explicit `sessionId` + `pageId`, no "current tab"            |
+| Bound what a page can spend of your context (snapshot size, refs, events) | **BrowserMesh** — every read is explicitly bounded and paginated               |
+| Browse, click, and read one page as one user                              | Playwright MCP — smaller surface, less to configure                            |
+| Debug performance, tracing, or the CDP-level behaviour of a page          | Chrome DevTools MCP — that is what it exposes                                  |
+| Run in someone else's cloud, with managed proxies and captcha handling    | A hosted service such as Browserbase — BrowserMesh is local-only               |
+| Evaluate arbitrary JavaScript in the page                                 | Playwright MCP or Chrome DevTools MCP — BrowserMesh has no such tool by design |
+| Drive Firefox or WebKit                                                   | Playwright MCP — BrowserMesh is Chromium-only today                            |
+
+The honest trade-off is discovery cost. BrowserMesh publishes 35 tools with full input _and_ output
+schemas; measured on one machine on one day, its `tools/list` is roughly 94 KB against 25 KB for
+`chrome-devtools-mcp` and 18 KB for `@playwright/mcp`, both of which publish no output schemas. If
+your client is short on context and your workflow is one browser and one user, that is a real
+argument for a smaller server. Narrow the surface with `--tools core` when you do want BrowserMesh
+but not all of it.
+
 ## Quick start
 
 Claude Code:
@@ -53,6 +83,14 @@ That is the whole setup. On its first start BrowserMesh downloads the Chromium b
 there is no separate install step. Pass `--no-auto-install` to manage the browser yourself, in
 which case MCP discovery still works and `browser_session_create` returns an actionable
 `BROWSER_ERROR` explaining what to run.
+
+That first download happens before the server answers `initialize`, and a Chromium build is around
+130 MB. Clients with a short connect timeout report the server as failed while it runs. On a slow
+link, warm it once before adding the server and every later start is immediate:
+
+```sh
+npx -y browsermesh --install-browser
+```
 
 Then ask for the work in plain language:
 

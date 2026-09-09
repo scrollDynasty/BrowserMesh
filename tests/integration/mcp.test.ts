@@ -10,7 +10,7 @@ import {
 import { applicationErrorResult } from '../../src/adapters/mcp/results.js';
 import { JSON_SCHEMA_2020_12_DIALECT } from '../../src/adapters/mcp/schema-dialect.js';
 import { createMcpServer } from '../../src/adapters/mcp/server.js';
-import { BrowserMeshError } from '../../src/domain/errors.js';
+import { BrowserMeshError, errorCodes } from '../../src/domain/errors.js';
 import { DEFAULT_RESOURCE_LIMITS } from '../../src/domain/resource-limits.js';
 import { BROWSERMESH_VERSION } from '../../src/infrastructure/generated/version.js';
 import { FakeEngine, testRuntime } from '../support/fakes.js';
@@ -632,6 +632,38 @@ describe('MCP adapter', () => {
     }
   });
 
+  it('describes every union argument in prose as well as in the union', async () => {
+    // A client that flattens oneOf/$ref during ingestion leaves the caller an
+    // untyped object, so the prose is the only statement of the shape it has
+    // (ADR 0022). Nothing else pins it: the byte budget is an upper bound that
+    // a silent loss of these 6,516 characters would pass, and the round trip
+    // below compares compacted against uncompacted, so it stays green if both
+    // sides lose the description. A Zod or SDK upgrade that stopped
+    // serializing .describe() on a discriminated union would revert the
+    // published surface with every test still passing.
+    const { schemas } = await discoveredToolPayload({});
+    const described = [
+      ['browser_click', 'locator'],
+      ['browser_screenshot', 'capture'],
+      ['browser_wait', 'condition'],
+      ['browser_action_and_wait', 'action'],
+      ['browser_action_and_wait', 'wait'],
+    ] as const;
+
+    for (const [tool, argument] of described) {
+      const schema = schemas.get(`${tool}.inputSchema`);
+      expect(schema, `${tool} publishes an input schema`).toBeDefined();
+      const properties = dereference(schema as Record<string, unknown>).properties as Record<
+        string,
+        { description?: unknown }
+      >;
+      const description = properties[argument]?.description;
+
+      expect(typeof description, `${tool}.${argument} description`).toBe('string');
+      expect(String(description).length, `${tool}.${argument} description`).toBeGreaterThan(40);
+    }
+  });
+
   it('publishes a tool surface small enough to share a client context window', async () => {
     // Discovery is paid once per session, in context, by every client. A client
     // that has to fit several MCP servers in one window drops the most
@@ -657,6 +689,59 @@ describe('MCP adapter', () => {
     expect(compact.schemas.size).toBe(expanded.schemas.size);
     for (const [key, schema] of compact.schemas) {
       expect(dereference(schema), `${key} round trip`).toEqual(expanded.schemas.get(key));
+    }
+  });
+
+  it('tells the caller what to do next for every error code it can return', () => {
+    // The fixed public message says only what went wrong. Without this field
+    // the remediation lives solely in the documentation site, which a client
+    // choosing its next tool call never reads (ADR 0022).
+    const steps: string[] = [];
+    for (const code of errorCodes) {
+      const parsed = publicErrorSchema.parse(
+        JSON.parse(
+          readText(requireCallResult(applicationErrorResult(new BrowserMeshError(code, 'raw')))),
+        ),
+      );
+
+      expect(parsed.error.code, code).toBe(code);
+      expect(parsed.error.nextStep, code).not.toBe(parsed.error.message);
+      steps.push(parsed.error.nextStep);
+    }
+
+    // Distinct per code, not merely distinct from its own message: a table
+    // where every code mapped to one generic string would satisfy the loop
+    // above, and a remediation that silently became a copy of another code's is
+    // the regression this field exists to prevent.
+    expect(new Set(steps).size).toBe(errorCodes.length);
+
+    // Every value is a compile-time constant, so no failure can turn the field
+    // into a channel for a locator, a URL, or a raw cause.
+    const leaky = requireCallResult(
+      applicationErrorResult(
+        new BrowserMeshError('LOCATOR_AMBIGUOUS', 'token=do-not-expose', {
+          details: { locator: { strategy: 'css', value: 'do-not-expose' } },
+        }),
+      ),
+    );
+    const nextStep = publicErrorSchema.parse(JSON.parse(readText(leaky))).error.nextStep;
+    expect(nextStep).not.toContain('do-not-expose');
+    expect(nextStep).toContain('browser_snapshot');
+  });
+
+  it('does not promise a rollback the runtime cannot perform', () => {
+    // A cancelled in-flight action is not aborted, and an unexpected throw can
+    // arrive after the action completed, so neither code may tell the caller to
+    // reissue unconditionally (ADR 0022).
+    for (const code of ['OPERATION_CANCELLED', 'INTERNAL_ERROR'] as const) {
+      const nextStep = publicErrorSchema.parse(
+        JSON.parse(
+          readText(requireCallResult(applicationErrorResult(new BrowserMeshError(code, 'raw')))),
+        ),
+      ).error.nextStep;
+
+      expect(nextStep, code).toContain('already taken effect');
+      expect(nextStep, code).toContain('confirm the page state');
     }
   });
 
@@ -875,6 +960,7 @@ const publicErrorSchema = z.object({
   error: z.object({
     code: z.string(),
     message: z.string().max(512),
+    nextStep: z.string().min(1).max(512),
     details: z.record(z.string(), z.unknown()).optional(),
     operationId: z.string().optional(),
   }),

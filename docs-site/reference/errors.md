@@ -8,34 +8,89 @@ Application failures set MCP `isError: true` and return bounded JSON text:
   "error": {
     "code": "PAGE_NOT_FOUND",
     "message": "The requested browser page was not found in the addressed session",
+    "nextStep": "Call browser_page_list for this sessionId to get its live pageIds. A pageId belonging to another session is always rejected.",
     "operationId": "…"
   }
 }
 ```
 
-| Code                      | Meaning / next step                                                |
-| ------------------------- | ------------------------------------------------------------------ |
-| `SESSION_NOT_FOUND`       | rediscover or create the session                                   |
-| `SESSION_NOT_READY`       | session has not reached ready state                                |
-| `SESSION_CLOSING`         | stop submitting work to this session                               |
-| `SESSION_CLOSED`          | create a new session                                               |
-| `PAGE_NOT_FOUND`          | verify both IDs and page ownership                                 |
-| `INVALID_ARGUMENT`        | correct the request schema/value                                   |
-| `OPERATION_TIMEOUT`       | inspect state, use a deterministic wait, or adjust bounded timeout |
-| `OPERATION_CANCELLED`     | caller cancelled the request                                       |
-| `NAVIGATION_FAILED`       | inspect safe reason/URL context and network conditions             |
-| `ELEMENT_NOT_FOUND`       | recapture state or correct the locator                             |
-| `LOCATOR_AMBIGUOUS`       | make the locator unique                                            |
-| `STALE_ELEMENT_REFERENCE` | capture a new snapshot/ref                                         |
-| `STALE_SNAPSHOT_CURSOR`   | capture a new snapshot                                             |
-| `BROWSER_ERROR`           | operation failed; install Chromium if remediation says so          |
-| `BROWSER_DISCONNECTED`    | existing sessions cannot recover; restart and recreate them        |
-| `LIMIT_EXCEEDED`          | reduce requested/captured data or revise configured budget         |
-| `RUNTIME_SHUTTING_DOWN`   | stop submitting work and reconnect later                           |
-| `SAVED_STATE_NOT_FOUND`   | list states or use another ID                                      |
-| `PERSISTENCE_DISABLED`    | enable persistence or omit state operations                        |
-| `INTERNAL_ERROR`          | unexpected safe failure; gather bounded diagnostics                |
+`message` says what went wrong and is fixed per code — it never carries a raw
+cause, a locator, or a URL. `nextStep` says what to do about it and is also fixed
+per code, so a client can act on a failure without consulting this page. The
+table below quotes what is actually sent (ADR 0022); `src/adapters/mcp/results.ts`
+is the source of truth.
 
-Browser failures may include only an allowlisted reason: `timeout`, `dns`, `connection`, `tls`, `invalid_url`, `locator_ambiguous`, `element_not_found`, or `other`. Public URLs exclude credentials, queries, and fragments. Raw Playwright messages, causes, stacks, tokens, and form values are not returned.
+| Code                      | `nextStep` sent to the caller                                                                                                                                                                                                                                                                                             |
+| ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `SESSION_NOT_FOUND`       | Call `browser_session_list` to recover live sessionIds, or `browser_session_create` to start a new isolated session.                                                                                                                                                                                                      |
+| `SESSION_NOT_READY`       | Read the status with `browser_session_get`: `creating` resolves on its own, so retry the operation; `failed` is terminal, so create a replacement with `browser_session_create`.                                                                                                                                          |
+| `SESSION_CLOSING`         | Stop sending work to this session. Use another session, or `browser_session_create` for a fresh one.                                                                                                                                                                                                                      |
+| `SESSION_CLOSED`          | This session and its pages are gone. Create a replacement with `browser_session_create`; pass `stateId` to restore saved authentication.                                                                                                                                                                                  |
+| `PAGE_NOT_FOUND`          | Call `browser_page_list` for this sessionId to get its live pageIds. A pageId belonging to another session is always rejected.                                                                                                                                                                                            |
+| `INVALID_ARGUMENT`        | Re-read the tool inputSchema and check the per-argument bounds. Some are enforced by the runtime rather than the schema, so a value the schema accepts can still be rejected. `browser_runtime_info` reports the session, screenshot, visible-text, and persistence limits, but not the snapshot or observability bounds. |
+| `OPERATION_TIMEOUT`       | A locator that matches nothing also times out. Confirm the element with `browser_snapshot` before raising `timeoutMs`, and try `exact:false` on a role locator whose name may not match the accessible name character for character.                                                                                      |
+| `OPERATION_CANCELLED`     | The client cancelled this call. Reissue it if the work is still wanted, unless the action may have already taken effect — confirm the page state first.                                                                                                                                                                   |
+| `NAVIGATION_FAILED`       | Check that the URL is absolute http(s) and reachable. `browser_observe` with source `requestFailed` reports the transport-level failure.                                                                                                                                                                                  |
+| `ELEMENT_NOT_FOUND`       | Capture `browser_snapshot` with `interactiveOnly:true` to see what the page actually exposes, then target it by role, label, or test ID.                                                                                                                                                                                  |
+| `LOCATOR_AMBIGUOUS`       | This locator matches more than one element. Narrow it with a role name, scope it to a container, or capture `browser_snapshot` with `includeRefs:true` and act on one ref.                                                                                                                                                |
+| `STALE_ELEMENT_REFERENCE` | Refs expire 30 seconds after capture and do not survive navigation or another page. Capture `browser_snapshot` with `includeRefs:true` again, or use a semantic locator instead.                                                                                                                                          |
+| `STALE_SNAPSHOT_CURSOR`   | Snapshot cursors expire 30 seconds after capture and do not survive navigation. Call `browser_snapshot` again without a cursor and page through the fresh capture.                                                                                                                                                        |
+| `BROWSER_ERROR`           | Call `browser_runtime_info` to check the launch state. If the details name a remediation, run it; otherwise retry the operation.                                                                                                                                                                                          |
+| `BROWSER_DISCONNECTED`    | Chromium is gone and live sessions cannot be recovered. Create new sessions with `browser_session_create`; restore authentication from a saved `stateId`.                                                                                                                                                                 |
+| `INTERNAL_ERROR`          | Retry once, unless the action may have already taken effect — confirm the page state first. If it recurs, quote the `operationId` when reporting it.                                                                                                                                                                      |
+| `LIMIT_EXCEEDED`          | Ask for less: lower `maxChars`, `maxBytes`, `maxRefs`, or `limit`, scope a snapshot to one container, or close sessions you no longer need. `browser_runtime_info` reports the session, screenshot, visible-text, and persistence limits, but not the snapshot or observability bounds.                                   |
+| `RUNTIME_SHUTTING_DOWN`   | The server is shutting down and accepts no further browser work. Reconnect before retrying.                                                                                                                                                                                                                               |
+| `SAVED_STATE_NOT_FOUND`   | Call `browser_state_list` for the stateIds this runtime holds, or save one first with `browser_state_save`.                                                                                                                                                                                                               |
+| `PERSISTENCE_DISABLED`    | This runtime was started without persistence. Continue without saved state, or ask the operator to start BrowserMesh with `BROWSERMESH_PERSISTENCE=true`.                                                                                                                                                                 |
 
-A failed operation does not poison the session queue. Do not automatically retry destructive actions unless the workflow can establish whether the action took effect.
+## Two failure channels
+
+Argument shapes rejected by the published input schema come back as MCP
+input-validation errors (`-32602`), not as the payload above. Those are more
+specific by design — they name the offending field:
+
+```text
+MCP error -32602: Input validation error: Invalid arguments for tool browser_click:
+Invalid discriminator value. Expected 'role' | 'text' | 'label' | 'placeholder' |
+'testId' | 'css' at locator.strategy
+```
+
+Arguments the schema accepts but the runtime rejects come back as
+`INVALID_ARGUMENT` with the fixed message, which cannot name the field. The
+clearest case is `browser_observe`'s `limit`: the schema permits up to 200 while
+a default server accepts 100 — and `maxPageSize`, the bound that rejected it, is
+one `browser_runtime_info` does not return. This page is the reference for those;
+see [Limits](/reference/limits).
+
+## Details
+
+Browser failures may include only an allowlisted `reason`: `timeout`, `dns`,
+`connection`, `tls`, `invalid_url`, `locator_ambiguous`, `element_not_found`, or
+`other`. Public URLs exclude credentials, queries, and fragments. Raw Playwright
+messages, causes, stacks, tokens, and form values are not returned.
+
+`SESSION_NOT_READY` covers two statuses. A session still being created becomes
+ready on its own, and the operation can simply be retried. A session that failed
+to create without a Chromium disconnect keeps `status: "failed"`, stays in
+`browser_session_list` and in `browsermesh://sessions`, and never becomes ready —
+retrying it loops forever. That is why the next step sends the caller to
+`browser_session_get` before deciding. A session that failed because Chromium
+disconnected reports `BROWSER_DISCONNECTED` instead.
+
+`ELEMENT_NOT_FOUND` is rarely what a locator-driven action returns today. A
+locator that matches nothing waits for it to appear and then reports
+`OPERATION_TIMEOUT`, which is why that code's next step tells you to check the
+page rather than raise the timeout. ADR 0025 proposes fixing the classification.
+
+## Recovery
+
+A failed operation does not poison the session queue: the next accepted
+operation on that session still runs. Do not automatically retry destructive
+actions unless the workflow can establish whether the action took effect.
+
+Cancellation does not roll anything back. A request cancelled while it waits in
+the session queue never touches the browser, but one cancelled while its action
+is in flight is not aborted — the queue re-checks the signal only after the
+action resolves, so `OPERATION_CANCELLED` can name a click that already landed.
+`INTERNAL_ERROR` carries the same caveat: any unexpected throw maps to it,
+including one raised after the browser action completed.

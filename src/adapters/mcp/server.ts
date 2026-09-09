@@ -110,20 +110,27 @@ const frameScopeSchema = z
     }),
   ])
   .describe('Top document or a bounded outer-to-inner chain of semantic iframe element selectors');
-const locatorSchema = z.discriminatedUnion('strategy', [
-  z.object({
-    strategy: z.literal('role'),
-    value: role,
-    name: z.string().optional(),
-    exact: z.boolean().optional().default(true),
-    frame: frameScopeSchema.optional(),
-  }),
-  z.object({
-    strategy: z.enum(['text', 'label', 'placeholder', 'testId', 'css']),
-    value: z.string().min(1),
-    frame: frameScopeSchema.optional(),
-  }),
-]);
+const locatorSchema = z
+  .discriminatedUnion('strategy', [
+    z.object({
+      strategy: z.literal('role'),
+      value: role,
+      name: z.string().optional(),
+      exact: z.boolean().optional().default(true),
+      frame: frameScopeSchema.optional(),
+    }),
+    z.object({
+      strategy: z.enum(['text', 'label', 'placeholder', 'testId', 'css']),
+      value: z.string().min(1),
+      frame: frameScopeSchema.optional(),
+    }),
+  ])
+  // Carried in prose as well as in the union because a client that flattens
+  // oneOf/$ref during schema ingestion leaves the caller an untyped object and
+  // nothing else in the published surface states the shape (ADR 0022).
+  .describe(
+    'One element, addressed semantically. Role form: {"strategy":"role","value":"button","name":"Sign in"} — name matches the accessible name exactly unless "exact":false. Other forms: {"strategy":"text"|"label"|"placeholder"|"testId"|"css","value":"…"}. Optional "frame" scopes the lookup into iframes.',
+  );
 const refSchema = z.string().regex(/^@e[a-f0-9]{32}$/u);
 const elementTargetSchema = z.union([locatorSchema, z.object({ ref: refSchema })]);
 const elementInputSchema = { locator: locatorSchema.optional(), ref: refSchema.optional() };
@@ -139,57 +146,72 @@ const screenshotCaptureSchema = z
     z.object({ kind: z.literal('fullPage') }),
     z.object({ kind: z.literal('element'), locator: locatorSchema }),
   ])
+  .describe(
+    'What to capture: {"kind":"viewport"} (the default when omitted), {"kind":"fullPage"}, or {"kind":"element","locator":{…}}.',
+  )
   .optional();
 const sessionSchema = { sessionId: z.string().min(1) };
 const urlMatcherSchema = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('exact'), value: z.string().min(1).max(2_048) }),
   z.object({ kind: z.literal('glob'), value: z.string().min(1).max(2_048) }),
 ]);
-const waitConditionSchema = z.discriminatedUnion('kind', [
-  z.object({ kind: z.literal('url'), matcher: urlMatcherSchema }),
-  z.object({ kind: z.literal('load'), state: z.enum(['domcontentloaded', 'load']) }),
-  z.object({
-    kind: z.literal('locator'),
-    locator: locatorSchema,
-    state: z.enum(['visible', 'hidden', 'attached', 'detached', 'enabled', 'disabled']),
-  }),
-  z.object({
-    kind: z.literal('text'),
-    text: z.string().min(1).max(2_000),
-    state: z.enum(['present', 'absent']),
-  }),
-]);
-const browserActionSchema = z.discriminatedUnion('kind', [
-  z.object({ kind: z.literal('click'), target: elementTargetSchema }),
-  z.object({
-    kind: z.literal('press'),
-    target: elementTargetSchema,
-    key: z.string().min(1).max(64),
-  }),
-]);
-const actionWaitSchema = z.discriminatedUnion('kind', [
-  z.object({
-    kind: z.literal('navigation'),
-    matcher: urlMatcherSchema.optional(),
-    loadState: z.enum(['domcontentloaded', 'load']).optional(),
-  }),
-  z.object({
-    kind: z.literal('response'),
-    matcher: urlMatcherSchema,
-    method: z
-      .string()
-      .regex(/^[A-Z]{1,16}$/u)
-      .optional(),
-    status: z.number().int().min(100).max(599).optional(),
-  }),
-  z.object({ kind: z.literal('popup') }),
-  z.object({
-    kind: z.literal('dialog'),
-    dialogType: z.enum(['alert', 'beforeunload', 'confirm', 'prompt']),
-    action: z.enum(['accept', 'dismiss']),
-    promptText: z.string().max(2_000).optional(),
-  }),
-]);
+const waitConditionSchema = z
+  .discriminatedUnion('kind', [
+    z.object({ kind: z.literal('url'), matcher: urlMatcherSchema }),
+    z.object({ kind: z.literal('load'), state: z.enum(['domcontentloaded', 'load']) }),
+    z.object({
+      kind: z.literal('locator'),
+      locator: locatorSchema,
+      state: z.enum(['visible', 'hidden', 'attached', 'detached', 'enabled', 'disabled']),
+    }),
+    z.object({
+      kind: z.literal('text'),
+      text: z.string().min(1).max(2_000),
+      state: z.enum(['present', 'absent']),
+    }),
+  ])
+  .describe(
+    'One passive condition: {"kind":"url","matcher":{"kind":"exact"|"glob","value":"…"}}, {"kind":"load","state":"domcontentloaded"|"load"}, {"kind":"locator","locator":{…},"state":"visible"|"hidden"|"attached"|"detached"|"enabled"|"disabled"}, or {"kind":"text","text":"…","state":"present"|"absent"}.',
+  );
+const browserActionSchema = z
+  .discriminatedUnion('kind', [
+    z.object({ kind: z.literal('click'), target: elementTargetSchema }),
+    z.object({
+      kind: z.literal('press'),
+      target: elementTargetSchema,
+      key: z.string().min(1).max(64),
+    }),
+  ])
+  .describe(
+    'The action to perform once the waiter is armed: {"kind":"click","target":{…}} or {"kind":"press","target":{…},"key":"Enter"}. "target" is a locator object or {"ref":"@e…"}.',
+  );
+const actionWaitSchema = z
+  .discriminatedUnion('kind', [
+    z.object({
+      kind: z.literal('navigation'),
+      matcher: urlMatcherSchema.optional(),
+      loadState: z.enum(['domcontentloaded', 'load']).optional(),
+    }),
+    z.object({
+      kind: z.literal('response'),
+      matcher: urlMatcherSchema,
+      method: z
+        .string()
+        .regex(/^[A-Z]{1,16}$/u)
+        .optional(),
+      status: z.number().int().min(100).max(599).optional(),
+    }),
+    z.object({ kind: z.literal('popup') }),
+    z.object({
+      kind: z.literal('dialog'),
+      dialogType: z.enum(['alert', 'beforeunload', 'confirm', 'prompt']),
+      action: z.enum(['accept', 'dismiss']),
+      promptText: z.string().max(2_000).optional(),
+    }),
+  ])
+  .describe(
+    'The event the action is expected to trigger: {"kind":"navigation"}, {"kind":"response","matcher":{…}}, {"kind":"popup"}, or {"kind":"dialog","dialogType":"confirm","action":"accept"}.',
+  );
 
 /**
  * The four observation sources share one contract. Only `console` and

@@ -10,7 +10,9 @@ describe('MCP prompts and resources', () => {
     await withClient(async (client) => {
       const listed = await client.listPrompts();
       expect(listed.prompts.map(({ name }) => name).sort()).toEqual([
+        'compare_page_states',
         'diagnose_page',
+        'form_validation',
         'parallel_roles',
       ]);
 
@@ -76,6 +78,65 @@ describe('MCP prompts and resources', () => {
       });
 
       expect(promptText(rendered)).not.toContain('Reported symptom');
+    });
+  });
+
+  it('renders the two-state comparison prompt as two sessions, not two readings', async () => {
+    await withClient(async (client) => {
+      const rendered = await client.getPrompt({
+        name: 'compare_page_states',
+        arguments: {
+          url: 'https://example.test/pricing',
+          left: 'signed-out visitor',
+          right: 'subscriber',
+        },
+      });
+
+      const text = promptText(rendered);
+      expect(text).toContain('https://example.test/pricing');
+      expect(text).toContain('signed-out visitor');
+      expect(text).toContain('subscriber');
+      // The whole point of routing this through BrowserMesh rather than one
+      // browser is that the second reading must not inherit the first state.
+      expect(text).toContain('browser_session_create twice');
+      expect(text).toContain('the same arguments');
+      expect(text).toContain('browser_session_close');
+    });
+
+    await withClient(async (client) => {
+      await expect(
+        client.getPrompt({
+          name: 'compare_page_states',
+          arguments: { url: 'not-a-url', left: 'a', right: 'b' },
+        }),
+      ).rejects.toThrow();
+    });
+  });
+
+  it('renders the form-validation prompt without inviting real credentials', async () => {
+    await withClient(async (client) => {
+      const rendered = await client.getPrompt({
+        name: 'form_validation',
+        arguments: { url: 'https://example.test/signup', form: 'the newsletter form' },
+      });
+
+      const text = promptText(rendered);
+      expect(text).toContain('https://example.test/signup');
+      expect(text).toContain('the newsletter form');
+      expect(text).toContain('browser_action_and_wait');
+      expect(text).toContain('browser_observe');
+      // A prompt that walks an agent through a login form has to say this, or
+      // it becomes an instruction to type the user's real password into a page.
+      expect(text).toContain('Never submit real credentials');
+    });
+
+    await withClient(async (client) => {
+      const rendered = await client.getPrompt({
+        name: 'form_validation',
+        arguments: { url: 'https://example.test/signup' },
+      });
+
+      expect(promptText(rendered)).not.toContain('Form:');
     });
   });
 

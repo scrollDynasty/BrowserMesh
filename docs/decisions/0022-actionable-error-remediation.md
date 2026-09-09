@@ -1,0 +1,152 @@
+# ADR 0022 — Actionable error remediation on the wire
+
+Status: Accepted
+
+Date: 2026-09-08
+
+## Context
+
+Every application failure crosses MCP through `applicationErrorResult`, which
+replaces the raw message with a fixed string chosen by error code. That is the
+right boundary: raw messages carry locators, URLs, and Playwright internals, and
+`SESSION_NOT_FOUND` must not become a place where a session name leaks.
+
+The cost is that the fixed string says only what went wrong. `PAGE_NOT_FOUND`
+reaches the client as "The requested browser page was not found in the addressed
+session" — accurate, and silent about the fact that `browser_page_list` exists
+and that a `pageId` from another session is rejected by design.
+
+The remediation was written down. `docs-site/reference/errors.md` carries a
+"Meaning / next step" column for all twenty codes. A client choosing its next
+tool call does not read the documentation site; it reads the result it just got.
+Two of the twenty codes — `STALE_ELEMENT_REFERENCE` and `STALE_SNAPSHOT_CURSOR`
+— already carry their remediation in the message itself, which is what the other
+eighteen should have been doing.
+
+Walking the surface as a client makes the gap concrete. A cross-session `pageId`
+returns `PAGE_NOT_FOUND` with no mention of `browser_page_list`. An element
+action whose locator matches nothing returns `OPERATION_TIMEOUT` with "The
+browser operation timed out", which reads as an invitation to raise `timeoutMs`
+— the one remedy guaranteed not to work.
+
+## Decision
+
+`applicationErrorResult` adds a `nextStep` string to the public error object,
+keyed only by `BrowserMeshErrorCode`:
+
+```json
+{
+  "ok": false,
+  "error": {
+    "code": "LOCATOR_AMBIGUOUS",
+    "message": "The locator matched multiple elements",
+    "nextStep": "This locator matches more than one element. Narrow it with a role name, scope it to a container, or capture browser_snapshot with includeRefs:true and act on one ref.",
+    "details": { "reason": "locator_ambiguous" }
+  }
+}
+```
+
+Three properties make this safe to state as strongly as the fixed message is.
+
+**Every value is a compile-time constant.** `NEXT_STEPS` is a
+`Readonly<Record<BrowserMeshErrorCode, string>>` of literals. Nothing is
+interpolated from the error, the page, the locator, the session, or
+configuration, so the field cannot become a leak channel however the failure
+arose. The exhaustive `Record` type means a new error code fails to compile
+until it has a next step, which is what keeps this from decaying the way a
+documentation table does.
+
+**It is additive.** `message` keeps its exact current text and its 512-character
+bound. A client that reads only `code` and `message` is unaffected.
+
+**It names tools and arguments, not prose.** `browser_page_list`,
+`includeRefs:true`, `exact:false`, `browser_state_list` — the vocabulary the
+client is about to type. A next step that says "check your inputs" would cost
+bytes and buy nothing.
+
+`OPERATION_TIMEOUT` gets the one entry that is not a straight lift from the
+documentation table, because the table is describing behaviour the code does not
+have: a locator matching nothing is indistinguishable, at the wire, from a slow
+page. Until ADR 0025 is decided the next step has to say so, so the client
+verifies with a snapshot instead of raising the timeout.
+
+**It never promises the operation was discarded.** `SerialQueue.run` re-checks
+the abort signal only after the task resolves, because an in-flight browser
+action cannot be aborted — a `browser_click` cancelled mid-flight can already
+have landed, and `asBrowserMeshError` maps any unexpected throw to
+`INTERNAL_ERROR`, including one raised after the action completed. So the next
+steps for `OPERATION_CANCELLED` and `INTERNAL_ERROR` qualify the retry rather
+than asserting a rollback the runtime cannot perform. Telling an agent to
+reissue a cancelled call unconditionally would contradict the documented
+recovery rule — do not retry destructive actions blind — on the channel the
+agent actually reads.
+
+**It does not guess which argument was wrong.** `INVALID_ARGUMENT` is raised
+from around thirty sites: absolute-URL checks, `timeoutMs`, URL matcher length
+and the wildcard cap, wait text, `key`, `promptText`, response method and
+status, and `browser_observe`'s `limit`. Naming one of them would be right
+occasionally and actively misleading the rest of the time — on `browser_observe`
+most of all, where a `limit` the schema accepts and the runtime rejects is the
+case the documentation singles out and the call carries no locator at all. The
+next step names the shape of the mistake instead: the schema is not the only
+bound.
+
+**It does not assume the transient cause when a code has two.**
+`readySession` raises `SESSION_NOT_READY` for any status that is not `ready`,
+`closing`, `closed`, or `failed`-after-disconnect. That is a session still being
+created, which resolves on its own — and a session whose creation failed without
+a Chromium disconnect, which is terminal, stays in `listSessions` and in
+`browsermesh://sessions`, and will never become ready. "Retry the operation"
+would loop an agent forever on the second, so the next step sends it to
+`browser_session_get` and names what each status means.
+
+**It does not send the client after a limit the runtime will not return.**
+`browser_runtime_info` returns `ResourceLimits` — session labels, screenshot,
+visible text, persistence — plus the default timeout and the session and page
+counts. The snapshot `maxChars`, `maxBytes` and `maxRefs` bounds are fixed in
+the build, and `browser_observe`'s `limit` is checked against
+`observability.maxPageSize`, which the tool does not echo. `LIMIT_EXCEEDED` and
+`INVALID_ARGUMENT` name what the tool does report and say plainly that the
+snapshot and observability bounds are not in it, so an agent that follows the
+next step does not spend a call to learn nothing. `docs-site/reference/limits.md`
+is the reference for the rest.
+
+## Consequences
+
+Each error result grows by roughly 100 to 200 bytes. Errors are a small fraction
+of results, and the alternative is a retry loop, which is measured in tool calls.
+
+The argument descriptions added alongside this decision are paid differently:
+they are discovery, so every client pays them on every connect whether or not it
+ever fails. They cost 6,516 characters, 7.5% of `tools/list`. ADR 0024 proposes
+the ceiling that makes an increase like this a deliberate choice rather than a
+side effect.
+
+The remediation now exists in two places: `NEXT_STEPS` and
+`docs-site/reference/errors.md`. The documentation table is updated to quote the
+wire strings so the drift is visible on review, and the exhaustive `Record` makes
+the code the one that cannot silently fall behind.
+
+`tests/integration/mcp.test.ts` asserts that every code in `errorCodes` produces
+a non-empty `nextStep` distinct from its message, and that a failure carrying a
+hostile locator in its details cannot get any of that content into the field.
+
+## Alternatives considered
+
+**Return the raw message for some codes.** `INVALID_ARGUMENT` is the code that
+most wants specifics — which argument, and why. Raw messages are constructed
+across the runtime and the Playwright adapter from values that include locators
+and URLs, and auditing them individually is a standing obligation rather than a
+decision. Rejected in favour of a fixed string that describes where the
+remaining bounds live rather than naming a field it cannot know.
+
+**Put the remediation in the tool descriptions.** Discovery is paid by every
+client on every connect, whether or not the failure ever happens; error results
+are paid only by the client that hit the error. ADR 0020 spent real effort
+reducing discovery weight, and this would give it back to callers who never fail.
+
+**Extend `details` instead of adding a field.** `details` is a sanitized
+passthrough of runtime-supplied values and is filtered by an allowlist. Putting
+a constant there would blur the distinction between "data from the failure,
+filtered" and "text BrowserMesh wrote", which is the distinction that makes the
+filter reviewable.
