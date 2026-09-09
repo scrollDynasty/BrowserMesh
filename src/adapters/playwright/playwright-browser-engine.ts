@@ -1036,7 +1036,7 @@ export class PlaywrightBrowserEngine implements BrowserEnginePort {
    * itself waits for `load` on the document it lands on.
    */
   private async settleBeforeHistoryMove(page: Page, control: OperationControl): Promise<void> {
-    await page.waitForLoadState('load', { timeout: remainingOperationTime(control) });
+    await page.waitForLoadState('domcontentloaded', { timeout: remainingOperationTime(control) });
   }
 
   private getPage(handle: BrowserPageHandle): Page {
