@@ -49,8 +49,13 @@ const safeFailureReasons = new Set([
 const NEXT_STEPS: Readonly<Record<BrowserMeshErrorCode, string>> = {
   SESSION_NOT_FOUND:
     'Call browser_session_list to recover live sessionIds, or browser_session_create to start a new isolated session.',
+  // readySession raises this for any non-ready status that is not closing,
+  // closed, or failed-after-disconnect — so it covers both a session still
+  // being created and one that failed to create without a Chromium disconnect.
+  // The second is terminal and stays listable, so the next step must not tell
+  // the caller to retry unconditionally.
   SESSION_NOT_READY:
-    'The session is still being created. Retry the operation; browser_session_get reports its current status.',
+    'Read the status with browser_session_get: "creating" resolves on its own, so retry the operation; "failed" is terminal, so create a replacement with browser_session_create.',
   SESSION_CLOSING:
     'Stop sending work to this session. Use another session, or browser_session_create for a fresh one.',
   SESSION_CLOSED:

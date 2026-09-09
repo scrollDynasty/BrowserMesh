@@ -23,7 +23,7 @@ is the source of truth.
 | Code                      | `nextStep` sent to the caller                                                                                                                                                                                                                                                                                             |
 | ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `SESSION_NOT_FOUND`       | Call `browser_session_list` to recover live sessionIds, or `browser_session_create` to start a new isolated session.                                                                                                                                                                                                      |
-| `SESSION_NOT_READY`       | The session is still being created. Retry the operation; `browser_session_get` reports its current status.                                                                                                                                                                                                                |
+| `SESSION_NOT_READY`       | Read the status with `browser_session_get`: `creating` resolves on its own, so retry the operation; `failed` is terminal, so create a replacement with `browser_session_create`.                                                                                                                                          |
 | `SESSION_CLOSING`         | Stop sending work to this session. Use another session, or `browser_session_create` for a fresh one.                                                                                                                                                                                                                      |
 | `SESSION_CLOSED`          | This session and its pages are gone. Create a replacement with `browser_session_create`; pass `stateId` to restore saved authentication.                                                                                                                                                                                  |
 | `PAGE_NOT_FOUND`          | Call `browser_page_list` for this sessionId to get its live pageIds. A pageId belonging to another session is always rejected.                                                                                                                                                                                            |
@@ -68,6 +68,14 @@ Browser failures may include only an allowlisted `reason`: `timeout`, `dns`,
 `connection`, `tls`, `invalid_url`, `locator_ambiguous`, `element_not_found`, or
 `other`. Public URLs exclude credentials, queries, and fragments. Raw Playwright
 messages, causes, stacks, tokens, and form values are not returned.
+
+`SESSION_NOT_READY` covers two statuses. A session still being created becomes
+ready on its own, and the operation can simply be retried. A session that failed
+to create without a Chromium disconnect keeps `status: "failed"`, stays in
+`browser_session_list` and in `browsermesh://sessions`, and never becomes ready —
+retrying it loops forever. That is why the next step sends the caller to
+`browser_session_get` before deciding. A session that failed because Chromium
+disconnected reports `BROWSER_DISCONNECTED` instead.
 
 `ELEMENT_NOT_FOUND` is rarely what a locator-driven action returns today. A
 locator that matches nothing waits for it to appear and then reports

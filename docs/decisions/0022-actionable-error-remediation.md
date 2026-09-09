@@ -91,6 +91,15 @@ case the documentation singles out and the call carries no locator at all. The
 next step names the shape of the mistake instead: the schema is not the only
 bound.
 
+**It does not assume the transient cause when a code has two.**
+`readySession` raises `SESSION_NOT_READY` for any status that is not `ready`,
+`closing`, `closed`, or `failed`-after-disconnect. That is a session still being
+created, which resolves on its own — and a session whose creation failed without
+a Chromium disconnect, which is terminal, stays in `listSessions` and in
+`browsermesh://sessions`, and will never become ready. "Retry the operation"
+would loop an agent forever on the second, so the next step sends it to
+`browser_session_get` and names what each status means.
+
 **It does not send the client after a limit the runtime will not return.**
 `browser_runtime_info` returns `ResourceLimits` — session labels, screenshot,
 visible text, persistence — plus the default timeout and the session and page

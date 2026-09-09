@@ -620,7 +620,11 @@ describe('real Chromium runtime', () => {
     await runtime.click(target, { strategy: 'role', value: 'link', name: 'Employees' });
     expect((await runtime.getUrl(target)).value).toContain('/exact');
 
-    await runtime.back(target);
+    // Navigate rather than go back: this test is about role-name matching, and
+    // goBack immediately after a click-driven navigation intermittently loses
+    // the Chromium page target ("Not attached to an active page"). Back,
+    // forward, and reload have their own test below.
+    await runtime.navigate(target, `${web.baseUrl}/ambiguous`);
     const ambiguous = await captureBrowserMeshError(
       runtime.click(target, {
         strategy: 'role',

@@ -632,6 +632,38 @@ describe('MCP adapter', () => {
     }
   });
 
+  it('describes every union argument in prose as well as in the union', async () => {
+    // A client that flattens oneOf/$ref during ingestion leaves the caller an
+    // untyped object, so the prose is the only statement of the shape it has
+    // (ADR 0022). Nothing else pins it: the byte budget is an upper bound that
+    // a silent loss of these 6,516 characters would pass, and the round trip
+    // below compares compacted against uncompacted, so it stays green if both
+    // sides lose the description. A Zod or SDK upgrade that stopped
+    // serializing .describe() on a discriminated union would revert the
+    // published surface with every test still passing.
+    const { schemas } = await discoveredToolPayload({});
+    const described = [
+      ['browser_click', 'locator'],
+      ['browser_screenshot', 'capture'],
+      ['browser_wait', 'condition'],
+      ['browser_action_and_wait', 'action'],
+      ['browser_action_and_wait', 'wait'],
+    ] as const;
+
+    for (const [tool, argument] of described) {
+      const schema = schemas.get(`${tool}.inputSchema`);
+      expect(schema, `${tool} publishes an input schema`).toBeDefined();
+      const properties = dereference(schema as Record<string, unknown>).properties as Record<
+        string,
+        { description?: unknown }
+      >;
+      const description = properties[argument]?.description;
+
+      expect(typeof description, `${tool}.${argument} description`).toBe('string');
+      expect(String(description).length, `${tool}.${argument} description`).toBeGreaterThan(40);
+    }
+  });
+
   it('publishes a tool surface small enough to share a client context window', async () => {
     // Discovery is paid once per session, in context, by every client. A client
     // that has to fit several MCP servers in one window drops the most

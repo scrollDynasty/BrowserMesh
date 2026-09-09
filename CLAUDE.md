@@ -58,14 +58,14 @@ code because an old test still expects it.
 | Command                    | Scope                                                    |
 | -------------------------- | -------------------------------------------------------- |
 | `npm run verify:fast`      | typecheck + lint + unit — the normal inner loop, ~25s    |
-| `npm test`                 | **unit only** (`tests/unit`) — 156 tests                 |
-| `npm run test:integration` | real Chromium (`tests/integration`) — 72 tests           |
+| `npm test`                 | **unit only** (`tests/unit`) — 179 tests                 |
+| `npm run test:integration` | real Chromium (`tests/integration`) — 83 tests           |
 | `npm run test:e2e`         | external-client workflow (`tests/e2e`) — 1 test          |
 | `npm run test:stress`      | bounded concurrency (`tests/stress`) — 2 tests           |
 | `npm run verify`           | typecheck + lint + format:check + full coverage + build  |
 | `npm run verify:package`   | builds, packs, installs the tarball, smoke-tests the CLI |
 
-`npm run verify` is the release gate and takes ~72s: all 231 tests under coverage thresholds
+`npm run verify` is the release gate and takes ~72s: all 265 tests under coverage thresholds
 (statements 90 / branches 75 / functions 95 / lines 90) plus a build. Use `verify:fast` while
 iterating and `verify` before pushing.
 
