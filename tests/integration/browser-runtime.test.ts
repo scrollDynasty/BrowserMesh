@@ -621,9 +621,7 @@ describe('real Chromium runtime', () => {
     expect((await runtime.getUrl(target)).value).toContain('/exact');
 
     // Navigate rather than go back: this test is about role-name matching, and
-    // goBack immediately after a click-driven navigation intermittently loses
-    // the Chromium page target ("Not attached to an active page"). Back,
-    // forward, and reload have their own test below.
+    // the click-then-back sequence has its own test below.
     await runtime.navigate(target, `${web.baseUrl}/ambiguous`);
     const ambiguous = await captureBrowserMeshError(
       runtime.click(target, {
@@ -638,6 +636,23 @@ describe('real Chromium runtime', () => {
     expect(ambiguous.details).toMatchObject({
       locator: { strategy: 'role', value: 'link', name: 'Employees', exact: false },
     });
+  });
+
+  it('goes back from a page a click navigated to', async () => {
+    // browser_click awaits the click and nothing else, so a client that calls
+    // browser_back next runs goBack while the clicked navigation may still be
+    // becoming the active document. Chromium answers Page.getNavigationHistory
+    // with "Not attached to an active page" in that window, which reached the
+    // caller as NAVIGATION_FAILED for a page that was only busy.
+    const target = await createTarget();
+
+    for (let attempt = 0; attempt < 5; attempt += 1) {
+      await runtime.navigate(target, `${web.baseUrl}/ambiguous`);
+      await runtime.click(target, { strategy: 'role', value: 'link', name: 'Employees' });
+      expect((await runtime.getUrl(target)).value).toContain('/exact');
+
+      expect((await runtime.back(target)).value).toContain('/ambiguous');
+    }
   });
 
   it('supports back, forward, and reload on an explicitly addressed page', async () => {

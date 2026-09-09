@@ -30,7 +30,7 @@ to make a deliberate choice rather than a side effect. The remaining floor is th
 union that roughly twenty tools embed, which is the feature rather than waste; ADR 0020 records why
 collapsing the interaction tools to reach Playwright MCP's number is rejected.
 
-Verification: 179 unit, 83 integration, 1 e2e, and 2 stress tests pass, with typecheck, lint, and
+Verification: 179 unit, 84 integration, 1 e2e, and 2 stress tests pass, with typecheck, lint, and
 format clean.
 
 Released as `browsermesh@0.2.0`. Every version of `multi-agent-browser-mcp` is deprecated in favour
