@@ -4,6 +4,13 @@ All notable changes to BrowserMesh are documented in this file.
 
 This project follows [Semantic Versioning](https://semver.org/). Release entries are maintained by [release-please](https://github.com/googleapis/release-please) from Conventional Commit pull-request titles.
 
+## [0.2.3](https://github.com/scrollDynasty/BrowserMesh/compare/v0.2.2...v0.2.3) (2026-09-10)
+
+
+### Features
+
+* return actionable next steps with every error and add two workflow prompts ([#68](https://github.com/scrollDynasty/BrowserMesh/issues/68)) ([53a5c0d](https://github.com/scrollDynasty/BrowserMesh/commit/53a5c0dc2393b8c66d5249de6f47a8a03781189b))
+
 ## [0.2.2](https://github.com/scrollDynasty/BrowserMesh/compare/v0.2.1...v0.2.2) (2026-09-07)
 
 
