@@ -2,4 +2,4 @@
 // x-release-please-start-version
 export const BROWSERMESH_VERSION = '0.2.2' as const;
 // x-release-please-end
-export const PLAYWRIGHT_VERSION = '1.62.1' as const;
+export const PLAYWRIGHT_VERSION = '1.63.0' as const;
